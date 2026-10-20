@@ -28,6 +28,9 @@
 - Démonstration guidée : étapes « éditeur d'opération » et « flux 2D », outils assurés avant la
   création des projets (corrige un échec possible avec une bibliothèque sans fraise 6 mm),
   mode automatique `CAM2027_DEMO_AUTO=1`.
+- Éditeur d'opération au clavier : focus sur le nom à l'ouverture, Ctrl+Entrée = OK, Échap /
+  Annuler demande confirmation s'il reste des modifications non appliquées (vérifié par
+  gui_smoke sur 1.1.4 et 1.0.2).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

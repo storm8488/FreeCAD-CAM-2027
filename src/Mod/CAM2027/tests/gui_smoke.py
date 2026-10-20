@@ -116,14 +116,17 @@ def run():
         QtWidgets.QApplication.processEvents()
         grab(editor, "op_editor_%d.png" % i)
     editor.tabs.setCurrentIndex(2)
+    log("editor unsaved at open: %s, focus on name: %s" % (editor.has_unsaved_changes(), editor.focusWidget() is editor.name))
     kind, widget = editor.widgets["StepDown"]
     widget.setValue(2.5)
+    log("editor unsaved after edit: %s" % editor.has_unsaved_changes())
     box, widgets = editor.dressup_boxes["tags"]
     box.setChecked(True)
     widgets["Count"][1].setValue(3)
     # changement de préréglage depuis l'onglet Outil (même outil : le contrôleur est mis à jour)
     editor.preset_combo.setCurrentIndex(1)
     log("editor apply: %s" % editor.apply())
+    log("editor unsaved after apply: %s" % editor.has_unsaved_changes())
     from cam2027.tools import bridge as bridgemod
     log("TC feed after preset change: %.0f" % bridgemod.tool_controller_values(op.ToolController)["feed_mm_min"])
     log("editor status: %s" % editor.status.text())

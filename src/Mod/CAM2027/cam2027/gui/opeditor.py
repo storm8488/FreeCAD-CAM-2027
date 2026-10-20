@@ -79,6 +79,16 @@ class OperationEditor(QtWidgets.QDialog):
         self.setMinimumWidth(720)
         self._build()
         theme.apply(self)
+        self._snapshot = self._current_state()
+        # clavier : Ctrl+Entrée = OK ; le nom a le focus à l'ouverture
+        shortcut_cls = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut  # Qt6 : QtGui, Qt5 : QtWidgets
+        self._shortcuts = []
+        for seq in ("Ctrl+Return", "Ctrl+Enter"):
+            sc = shortcut_cls(QtGui.QKeySequence(seq), self)
+            sc.activated.connect(self.accept)
+            self._shortcuts.append(sc)
+        self.name.setFocus()
+        self.name.selectAll()
 
     # -- construction ----------------------------------------------------------
 
@@ -404,7 +414,7 @@ class OperationEditor(QtWidgets.QDialog):
                 out[n] = w.text()
         return out
 
-    def apply(self):
+    def _apply(self):
         try:
             label = self.name.text().strip()
             if label:
@@ -436,12 +446,37 @@ class OperationEditor(QtWidgets.QDialog):
         panels.refresh_project_panel()
         return True
 
+    def _current_state(self):
+        """Valeurs affichées (nom, outil, géométrie, paramètres, habillages) pour détecter une modification non appliquée."""
+        dressups = {}
+        for key, (box, widgets) in getattr(self, "dressup_boxes", {}).items():
+            dressups[key] = (box.isChecked(), tuple(sorted(self._widget_values(widgets).items())))
+        return (self.name.text(), self.asm_combo.currentData(), self.preset_combo.currentData(),
+                tuple((o.Name, tuple(subs)) for o, subs in self._base),
+                tuple(sorted((k, repr(v)) for k, v in self.params().items())), tuple(sorted(dressups.items())))
+
+    def has_unsaved_changes(self):
+        return self._current_state() != self._snapshot
+
+    def apply(self):
+        ok = self._apply()
+        if ok:
+            self._snapshot = self._current_state()
+        return ok
+
     def accept(self):
         if self.apply():
             super(OperationEditor, self).accept()
             self._finish(True)
 
     def reject(self):
+        # Échap / Annuler : ne pas perdre en silence des modifications non appliquées
+        if self.has_unsaved_changes():
+            answer = QtWidgets.QMessageBox.question(
+                self, "CAM2027", tr("Discard the changes that were not applied?"),
+                QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel, QtWidgets.QMessageBox.Cancel)
+            if answer != QtWidgets.QMessageBox.Discard:
+                return
         super(OperationEditor, self).reject()
         self._finish(False)
 

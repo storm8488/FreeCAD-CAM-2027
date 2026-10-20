@@ -681,5 +681,8 @@
 
   "_section_menus": "ajouts",
   "More...": "Plus...",
-  "Library...": "Bibliothèque..."
+  "Library...": "Bibliothèque...",
+
+  "_section_keys": "ajouts",
+  "Discard the changes that were not applied?": "Abandonner les modifications non appliquées ?"
 }
