@@ -232,7 +232,7 @@ class TestNesting(unittest.TestCase):
         expected = (3 * 100 * 50 + math.pi * 30 ** 2 + 150 * 40 / 2.0) / (300 * 200)
         self.assertAlmostEqual(rep["utilization"], expected, places=3)
         # panneau imposé : le brut est exactement le panneau
-        proj.create_sheet_job(rep["objects"], thickness=18.0, sheet_rect=(0, 0, 300, 200))
+        proj.create_sheet_job(rep["objects"], thickness=18.0)  # panneau de l'imbrication repris tout seul
         sb = proj.stock_bounds()
         self.assertEqual([round(sb[k], 6) for k in ("xmin", "xmax", "ymin", "ymax", "zmin", "zmax")],
                          [0.0, 300.0, 0.0, 200.0, -18.0, 0.0])

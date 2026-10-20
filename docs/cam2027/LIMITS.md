@@ -139,6 +139,18 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   d'outils (hors document) ne sont pas annulables.
 - Vérification visuelle : captures `tests/screenshots/` produites par `tests/gui_smoke.py`.
 
+## Flux 2D avancé
+
+- **Fond plat** : la zone plate est la face réduite de la portée du V-bit (rayon de pointe + profondeur ×
+  tan(demi-angle)) ; ses angles rentrants gardent le rayon de la fraise plate. À recréer si la
+  profondeur du V-carving change (les trois opérations sont figées à leur création).
+- **Incrustation** : géométrie d'Aspire (départ du mâle réduit la forme de Ps × tan(demi-angle)) ;
+  vérifiée sur un rectangle par simulation des deux faces. Formes à angles rentrants : la cavité
+  y est arrondie (diagonale du V-carving) alors que le bouchon y est vif, risque d'interférence
+  non contrôlé automatiquement. Le mâle est un projet séparé, à enregistrer.
+- **Imbrication** : par rectangles englobants seulement (une pièce en L ne reçoit rien dans son
+  creux) ; un seul panneau ; pièces non placées rapportées. À faire avant « Brut et montage ».
+
 ## 4e axe
 
 - **Indexé 3+1 seulement** : pour chaque angle A, la pièce est copiée et tournée exactement autour

@@ -78,7 +78,7 @@ STRATEGIES = {
         "label": "V-carve (variable depth, Voronoi medial axis)",
         "params": ("Discretize", "Colinear", "Tolerance", "StartDepth", "FinalDepth", "ClearanceHeight",
                    "SafeHeight"),
-        "limits": "No flat-depth clearing with a second tool yet (Aspire 'flat depth' equivalent missing).",
+        "limits": "Depth limited by the final depth; for wide areas use Machine > Flat depth clearing (flat end mill, V-bit outline, sharp corners).",
     },
     "helix": {
         "module": "Path.Op.Helix",

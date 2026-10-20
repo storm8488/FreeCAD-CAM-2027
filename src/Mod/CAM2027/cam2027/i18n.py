@@ -105,7 +105,8 @@ def missing_translations(code="fr"):
             if name.endswith(".py"):
                 with open(os.path.join(dirpath, name), "r", encoding="utf-8") as fp:
                     for m in pattern.finditer(fp.read()):
-                        used.add(m.group(2).encode().decode("unicode_escape"))
+                        # échappements Python résolus sans abîmer les caractères non ASCII (°)
+                        used.add(m.group(2).encode("latin-1", "backslashreplace").decode("unicode_escape"))
     path = os.path.join(_CATALOG_DIR, "%s.json" % code)
     with open(path, "r", encoding="utf-8") as fp:
         have = set(k for k in json.load(fp) if not k.startswith("_"))

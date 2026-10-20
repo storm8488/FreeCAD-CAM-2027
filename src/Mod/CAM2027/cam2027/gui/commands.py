@@ -429,6 +429,84 @@ def open_wrap_dialog(proj, op=None):
     return result
 
 
+def _sheet_dialog(proj, dlg_cls, **kw):
+    from . import sheetdlgs
+
+    dlg = getattr(sheetdlgs, dlg_cls)(proj, FreeCADGui.getMainWindow(), **kw)
+    if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+        return None
+    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+    try:
+        result = dlg.apply()
+        if proj.has_job:
+            proj.compute()
+    except Exception as exc:
+        _warn(tr("Operation failed: {error}", error=str(exc)))
+        return None
+    finally:
+        QtWidgets.QApplication.restoreOverrideCursor()
+    _after_change()
+    return result
+
+
+class FlatDepth(_Base):
+    atelier = "pocket"
+    text = "Flat depth clearing (V-carve)"
+    tooltip = "Clear the wide areas of a limited-depth V-carve with a flat end mill, with V-bit outline and sharp corners"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None or not proj.has_job:
+            return
+        sel = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+        _sheet_dialog(proj, "FlatDepthDialog", selected_op=sel[0] if sel else None)
+
+
+class Inlay(_Base):
+    atelier = "engrave"
+    text = "V inlay (male / female)"
+    tooltip = "Female V pocket in this project and mirrored male plug in a new project, with glue gap"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        sel = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+        res = _sheet_dialog(proj, "InlayDialog", selected=sel)
+        if res:
+            res["male_project"].compute()
+            lines = [tr("Male plug created in the new project {name}: save it, it is machined on another board.",
+                        name=res["male_project"].doc.Label),
+                     tr("Glue gap at the bottom: {b} mm; gap between the boards: {s} mm.",
+                        b="%.2f" % res["bottom_gap"], s="%.2f" % res["surface_gap"])] + res["notes"]
+            _info("\n".join(lines))
+
+
+class Nest(_Base):
+    atelier = "measure"
+    text = "Nest parts on a sheet"
+    tooltip = "Place the 2D drawings on a sheet of a given size (bounding rectangles, 90° rotation, copies)"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if proj.has_job:
+            _warn(tr("Nesting is done before Stock & fixture (the job is already created)."))
+            return
+        rep = _sheet_dialog(proj, "NestDialog")
+        if rep:
+            lines = [tr("Placed: {n} part(s), sheet use {u} %.", n=len(rep["placed"]), u="%.0f" % (100 * rep["utilization"]))]
+            if rep["unplaced"]:
+                lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
+            lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
+            _info("\n".join(lines))
+            FreeCADGui.SendMsgToActiveView("ViewFit")
+
+
 def default_params(kind, tool, values):
     """Paramètres initiaux d'une opération dérivés du préréglage (passe axiale, recouvrement, etc.)."""
     params = {"StepDown": values["axial_engagement_mm"]}
@@ -934,6 +1012,9 @@ COMMANDS = [
     ("CAM2027_StockFixture", StockFixture),
     ("CAM2027_AddOperation", AddOperation),
     ("CAM2027_WrapEngrave", WrapEngrave),
+    ("CAM2027_FlatDepth", FlatDepth),
+    ("CAM2027_Inlay", Inlay),
+    ("CAM2027_Nest", Nest),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -953,9 +1034,10 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
-    ("Machining", ["CAM2027_AddOperation", "CAM2027_WrapEngrave", "CAM2027_Compute"]),
+    ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
+                   "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),
 )

@@ -394,6 +394,55 @@ def run():
     viewr.fitAll()
     QtWidgets.QApplication.processEvents()
     viewr.saveImage(os.path.join(OUT, "view3d_relief.png"), 1000, 700, "White")
+    # flux 2D : imbrication, fond plat, incrustation (dialogues)
+    from cam2027.gui import sheetdlgs
+    from cam2027.project import sheet as sheetmod
+    from tests.test_import import SVG
+    svg2 = os.path.join(tmp, "drawing2d.svg")
+    with open(svg2, "w", encoding="utf-8") as fp:
+        fp.write(SVG)
+    proj2d = Project.create("Inlay", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj2d.doc.Name)
+    proj2d.import_model(svg2)
+    ndlg = sheetdlgs.NestDialog(proj2d, mw)
+    ndlg.table.cellWidget(0, 2).setValue(2)
+    ndlg.width.setValue(300.0)
+    ndlg.length.setValue(200.0)
+    QtWidgets.QApplication.processEvents()
+    grab(ndlg, "nest_dialog.png")
+    nrep = ndlg.apply()
+    ndlg.reject()
+    log("nest: placed %d, unplaced %s, use %.0f %%" % (len(nrep["placed"]), nrep["unplaced"], 100 * nrep["utilization"]))
+    proj2d.create_sheet_job(thickness=12.0)
+    log("nest sheet: %s" % [round(v, 1) for v in (proj2d.stock_bounds()[k] for k in ("xmin", "xmax", "ymin", "ymax"))])
+    rect2d = [v for v in sheetmod.vector_objects(proj2d.doc) if len(v.Shape.Edges) == 4][0]
+    vbit2 = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+    vop2, _r = proj2d.add_operation("vcarve", "Vcarve rect", lib.assemblies_for_tool(vbit2.id)[0].id, vbit2.presets[0].id,
+                                    base=[(proj2d.drawing_clone(rect2d, face=True), ["Face1"])], params={"FinalDepth": -2.0})
+    fdlg = sheetdlgs.FlatDepthDialog(proj2d, mw, selected_op=vop2)
+    fasm_ok = fdlg.buttons.button(QtWidgets.QDialogButtonBox.Ok).isEnabled()
+    grab(fdlg, "flat_depth_dialog.png")
+    fops = fdlg.apply()
+    fdlg.reject()
+    idlg = sheetdlgs.InlayDialog(proj2d, mw, selected=[rect2d])
+    idlg.female.setValue(4.0)
+    idlg.start.setValue(2.0)
+    idlg.male.setValue(4.0)
+    QtWidgets.QApplication.processEvents()
+    log("inlay dialog: %s, ok %s" % (idlg.gaps.text(), idlg.buttons.button(QtWidgets.QDialogButtonBox.Ok).isEnabled()))
+    grab(idlg, "inlay_dialog.png")
+    ires = idlg.apply()
+    idlg.reject()
+    r2d = proj2d.compute()
+    rmale = ires["male_project"].compute()
+    log("flat depth: ok %s, ops %s; inlay: female %d ops, male %d ops, all valid %s" % (
+        fasm_ok, [o.Label for o in fops if o is not None], len(ires["female_ops"]), len(ires["male_ops"]),
+        all(r["valid"] for r in r2d + rmale)))
+    viewi = FreeCADGui.getDocument(ires["male_project"].doc.Name).activeView()
+    viewi.viewIsometric()
+    viewi.fitAll()
+    QtWidgets.QApplication.processEvents()
+    viewi.saveImage(os.path.join(OUT, "view3d_inlay_male.png"), 1000, 700, "White")
     # 4e axe continu : gravure enroulée sur un brut rond R20
     import Part
     from cam2027.gui.wrapdlg import WrapDialog

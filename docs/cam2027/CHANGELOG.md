@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Flux 2D avancé** (étape 4.5) : V-carving à **fond plat** (fraise plate à la profondeur limite,
+  contour et angles vifs au V-bit) ; **incrustation en V** mâle / femelle (mâle miroir dans un
+  nouveau projet, jeux de colle affichés) ; **imbrication** des pièces 2D sur un panneau (rectangles
+  englobants, rotation, copies, panneau de cette taille). Vérifiés sur la matière simulée (66 tests).
 - **Contrôle de collision** (étape 4.4) : le contrôle matière vérifie aussi la longueur de coupe
   (frottement de la queue), le porte-outil (tronçons de la bibliothèque) et les brides, rapides
   compris, avec l'opération, le n° de commande et la position ; marqueurs rouges ; à l'export,

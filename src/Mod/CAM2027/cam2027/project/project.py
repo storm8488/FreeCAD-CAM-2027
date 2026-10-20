@@ -166,6 +166,8 @@ class Project(object):
         vectors = list(vectors) if vectors else sheetmod.vector_objects(self.doc)
         if not vectors:
             raise ValueError("aucun dessin 2D dans le projet (importer un SVG ou un DXF)")
+        if sheet_rect is None and getattr(self.info, "NestedSheet", ""):
+            sheet_rect = json.loads(self.info.NestedSheet)  # panneau choisi à l'imbrication
         sheet = sheetmod.make_sheet(self.doc, vectors, float(thickness), float(margin), rect=sheet_rect)
         faces = sheetmod.make_faces(self.doc, vectors)
         self.doc.recompute()
@@ -514,6 +516,9 @@ class Project(object):
                 used += nesting.outline_area(o)
             else:
                 report["unplaced"].append(o.Label)
+        if "NestedSheet" not in self.info.PropertiesList:
+            self.info.addProperty("App::PropertyString", "NestedSheet", "CAM2027", "Sheet chosen when nesting (JSON)")
+        self.info.NestedSheet = json.dumps([0.0, 0.0, float(sheet_width), float(sheet_length)])
         self.doc.recompute()
         report["utilization"] = used / (sheet_width * sheet_length)
         report["objects"] = [o for o in objs if o.Name in placed]
