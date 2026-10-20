@@ -747,6 +747,36 @@ class TestPipeline(unittest.TestCase):
         self.assertAlmostEqual(result["analysis"]["bbox"]["Z"][0], -12.0, places=3)
         proj.close()
 
+    def test_compute_states(self):
+        """À calculer, Calculé, À recalculer après modification, Inactive, Avertissement, Échec."""
+        proj, lib, clone = self._project_with_job("States test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op, _rec = proj.add_operation("profile", "Contour", asm.id, endmill.presets[0].id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        self.assertEqual(proj.operation_state(op), "todo")
+        proj.compute()
+        self.assertEqual(proj.operation_state(op), "computed")
+        proj.update_operation(op, {"StepDown": 2.0})
+        self.assertEqual(proj.operation_state(op), "stale")
+        proj.compute()
+        self.assertEqual(proj.operation_state(op), "computed")
+        proj.set_operation_active(op, False)
+        self.assertEqual(proj.operation_state(op), "inactive")
+        proj.set_operation_active(op, True)
+        proj.compute()
+        # avertissement : paramètre ignoré enregistré
+        proj.update_operation(op, {"NotAProperty": 1})
+        proj.compute()
+        self.assertEqual(proj.operation_state(op), "warning")
+        # échec : gravure sans aucune arête -> aucun mouvement de coupe
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+        op2, _r2 = proj.add_operation("engrave", "Empty engrave", lib.assemblies_for_tool(vbit.id)[0].id,
+                                      vbit.presets[0].id, base=None, params={})
+        proj.compute()
+        self.assertEqual(proj.operation_state(op2), "failed")
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

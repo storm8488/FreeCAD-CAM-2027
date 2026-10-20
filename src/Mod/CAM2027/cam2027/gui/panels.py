@@ -815,6 +815,8 @@ class ToolLibraryPanel(QtWidgets.QWidget):
 # ---------------------------------------------------------------------------
 
 
+_STATE_ICONS = {"inactive": "visibility", "todo": "calculate", "stale": "recalculate", "failed": "error",
+                "warning": "warning", "computed": "check"}
 _STEP_ICONS = {"model": "open-project", "stock": "stock", "ops": "contour", "export": "export-gcode"}
 _LIST_ICONS = {"edit": "settings", "dup": "redo", "del": "delete"}
 
@@ -866,7 +868,9 @@ class ProjectPanel(QtWidgets.QWidget):
         lay.addLayout(steps)
 
         self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels([tr("Operation"), tr("Strategy"), tr("Tool"), tr("Commands"), tr("Z"), tr("Time")])
+        self.tree.setHeaderLabels([tr("Operation"), tr("State"), tr("Strategy"), tr("Tool"), tr("Commands"),
+                                   tr("Z (mm)"), tr("Time (estimate)")])
+        self.tree.headerItem().setToolTip(1, tr("To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine."))
         self.tree.setRootIsDecorated(False)
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
@@ -892,7 +896,7 @@ class ProjectPanel(QtWidgets.QWidget):
             self.buttons[key] = b
         lay.addLayout(row)
         row2 = QtWidgets.QHBoxLayout()
-        recompute = QtWidgets.QPushButton(tr("Recompute toolpaths"))
+        recompute = self.recompute_button = QtWidgets.QPushButton(tr("Recompute toolpaths"))
         recompute.setIcon(theme.icon("recalculate"))
         recompute.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Compute"))
         row2.addWidget(recompute)
@@ -942,7 +946,7 @@ class ProjectPanel(QtWidgets.QWidget):
             self.steps.setText("")
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
-        from ..project.operations import toolpath_summary, STRATEGIES
+        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES
 
         if proj.has_job:
             models = [m.Label for m in proj.job.Model.Group]
@@ -963,6 +967,7 @@ class ProjectPanel(QtWidgets.QWidget):
         ops = proj.operations() if proj.has_job else []
         reg = proj.registry if proj.has_job else {}
         bad = 0
+        pending = 0
         total_seconds = 0
         for op in ops:
             s = toolpath_summary(op)
@@ -975,11 +980,15 @@ class ProjectPanel(QtWidgets.QWidget):
             if tc is not None:
                 v = bridge.tool_controller_values(tc)
                 tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
-            valid = op.isValid() and (s["commands"] > 0 or not base.Active)
+            op_state = proj.operation_state(op)
+            valid = op_state not in ("failed",)
             if not valid:
                 bad += 1
+            if op_state in ("todo", "stale"):
+                pending += 1
+            state_label, state_level = COMPUTE_STATES[op_state]
             item = QtWidgets.QTreeWidgetItem([
-                op.Label, tr(STRATEGIES.get(kind, {}).get("label", kind)), tool_text,
+                op.Label, tr(state_label), tr(STRATEGIES.get(kind, {}).get("label", kind)), tool_text,
                 str(s["commands"]) if base.Active else tr("(inactive)"),
                 "%.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0) if s["commands"] else "",
                 str(s["cycle_time"] or ""),
@@ -990,9 +999,10 @@ class ProjectPanel(QtWidgets.QWidget):
             tips = list(rec.get("warnings", []))
             if rec.get("ignored_params"):
                 tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
+            item.setIcon(1, theme.icon(_STATE_ICONS[op_state]))
+            item.setForeground(1, QtGui.QBrush(QtGui.QColor(theme.status_color(state_level))))
             if not valid:
-                tips.append(tr("INVALID"))
-                item.setIcon(0, theme.icon("warning"))
+                tips.append(tr("No cutting move: check the geometry, the depths and the tool."))
                 for col in range(item.columnCount()):
                     item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.status_color("error"))))
             if tips:
@@ -1014,6 +1024,15 @@ class ProjectPanel(QtWidgets.QWidget):
         missing = proj.machine.unknown_fields()
         self.steps.setText(tr("Machine data to fill in: {fields}", fields=", ".join(missing)) if missing else "")
         self._mark_next_step()
+        if pending:
+            # calcul périmé : l'action principale devient « Recalculer »
+            for _key, (_st, _tx, btn, _lb) in self.step_rows.items():
+                theme.set_role(btn, "")
+            theme.set_role(self.recompute_button, "primary")
+            self.recompute_button.setText(tr("Recompute toolpaths ({n} pending)", n=pending))
+        else:
+            theme.set_role(self.recompute_button, "")
+            self.recompute_button.setText(tr("Recompute toolpaths"))
 
     def _mark_next_step(self):
         """Action principale contextuelle : le bouton de la première étape non faite est en bleu."""

@@ -625,5 +625,19 @@
   "light": "clair",
   "done": "fait",
   "to do": "à faire",
-  "No issue found among the checks performed (see the documentation for what is checked).": "Aucun problème parmi les contrôles effectués (voir la documentation pour la liste des contrôles)."
+  "No issue found among the checks performed (see the documentation for what is checked).": "Aucun problème parmi les contrôles effectués (voir la documentation pour la liste des contrôles).",
+
+  "_section_states": "ajouts",
+  "Inactive": "Inactive",
+  "To compute": "À calculer",
+  "To recompute": "À recalculer",
+  "Failed": "Échec",
+  "Warning": "Avertissement",
+  "Computed": "Calculé",
+  "State": "État",
+  "Z (mm)": "Z (mm)",
+  "Time (estimate)": "Temps (estimation)",
+  "To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine.": "À calculer / Calculé / À recalculer / Avertissement / Échec. « Calculé » ne veut pas dire vérifié ni sûr pour la machine.",
+  "No cutting move: check the geometry, the depths and the tool.": "Aucun mouvement de coupe : vérifiez la géométrie, les profondeurs et l'outil.",
+  "Recompute toolpaths ({n} pending)": "Recalculer les parcours ({n} en attente)"
 }

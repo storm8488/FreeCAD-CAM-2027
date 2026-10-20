@@ -93,6 +93,16 @@ def run():
     log("after duplicate: %d operations" % len(proj.operations()))
     project_panel.move_selected(-1)
     log("after move up: %s" % [o.Label for o in proj.operations()])
+    # état « à recalculer » : modification sans recalcul, puis capture
+    proj.update_operation(proj.base_operation(proj.operations()[0]), {"StepDown": 4.0})
+    panels.refresh_project_panel()
+    QtWidgets.QApplication.processEvents()
+    log("states: %s, recompute button: %s" % ([project_panel.tree.topLevelItem(i).text(1) for i in range(project_panel.tree.topLevelItemCount())],
+                                             project_panel.recompute_button.text()))
+    grab(project_panel, "project_panel_stale.png")
+    proj.compute()
+    panels.refresh_project_panel()
+    QtWidgets.QApplication.processEvents()
     grab(project_panel, "project_panel.png")
     # éditeur d'opération (non modal) : onglets générés, lecture des valeurs, application
     from cam2027.gui import opeditor

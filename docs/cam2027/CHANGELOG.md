@@ -8,6 +8,10 @@
   stratégies et actions, action principale contextuelle en bleu cobalt, commande « Thème :
   système / sombre / clair », plus aucune couleur codée en dur dans l'interface. Test
   `test_theme` (44 tests). Voir `docs/cam2027/DESIGN.md`.
+- États de calcul normalisés (À calculer / Calculé / À recalculer / Avertissement / Échec /
+  Inactive) lus sur l'état réel des objets FreeCAD (`operations.compute_state`), colonne « État »
+  avec icône + texte + couleur ; « Recalculer les parcours (n en attente) » devient l'action
+  principale dès qu'un calcul est périmé. Test `test_compute_states` (45 tests).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

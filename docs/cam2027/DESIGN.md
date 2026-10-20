@@ -14,6 +14,7 @@ FreeCAD et son atelier CAM.
 | Choix du thème | préférence `BaseApp/Preferences/CAM2027/Theme` = `system` (défaut, suit la palette FreeCAD) / `dark` / `light` ; commande « Thème : système / sombre / clair » (menu CAM2027) | |
 | Icônes | `Resources/icons/atelier/{dark,light}/*.svg` (32 × 2, copie exacte) | variante choisie selon le thème effectif ; commandes, étapes du flux, stratégies, actions de liste, opération invalide |
 | Boutons | vrais `QPushButton` avec rôles `primary` / `danger` (pas d'images) | l'étape suivante du flux de travail est l'action principale (bleu cobalt) |
+| États de calcul | colonne « État » de la liste d'opérations (`operations.compute_state`) | lus sur l'objet FreeCAD (Touched / Invalid / mouvements de coupe), jamais un statut parallèle ; « Calculé » ≠ vérifié |
 | États | statut d'étape = symbole (✔ / ○) + couleur + info-bulle ; opération invalide = icône d'alerte + couleur + info-bulle ; contrôles d'export = niveau en texte + couleur | jamais la couleur seule |
 
 ## Non intégré / à faire

@@ -349,6 +349,46 @@ def model_clone(job, obj):
     return obj
 
 
+#: états de calcul normalisés (charte « Atelier ») -> (libellé anglais, niveau d'état pour la couleur)
+COMPUTE_STATES = {
+    "inactive": ("Inactive", "muted"),
+    "todo": ("To compute", "todo"),
+    "stale": ("To recompute", "stale"),
+    "failed": ("Failed", "error"),
+    "warning": ("Warning", "warning"),
+    "computed": ("Computed", "ok"),
+}
+
+
+_CUTTING_CODES = ("G1", "G01", "G2", "G02", "G3", "G03", "G73", "G81", "G82", "G83", "G84", "G85")
+
+
+def compute_state(obj, base=None, record=None):
+    """État de calcul d'une opération (ou de son habillage ``obj``) d'après l'objet FreeCAD.
+
+    Lu sur l'état réel du document (``State`` / ``isValid`` / commandes), jamais maintenu à part :
+    ``todo`` = jamais calculée, ``stale`` = dépendance modifiée depuis le dernier calcul,
+    ``failed`` = calcul en erreur ou parcours vide, ``warning`` = calculée avec avertissements
+    (approximation d'outil, paramètres ignorés), ``computed`` = calculée. « computed » ne veut pas
+    dire « vérifiée » ni « sûre pour la machine ».
+    """
+    base = base or obj
+    if getattr(base, "Active", True) is False:
+        return "inactive"
+    states = set(getattr(obj, "State", []) or []) | set(getattr(base, "State", []) or [])
+    cmds = obj.Path.Commands if getattr(obj, "Path", None) is not None else []
+    cutting = sum(1 for c in cmds if c.Name in _CUTTING_CODES)
+    if "Invalid" in states or not obj.isValid():
+        return "failed"
+    if "Touched" in states:
+        return "todo" if not cmds else "stale"
+    if cutting == 0:
+        return "failed"  # aucun mouvement de coupe : rien ne sera usiné
+    if record and (record.get("warnings") or record.get("ignored_params")):
+        return "warning"
+    return "computed"
+
+
 def toolpath_summary(op):
     """Résumé du parcours calculé (pour l'examen et les tests).
 

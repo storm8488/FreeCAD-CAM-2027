@@ -223,6 +223,11 @@ class Project(object):
     def operations(self):
         return list(self.job.Operations.Group)
 
+    def operation_state(self, obj):
+        """État de calcul normalisé de l'objet du groupe Operations (voir ``operations.compute_state``)."""
+        base = dressupmod.base_operation(obj)
+        return opsmod.compute_state(obj, base, self.registry.get(base.Name))
+
     def update_operation(self, op, params):
         """Modifie des propriétés d'une opération existante (registre mis à jour) ; retourne les noms ignorés.
 
