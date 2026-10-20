@@ -74,6 +74,8 @@ class TestZMap(unittest.TestCase):
         tool = sim.ToolProfile("flat", 3.0)
         z.sweep((5, 5, 10), (5, 5, -1), tool, rapid=True)  # descente rapide dans la matière
         self.assertEqual(z.rapid_hits, 1)
+        z.sweep((20, 20, -1), (20, 20, 10), tool, rapid=True)  # dégagement vertical vers le haut : jamais compté
+        self.assertEqual(z.rapid_hits, 1)
 
     def test_model_heights(self):
         z = sim.ZMap(-5, -5, 25, 25, 20.0, 0.5)
@@ -84,6 +86,18 @@ class TestZMap(unittest.TestCase):
         self.assertAlmostEqual(h[i, j], math.sqrt(16 - (x - 18) ** 2 - (y - 18) ** 2), delta=0.05)
         i, j, _x, _y = _cell(z, 12, 3)
         self.assertEqual(h[i, j], -float("inf"))
+
+    def test_wall_on_grid(self):
+        """Paroi verticale pile sur les centres des colonnes, fraise tangente : pas d'entaille."""
+        z = sim.ZMap(0, 0, 20, 20, 10.0, 0.5)  # centres à 0.25, 0.75...
+        part = Part.makeBox(20, 20, 10).cut(Part.makeBox(9.5, 9.5, 5, FreeCAD.Vector(5.25, 5.25, 5)))
+        z.sweep((6.75, 6.75, 5.0), (6.75, 13.25, 5.0), sim.ToolProfile("flat", 3.0))
+        heights, low = sim.model_heights(z, [part], lateral=sim.WALL_TOLERANCE)
+        self.assertAlmostEqual(sim.compare(z, heights)["gouge_max"], 5.0)  # centre sur la paroi : haut du mur
+        self.assertEqual(sim.compare(z, heights, gouge_heights=low)["gouge_max"], 0.0)
+        z.sweep((6.15, 6.75, 5.0), (6.15, 13.25, 5.0), sim.ToolProfile("flat", 3.0))  # 0,6 mm dans la paroi
+        self.assertAlmostEqual(sim.compare(z, heights, gouge_heights=low)["gouge_max"], 5.0)
+
 
 
 class TestMaterialCheck(unittest.TestCase):
@@ -147,6 +161,31 @@ class TestMaterialCheck(unittest.TestCase):
         self.assertGreater(rep["removed_volume"], 1000.0)
         self.assertLess(rep["leftover_mean"], 0.3, rep)
         proj.close()
+
+    def test_thread_milling_whole_part(self):
+        """Filetage sans sélection : le filet suit l'avant-trou (6,8 mm : M8 x 1,25, pas le M6 demandé) ; le
+        filet n'est pas une entaille ; sans perçage avant, un seul défaut qui dit de percer."""
+        from cam2027.gui.commands import default_params
+
+        lib = starter_library()
+        proj = Project.create("Sim thread", lib, self._machine())
+        part = proj.import_model(self.step, label="Plate").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        tm = lib.search("thread mill")[0]
+        params = default_params("threadmill", tm, tm.presets[0].resolve(tm))
+        self.assertEqual(params["ThreadName"], "M6 x 1")
+        op, rec = proj.add_operation("threadmill", "Thread", lib.assemblies_for_tool(tm.id)[0].id, tm.presets[0].id,
+                                     base=[(clone, [])], params=params)
+        self.assertEqual(op.ThreadName, "M8 x 1.25")
+        self.assertEqual(rec["params"]["ThreadName"], "M8 x 1.25")
+        self.assertEqual(len(rec["warnings"]), 1, rec["warnings"])
+        rep = proj.material_check()
+        self.assertLess(rep["gouge_max"], 0.03, rep["gouge_at"])
+        self.assertEqual([e[0] for e in rep["collisions"]["events"]], ["undrilled"])
+        self.assertEqual(rep["collisions"]["rapids"], "collision")
+        proj.close()
+
 
 
 class TestCollisions(unittest.TestCase):

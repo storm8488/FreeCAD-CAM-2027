@@ -13,6 +13,7 @@ adaptative est l'opération ``adaptive`` (algorithme de Kalman/Adaptive de
 FreeCAD, engagement contrôlé en 2D).
 """
 
+from ..i18n import UserError
 import csv
 import importlib
 import os
@@ -146,6 +147,8 @@ DEFAULT_THREAD_TYPE = "MetricInternal6H"
 #: stratégies qui travaillent sur des trous : sans sélection, FreeCAD détecte tous les trous
 #: cylindriques plus grands que l'outil (``findAllHoles``)
 HOLE_STRATEGIES = ("drilling", "helix", "threadmill")
+#: ébauche 3D en mode classique (FreeCAD 1.0) : au-delà, le calcul fige l'interface plusieurs minutes
+MAX_CLASSIC_ROUGH_FACES = 200
 
 _MILLS = ("endmill", "bullnose", "ballend")
 #: types d'outil de la bibliothèque proposés pour chaque stratégie (le premier présent est présélectionné)
@@ -183,10 +186,23 @@ def _horizontal_planes(shape, tol=1e-6):
 
 
 def pocket_floor_faces(obj, tol=1e-6):
-    """Fonds de poche d'un solide : faces planes horizontales strictement entre le dessous et le dessus."""
-    bb = obj.Shape.BoundBox
-    return ["Face%d" % i for i, f in _horizontal_planes(obj.Shape, tol)
-            if bb.ZMin + 1e-3 < f.BoundBox.ZMin < bb.ZMax - 1e-3]
+    """Fonds de poche d'un solide : faces planes horizontales strictement entre le dessous et le dessus, sans
+    matière au-dessus d'elles. Un fond sous un surplomb n'est pas accessible par le dessus : la poche FreeCAD
+    l'extrude vers le haut et usine à travers le surplomb."""
+    import FreeCAD
+
+    shape = obj.Shape
+    bb = shape.BoundBox
+    out = []
+    for i, f in _horizontal_planes(shape, tol):
+        if not bb.ZMin + 1e-3 < f.BoundBox.ZMin < bb.ZMax - 1e-3:
+            continue
+        above = f.copy()
+        above.translate(FreeCAD.Vector(0, 0, 1e-3))
+        if above.extrude(FreeCAD.Vector(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0)).common(shape).Volume > 1e-3:
+            continue
+        out.append("Face%d" % i)
+    return out
 
 
 def top_faces(obj, tol=1e-6):
@@ -253,6 +269,52 @@ def thread_spec(thread_type, name, fit=50):
     return spec
 
 
+#: avant-trou d'un filet : diamètre mineur de la table, à cette marge près (mm)
+TAP_DRILL_TOLERANCE = 0.15
+
+
+def fit_thread_to_holes(op, tool, params):
+    """Filetage sans sélection : FreeCAD retient tous les trous de la pièce, quel que soit leur diamètre (un
+    filet M6 dans un trou de 4,1 mm entaille la pièce). Garde les trous percés pour un même filet (diamètre
+    entre les diamètres mineurs de la table, à ``TAP_DRILL_TOLERANCE`` près) : le filet demandé s'il en a,
+    sinon celui qui en a le plus, parmi les filets que l'outil peut fraiser (pas dans sa plage, diamètre
+    majeur au-delà de son diamètre). Retourne ``(params, nombre de trous gardés, diamètres écartés)``."""
+    holes = [(b, sub, float(op.Proxy.holeDiameter(op, b, sub))) for b, subs in op.Base for sub in subs]
+    if not holes:
+        return params, 0, []
+    thread_type = params.get("ThreadType", DEFAULT_THREAD_TYPE)
+    imperial = thread_type in strategy_module("threadmill").ThreadTypesImperial
+    scale = 25.4 if imperial else 1.0
+    g = tool.geometry
+    groups = {}
+    for row in thread_table(thread_type):
+        pitch = 25.4 / int(row["tpi"]) if imperial else float(row["pitch"])
+        if pitch < (g.pitch_min or 0.0) - 1e-6 or pitch > g.pitch + 1e-6 or float(row["dMajorMin"]) * scale <= g.diameter:
+            continue
+        lo = float(row["dMinorMin"]) * scale - TAP_DRILL_TOLERANCE
+        hi = float(row["dMinorMax"]) * scale + TAP_DRILL_TOLERANCE
+        hits = [h for h in holes if lo <= h[2] <= hi]
+        if hits:
+            groups[row["name"]] = (hits, pitch)
+    if not groups:
+        raise UserError("No hole of the part is drilled for a thread this tool can mill (hole diameters: {d} mm): select the holes, or drill them to the tap drill size first",
+                        d=", ".join("%.2f" % d for d in sorted({round(h[2], 2) for h in holes})))
+    name = params.get("ThreadName")
+    if name not in groups:
+        name = max(groups, key=lambda n: (len(groups[n][0]), groups[n][1]))  # le plus de trous, puis pas gros
+    kept = groups[name][0]
+    base = {}
+    for b, sub, _d in kept:
+        base.setdefault(b.Name, (b, []))[1].append(sub)
+    op.Base = list(base.values())
+    params = dict(params)
+    for key in ("MajorDiameter", "MinorDiameter", "Pitch", "TPI"):
+        params.pop(key, None)
+    params.update(thread_spec(thread_type, name, params.get("ThreadFit", 50)))
+    set_params(op, params)
+    others = sorted({round(h[2], 2) for h in holes if h not in kept})
+    return params, len(kept), others
+
 def resolve_params(kind, tool, params):
     """Complète les paramètres d'une stratégie à partir de l'outil de la bibliothèque.
 
@@ -286,7 +348,36 @@ def resolve_params(kind, tool, params):
 def strategy_module(kind):
     if kind not in STRATEGIES:
         raise ValueError("stratégie inconnue : %r (disponibles : %s)" % (kind, ", ".join(sorted(STRATEGIES))))
-    return importlib.import_module(STRATEGIES[kind]["module"])
+    mod = importlib.import_module(STRATEGIES[kind]["module"])
+    if kind in ("adaptive", "rough3d"):
+        patch_adaptive_slicing(mod)
+    return mod
+
+
+def patch_adaptive_slicing(mod=None):
+    """Mode « modèle » de l'adaptative (FreeCAD 1.1) : à chaque niveau, les faces de la pièce au-dessus de la
+    tranche sont projetées sur XY puis réunies en une face par ``DraftGeomUtils.concatenate``. Sur certaines
+    pièces (chauffage Vz330 : tranches 6,5-9,5 et 28,5-36,5 mm) cette dernière étape lève « Wire is not
+    closed » et toute l'opération échoue, sans parcours. Chaque face se projette pourtant seule : en cas
+    d'échec, la réunion des projections est gardée telle quelle (faces coplanaires à Z 0)."""
+    if mod is None:
+        mod = importlib.import_module("Path.Op.Adaptive")
+    original = getattr(mod, "projectFacesToXY", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+
+    def projection(faces, *args, **kwargs):
+        try:
+            return original(faces, *args, **kwargs)
+        except Exception:
+            parts = [original([f], *args, **kwargs) for f in faces]
+            parts = [p for p in parts if not p.isNull() and p.Faces]
+            if not parts:
+                raise
+            return parts[0].fuse(parts[1:]).removeSplitter() if len(parts) > 1 else parts[0]
+
+    projection.cam2027_patched = True
+    mod.projectFacesToXY = projection
 
 
 def create_operation(job, kind, name, tool_controller, base=None, params=None):
@@ -342,8 +433,22 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         gui_mod = importlib.import_module(STRATEGIES[kind]["module"].replace("Path.Op.", "Path.Op.Gui."))
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, gui_mod.Command.res)
         op.ViewObject.Visibility = True
+    model_aware_objects = None
     if kind == "rough3d":
-        base = [(obj, list(subs) or raised_faces(model_clone(job, obj))) for obj, subs in (base or [])]
+        whole = all(not subs for _o, subs in (base or []))
+        if whole and "ModelAwareExperiment" in op.PropertiesList:
+            # pièce entière : mode « modèle » de l'adaptative (FreeCAD 1.1) : pièce et brut tranchés à chaque
+            # niveau. Le mode classique avec toutes les faces en relief comme base (1152 faces pour un plateau
+            # à alvéoles) calculait plus de 15 min, interface figée.
+            op.ModelAwareExperiment = True
+            model_aware_objects = [model_clone(job, obj) for obj, _s in (base or [])] or list(job.Model.Group)
+            base = []
+        else:
+            base = [(obj, list(subs) or raised_faces(model_clone(job, obj))) for obj, subs in (base or [])]
+            faces = sum(len(subs) for _o, subs in base)
+            if whole and faces > MAX_CLASSIC_ROUGH_FACES:
+                raise UserError("3D roughing of the whole part ({n} faces in relief) is too slow without the model-aware mode of FreeCAD 1.1: select the faces to rough",
+                                n=faces)
     explicit = [(model_clone(job, obj), list(subs)) for obj, subs in (base or []) if subs]
     if explicit:
         op.Base = explicit
@@ -351,6 +456,11 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         op.Base = [(model_clone(job, obj), []) for obj, _subs in base]
     # stratégies sur trous sans sous-élément : garder les trous détectés par FreeCAD (findAllHoles)
     ignored = set_params(op, params)
+    if model_aware_objects is not None:
+        extra = {"ZStockToLeave": params.get("StockToLeave", 0.5)}
+        if "FinalDepth" not in params:  # sinon : dessus de la pièce, un seul niveau
+            extra["FinalDepth"] = min(o.Shape.BoundBox.ZMin for o in model_aware_objects)
+        set_params(op, extra)
     if getattr(op, "Active", None) is False:
         op.Active = True
     return op, ignored

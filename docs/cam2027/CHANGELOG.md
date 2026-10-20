@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **Ébauche 3D et toutes les stratégies vérifiées sur les pièces de l'utilisateur** (matrice stratégies ×
+  pièces, chaque case dans son propre CAM2027.exe, `tests/run_strategy_matrix.py`). Ébauche 3D de la pièce
+  entière : mode « modèle » de FreeCAD 1.1 (plus de 15 min figé auparavant), calcul arrêtable
+  (« Arrêter le calcul »), projection de tranche réparée quand FreeCAD lève « Wire is not closed »,
+  liaisons remontées d'une passe (G0 dans la matière) ; sur 1.0.2, refus clair au-delà de 200 faces.
+  Finition 3D échantillonnée à 0,1 mm (entaille de 1,45 mm à 0,5). Filetage sans sélection : filet choisi
+  d'après les avant-trous, autres trous écartés et listés. Poche / adaptative sans sélection : fonds sous
+  un surplomb écartés. Contrôle matière : tolérance de 0,05 mm au droit des parois verticales, trous
+  filetés creusés au diamètre majeur, dégagements verticaux et frôlements de moins de 0,01 mm non comptés
+  comme rapides dans la matière, filetage dans un trou non percé signalé comme tel. 79 tests.
 - **Plantage à la création du brut corrigé** : un fichier importé deux fois donnait, une fois les corps
   fusionnés, une forme vide (0 solide, boîte invalide) ; le brut de FreeCAD (`Stock.execute` /
   `onChanged`) bouclait alors jusqu'au débordement de pile (vidages Windows : violation d'accès dans

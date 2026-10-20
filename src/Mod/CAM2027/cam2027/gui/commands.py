@@ -41,10 +41,16 @@ def _need_project():
 
 
 class busy(object):
-    """Curseur d'attente + message dans la barre d'état pendant une action longue (import, calcul...)."""
+    """Curseur d'attente + message dans la barre d'état pendant une action longue (import, calcul...).
 
-    def __init__(self, message):
+    ``stoppable`` (projet) : fenêtre de progression avec « Arrêter le calcul » ; l'adaptative de FreeCAD rend
+    la main à l'interface pendant son calcul et s'arrête quand ``StopProcessing`` passe à vrai."""
+
+    def __init__(self, message, stoppable=None):
         self.message = message
+        self.project = stoppable
+        self.dialog = None
+        self.stopped = False
 
     def __enter__(self):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -52,15 +58,39 @@ class busy(object):
             FreeCADGui.getMainWindow().statusBar().showMessage(self.message)
         except Exception:
             pass
+        if self.project is not None:
+            self.dialog = QtWidgets.QProgressDialog(self.message, tr("Stop the computation"), 0, 0,
+                                                    FreeCADGui.getMainWindow())
+            self.dialog.setWindowTitle("CAM2027")
+            self.dialog.setMinimumDuration(0)
+            self.dialog.setWindowModality(QtCore.Qt.WindowModal)
+            self.dialog.canceled.connect(self.stop)
+            self.dialog.show()
         QtWidgets.QApplication.processEvents()
         return self
 
+    def stop(self):
+        self.stopped = True
+        try:
+            for op in self.project.operations():
+                base = self.project.base_operation(op)
+                if "StopProcessing" in base.PropertiesList:
+                    base.StopProcessing = True
+        except Exception:
+            pass
+
     def __exit__(self, *_exc):
+        if self.dialog is not None:
+            self.dialog.canceled.disconnect(self.stop)
+            self.dialog.close()
+            self.dialog.deleteLater()
         QtWidgets.QApplication.restoreOverrideCursor()
         try:
             FreeCADGui.getMainWindow().statusBar().clearMessage()
         except Exception:
             pass
+        if self.stopped:
+            _warn(tr("Computation stopped: the operations concerned have an incomplete toolpath (recompute them later)."))
         return False
 
 
@@ -481,7 +511,8 @@ class AddOperation(_Base):
             index_deg = index.value() if index.isEnabled() and index.value() > index.minimum() else None
             op, rec = proj.add_operation(k, name.text().strip() or tr(STRATEGIES[k]["label"]).split(" (")[0],
                                          a.id, preset.currentData(), base=base, params=params, index_deg=index_deg)
-            proj.compute()
+            with busy(tr("Computing the toolpaths..."), stoppable=proj):
+                proj.compute()
         except Exception as exc:
             _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
             _after_change()
@@ -641,10 +672,15 @@ def default_params(kind, tool, values):
                                          / tool.geometry.diameter))))
     if kind in ("pocket", "millface", "adaptive", "helix", "rough3d"):
         params["StepOver"] = stepover
+    if kind in ("adaptive", "rough3d"):
+        # liaisons de l'adaptative « en zone dégagée » remontées d'une passe : à 0 (défaut FreeCAD) elles se font
+        # à la profondeur de coupe, et l'adaptative en voit parfois une à travers de la matière (G0 dans 3 mm de
+        # matière sur le chauffage Vz330)
+        params["LiftDistance"] = values["axial_engagement_mm"]
     if kind == "millface":
         params["ClearEdges"] = True
     if kind == "surface3d":
-        params.update({"StepOver": stepover, "CutPattern": "ZigZag", "SampleInterval": 0.5})
+        params.update({"StepOver": stepover, "CutPattern": "ZigZag", "SampleInterval": 0.1})
         params.pop("StepDown", None)  # passe unique de finition par défaut
     if kind == "waterline":
         params.update({"LayerMode": "Multi-pass", "SampleInterval": 0.5})
@@ -671,7 +707,7 @@ class Compute(_Base):
         if not proj.has_job:
             _warn(tr("Define the stock & fixture first (this creates the job)."))
             return
-        with busy(tr("Computing the toolpaths...")):
+        with busy(tr("Computing the toolpaths..."), stoppable=proj):
             results = proj.compute()
         bad = [r["name"] for r in results if not r["valid"] or r["commands"] == 0]
         if bad:
@@ -969,7 +1005,8 @@ def material_report_text(rep):
         if not col["clamps_defined"]:
             lines.append(tr("No clamp defined: clamps not checked (Stock & fixture)."))
         kinds = {"flute_length": tr("material above the flute length"), "holder": tr("tool holder in the material"),
-                 "clamp": tr("clamp"), "rapid": tr("rapid into the material")}
+                 "clamp": tr("clamp"), "rapid": tr("rapid into the material"),
+                 "undrilled": tr("thread milling in a hole that is not drilled (drill it first)")}
         for e in col["events"]:
             x, y, z = e[3] if e[3] else (0.0, 0.0, 0.0)
             what = kinds[e[0]] + (" %s (%s)" % (e[5], e[6]) if e[0] == "clamp" else "")

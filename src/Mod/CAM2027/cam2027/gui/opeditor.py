@@ -463,7 +463,10 @@ class OperationEditor(QtWidgets.QDialog):
                 self._refresh_base_list()
             ignored = self.proj.update_operation(self.op, self.params())
             self._apply_dressups()
-            self.proj.compute()
+            from .commands import busy
+
+            with busy(tr("Computing the toolpaths..."), stoppable=self.proj):
+                self.proj.compute()
             from ..project import dressups as dressupmod
             from ..project.operations import toolpath_summary
 

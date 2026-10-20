@@ -46,11 +46,23 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Stratégies exposées : contour, poche, adaptative 2D, perçage, surfaçage, gravure,
   V-carving, alésage hélicoïdal, rainure, fraisage de filets, chanfreinage, poche 2D,
   **finition 3D de surface et en Z constant** (OpenCamLib, 3 axes : balayage rotatif non exposé ;
-  **ébauche 3D** = adaptative niveau par niveau autour des faces en relief, avec des marches
+  échantillonnage par défaut 0,1 mm : à 0,5 mm les segments entre échantillons coupaient le haut des
+  parois, 1,45 mm d'entaille sur la plaque de test ;
+  **ébauche 3D** = adaptative niveau par niveau ; pièce entière sur FreeCAD 1.1 : mode « modèle » (pièce
+  et brut tranchés à chaque niveau, calcul arrêtable ; quand la réunion des projections d'une tranche
+  échoue dans FreeCAD, « Wire is not closed », la réunion face par face est gardée) ; sur 1.0.2 : autour
+  des faces en relief, refusée au-delà de 200 faces (calcul de plusieurs minutes), avec des marches
   entre niveaux ; sur un relief depuis une image, seule la surface du dessus sert de base),
   pas de reprise, pas de 4e axe, pas d'attaches/dogbones/rampes
   inline (les habillages FreeCAD restent utilisables dans l'atelier CAM standard sur le
   même document).
+- Adaptative et ébauche 3D : liaisons « en zone dégagée » remontées d'une passe (`LiftDistance` = passe ;
+  0 dans FreeCAD, l'adaptative en faisait parfois une à travers la matière). Le Z constant (OpenCamLib) ne
+  s'arrête pas en cours de calcul : sur une grande pièce l'interface reste occupée (39 s sur le chauffage
+  de test à 0,5 mm d'échantillonnage).
+- Sans sélection, poche et adaptative usinent les fonds de poche : faces planes horizontales entre le dessous
+  et le dessus **sans matière au-dessus** (un fond sous un surplomb est écarté : FreeCAD l'extruderait à
+  travers le surplomb). Un fond partiellement couvert est écarté en entier : le sélectionner à la main.
 - La poche FreeCAD (décalage/zigzag) **n'est pas** adaptative ; « adaptative » est
   l'opération Adaptive de FreeCAD (engagement contrôlé 2D, monothread).
 - Surfaçage : faces planes ; avec `ClearEdges` (activé par le dialogue) le centre de
@@ -64,7 +76,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   min(queue, 0,8 × D) pour que l'esquisse FreeCAD se résolve ; sur 1.0.2 l'esquisse du
   ToolBit à fileter signale une arête nulle (crête 0) : forme 3D de l'outil dégradée,
   parcours inchangé (il n'utilise que les propriétés Diameter/Crest) ; le trou doit être
-  pré-percé (aucune opération de dégagement liée). Testé automatiquement : filet intérieur
+  pré-percé (aucune opération de dégagement liée ; le contrôle matière le dit : « filetage dans un trou pas
+  encore percé »). Sans sélection, seuls les trous percés pour un même filet sont gardés (diamètre mineur de
+  la table à 0,15 mm près) : le filet demandé s'il en a, sinon celui qui en a le plus parmi ceux que l'outil
+  peut fraiser (les autres trous sont listés). Testé automatiquement : filet intérieur
   métrique 6H ; filets extérieurs et impériaux **non vérifiés**.
 - Chanfreinage (`Path.Op.Deburr`) : arêtes sélectionnées (ou contour d'une face plane) avec
   une fraise à chanfreiner ou un V-bit ; la profondeur découle de l'angle de l'outil
@@ -123,7 +138,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   voit que le dessus : parois verticales, contre-dépouilles et collisions porte-outil / brides ne sont
   pas contrôlées (dit dans le rapport). Fraises autres que plate / boule / torique / conique simulées
   comme plates (signalé). Brut rond (4e axe) refusé. Une entaille est un écart de plus de 0,02 mm sous
-  le dessus de la pièce au centre d'une colonne.
+  le dessus de la pièce au centre d'une colonne, ou à 0,05 mm de lui (colonne pile sur une paroi
+  verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
+  dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
 - Fiche de préparation en Markdown (pas de PDF).
 
 ## Interface

@@ -262,6 +262,20 @@ class Project(object):
         job.Proxy.addToolController(tc)
         op, ignored = opsmod.create_operation(job, kind, name, tc, base=base, params=params)
         job.Proxy.addOperation(op)
+        if kind == "threadmill" and not any(subs for _o, subs in (base or [])):
+            try:
+                params, kept, others = opsmod.fit_thread_to_holes(op, tool, params)
+            except Exception:  # aucun trou à fileter : ne rien laisser dans le job
+                job.Operations.Group = [o for o in job.Operations.Group if o.Name != op.Name]
+                job.Tools.Group = [t for t in job.Tools.Group if t.Name != tc.Name]
+                for obj in (op, tc, toolbit):
+                    self.doc.removeObject(obj.Name)
+                raise
+            if kept:
+                bit_warnings = list(bit_warnings) + [Msg("Thread {name} on the {n} hole(s) drilled for it", name=params["ThreadName"], n=kept)]
+                if others:
+                    bit_warnings.append(Msg("Holes of other diameters left out of the thread milling: {d} mm",
+                                            d=", ".join("%.2f" % d for d in others)))
         reg = self.registry
         record = {
             "kind": kind,
@@ -617,6 +631,8 @@ class Project(object):
             if holder is None:
                 no_holder.append(obj.Label)
             seen = set()
+            # filetage dans la matière (trou pas encore percé) : un seul message qui dit quoi faire
+            threading = rec.get("kind") == "threadmill"
             segments, pos = sim.path_segments(obj.Path.Commands, pos, with_index=True)
             top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
             clamp_top = max([bb.ZMax for _n, bb in boxes] or [-float("inf")])
@@ -628,25 +644,32 @@ class Project(object):
                         continue
                     excess, at = sim.material_excess(zmap, p0, p1, r, lo)
                     if excess > tolerance + 0.03:
-                        events.append(("holder" if role == "holder" else "flute_length", obj.Label, index, at, excess))
                         seen.add((role, "material"))
+                        if not threading:
+                            events.append(("holder" if role == "holder" else "flute_length", obj.Label, index, at, excess))
+                        elif "undrilled" not in seen:
+                            events.append(("undrilled", obj.Label, index, at, excess))
+                            seen.add("undrilled")
                 for name, role, depth, at in (sim.clamp_contacts(p0, p1, envelope, boxes) if z_low < clamp_top else ()):
                     if ("clamp", name) not in seen:
                         events.append(("clamp", obj.Label, index, at, depth, name, role))
                         seen.add(("clamp", name))
                 before = zmap.rapid_hits
                 zmap.sweep(p0, p1, profile, rapid=rapid)
-                if zmap.rapid_hits > before and "rapid" not in seen:
-                    events.append(("rapid", obj.Label, index, tuple(p1), 0.0))
-                    seen.add("rapid")
+                if zmap.rapid_hits > before and "rapid" not in seen and not (threading and "undrilled" in seen):
+                    events.append(("undrilled" if threading else "rapid", obj.Label, index, tuple(p1), 0.0))
+                    seen.add("undrilled" if threading else "rapid")
             simulated.append(obj.Label)
-        heights = sim.model_heights(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)])
-        report = sim.compare(zmap, heights, tolerance)
+        heights, low = sim.model_heights(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)],
+                                         lateral=sim.WALL_TOLERANCE)
+        self._thread_the_holes(zmap, heights)
+        self._thread_the_holes(zmap, low)
+        report = sim.compare(zmap, heights, tolerance, gouge_heights=low)
         checked = bool(simulated)
         not_run = [label for label, _r in skipped]
 
         def status(kind, extra_unchecked=()):
-            if any(e[0] == kind for e in events):
+            if any(e[0] == kind or (e[0] == "undrilled" and kind in ("rapid", "flute_length")) for e in events):
                 return "collision"
             if not checked or extra_unchecked or not_run:
                 return "not_checked"
@@ -667,9 +690,32 @@ class Project(object):
                       approximations=approximations, resolution=resolution, tolerance=tolerance,
                       cells=(zmap.nx, zmap.ny))
         self.last_zmap = zmap
-        self.last_heights = heights
+        self.last_heights = low  # affichage des entailles (gouge_mask)
         self._store_check(report)
         return report
+
+    def _thread_the_holes(self, zmap, heights):
+        """La pièce montre l'avant-trou lisse : un filetage enlève forcément la matière jusqu'à son diamètre
+        majeur. Les trous filetés sont creusés à ce diamètre dans la hauteur de référence (sinon chaque
+        filet compte comme une entaille)."""
+        import numpy as np
+
+        for obj in self.operations():
+            base = dressupmod.base_operation(obj)
+            if (self.registry.get(base.Name) or {}).get("kind") != "threadmill" or not base.Active:
+                continue
+            r = float(base.MajorDiameter.Value) / 2.0 + zmap.res
+            bottom = float(base.FinalDepth.Value)
+            for b, subs in base.Base:
+                for sub in subs:
+                    c = base.Proxy.holePosition(base, b, sub)
+                    win = zmap._window(c.x - r, c.x + r, c.y - r, c.y + r)
+                    if win is None:
+                        continue
+                    i0, i1, j0, j1, (X, Y) = win
+                    inside = np.hypot(X - c.x, Y - c.y) <= r
+                    block = heights[i0:i1, j0:j1]
+                    block[inside] = np.minimum(block[inside], bottom)
 
     def _store_check(self, report):
         """Dernier contrôle matière / collisions, enregistré dans le document (chaque commande de l'interface
@@ -774,7 +820,8 @@ class Project(object):
                     "holder": Msg("tool holder touches the material"),
                     "clamp": Msg("collision with clamp {name} ({part})", name=event[5], part=Msg(event[6]))
                     if kind == "clamp" else "",
-                    "rapid": Msg("rapid move into the material")}[kind]
+                    "rapid": Msg("rapid move into the material"),
+                    "undrilled": Msg("thread milling in a hole that is not drilled: add a drilling operation at the tap drill size before it")}[kind]
             issues.append(("error", Msg("{op}: {what}, command {n}, tip at {where}", op=label, what=what, n=index,
                                         where=where)))
         for key, label in (("flute_length", Msg("flute length")), ("holder", Msg("tool holder")),
@@ -1019,6 +1066,7 @@ class Project(object):
         """Recalcule le document et retourne un résumé par opération."""
         for op in self.wrapped_operations():
             self._generate_wrap(op)  # le dessin ou le brut ont pu changer
+        opsmod.patch_adaptive_slicing()  # projet rouvert : l'adaptative n'est pas encore passée par strategy_module
         self.doc.recompute()
         results = []
         for op in self.operations():

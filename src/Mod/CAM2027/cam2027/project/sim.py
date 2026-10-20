@@ -29,6 +29,10 @@ _SLOPE_STEP_MM = 0.5
 _SLOPE_DZ_MM = 0.05
 
 
+#: profondeur à partir de laquelle un rapide (G0) compte comme entrant dans la matière (mm)
+RAPID_TOLERANCE = 0.01
+
+
 def _np():
     import numpy
 
@@ -153,7 +157,9 @@ class ZMap(object):
         z = np.where(inside, z, np.inf)
         block = self.top[i0:i1, j0:j1]
         touched = z < block - 1e-6
-        if rapid and touched.any():
+        # rapide : dégagement vertical vers le haut (la fraise quitte l'endroit qu'elle vient d'usiner) jamais
+        # compté ; ailleurs, au-delà de RAPID_TOLERANCE (les pentes découpées laissent quelques microns)
+        if rapid and not (L2 < 1e-18 and p1[2] > p0[2]) and (z < block - RAPID_TOLERANCE).any():
             self.rapid_hits += 1
             if self.rapid_hit_at is None:
                 self.rapid_hit_at = tuple(p1)
@@ -302,10 +308,23 @@ def path_segments(commands, start=None, with_index=False):
 # -- dessus de la pièce ---------------------------------------------------------------------------------
 
 
-def model_heights(zmap, shapes, deflection=0.05):
-    """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce)."""
+#: tolérance latérale du contrôle d'entaille au droit des parois verticales (mm)
+WALL_TOLERANCE = 0.05
+
+
+def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
+    """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce).
+
+    ``lateral`` > 0 : retourne ``(hauteurs au centre, hauteurs basses)``, les basses étant la plus basse des
+    hauteurs au centre et à ``lateral`` mm de lui (4 directions). Sert au contrôle d'entaille : une colonne
+    dont le centre tombe pile sur une paroi verticale (grille alignée sur les cotes de la pièce) prendrait
+    le haut de la paroi alors que la fraise passe tangente à côté."""
     np = _np()
-    h = np.full((zmap.nx, zmap.ny), -np.inf)
+    offsets = [(0.0, 0.0)]
+    if lateral > 0:
+        offsets += [(lateral, 0.0), (-lateral, 0.0), (0.0, lateral), (0.0, -lateral)]
+    hs = [np.full((zmap.nx, zmap.ny), -np.inf) for _o in offsets]
+    pad = max(abs(o[0]) + abs(o[1]) for o in offsets)
     for shape in shapes:
         points, triangles = shape.tessellate(deflection)
         pts = np.array([[v.x, v.y, v.z] for v in points]) if points else np.zeros((0, 3))
@@ -314,22 +333,29 @@ def model_heights(zmap, shapes, deflection=0.05):
             det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
             if abs(det) < 1e-12:
                 continue  # face verticale vue de dessus
-            win = zmap._window(min(a[0], b[0], c[0]), max(a[0], b[0], c[0]),
-                               min(a[1], b[1], c[1]), max(a[1], b[1], c[1]))
+            win = zmap._window(min(a[0], b[0], c[0]) - pad, max(a[0], b[0], c[0]) + pad,
+                               min(a[1], b[1], c[1]) - pad, max(a[1], b[1], c[1]) + pad)
             if win is None:
                 continue
-            i0, i1, j0, j1, (X, Y) = win
-            l1 = ((b[1] - c[1]) * (X - c[0]) + (c[0] - b[0]) * (Y - c[1])) / det
-            l2 = ((c[1] - a[1]) * (X - c[0]) + (a[0] - c[0]) * (Y - c[1])) / det
-            l3 = 1.0 - l1 - l2
-            eps = -1e-9
-            inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
-            if not inside.any():
-                continue
-            z = np.where(inside, l1 * a[2] + l2 * b[2] + l3 * c[2], -np.inf)
-            block = h[i0:i1, j0:j1]
-            np.maximum(block, z, out=block)
-    return h
+            i0, i1, j0, j1, (X0, Y0) = win
+            for (ox, oy), h in zip(offsets, hs):
+                X, Y = X0 + ox, Y0 + oy
+                l1 = ((b[1] - c[1]) * (X - c[0]) + (c[0] - b[0]) * (Y - c[1])) / det
+                l2 = ((c[1] - a[1]) * (X - c[0]) + (a[0] - c[0]) * (Y - c[1])) / det
+                l3 = 1.0 - l1 - l2
+                eps = -1e-9
+                inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
+                if not inside.any():
+                    continue
+                z = np.where(inside, l1 * a[2] + l2 * b[2] + l3 * c[2], -np.inf)
+                block = h[i0:i1, j0:j1]
+                np.maximum(block, z, out=block)
+    if len(hs) == 1:
+        return hs[0]
+    low = hs[0].copy()
+    for h in hs[1:]:
+        low = np.where(np.isfinite(h), np.minimum(low, h), low)
+    return hs[0], low
 
 
 def surface_mesh(zmap, mask=None, lift=0.0):
@@ -365,8 +391,11 @@ def gouge_mask(zmap, heights, tolerance=0.02):
     return np.isfinite(heights) & (zmap.top < heights - tolerance)
 
 
-def compare(zmap, heights, tolerance=0.02):
-    """Entailles et reste sur les colonnes de pièce : dict de mesures (mm, mm³)."""
+def compare(zmap, heights, tolerance=0.02, gouge_heights=None):
+    """Entailles et reste sur les colonnes de pièce : dict de mesures (mm, mm³).
+
+    ``gouge_heights`` : hauteurs pour l'entaille seulement (tolérance latérale aux parois, voir
+    ``model_heights``) ; le reste se mesure toujours au centre des colonnes."""
     np = _np()
     on_part = np.isfinite(heights)
     report = {"part_cells": int(on_part.sum()), "gouge_max": 0.0, "gouge_cells": 0, "gouge_at": None,
@@ -374,12 +403,13 @@ def compare(zmap, heights, tolerance=0.02):
     if not on_part.any():
         return report
     diff = np.where(on_part, zmap.top - heights, np.nan)  # > 0 : reste ; < 0 : entaille
-    gouge = np.where(on_part, -diff, -np.inf)
+    gh = heights if gouge_heights is None else gouge_heights
+    gouge = np.where(on_part, gh - zmap.top, -np.inf)
     gmax = float(np.max(gouge))
     if gmax > tolerance:
         i, j = np.unravel_index(int(np.argmax(gouge)), gouge.shape)
         report.update(gouge_max=gmax, gouge_cells=int((gouge > tolerance).sum()),
-                      gouge_at=(float(zmap.xs[i]), float(zmap.ys[j]), float(heights[i, j])))
+                      gouge_at=(float(zmap.xs[i]), float(zmap.ys[j]), float(gh[i, j])))
     left = np.where(on_part, diff, -np.inf)
     lmax = float(np.max(left))
     i, j = np.unravel_index(int(np.argmax(left)), left.shape)

@@ -966,5 +966,13 @@
   "{name}: empty shape, it cannot be machined": "{name} : forme vide, elle ne peut pas être usinée",
   "{file} was already imported: the project now contains it twice": "{file} était déjà importé : le projet le contient maintenant deux fois",
   "{n} duplicate bodies ignored (file imported twice?).": "{n} corps en double ignorés (fichier importé deux fois ?).",
-  "The {n} bodies could not be merged into one solid: they are machined as separate parts.": "Les {n} corps n'ont pas pu être fusionnés en un seul solide : ils sont usinés comme des pièces séparées."
+  "The {n} bodies could not be merged into one solid: they are machined as separate parts.": "Les {n} corps n'ont pas pu être fusionnés en un seul solide : ils sont usinés comme des pièces séparées.",
+  "3D roughing of the whole part ({n} faces in relief) is too slow without the model-aware mode of FreeCAD 1.1: select the faces to rough": "ébauche 3D de la pièce entière ({n} faces en relief) trop lente sans le mode « modèle » de FreeCAD 1.1 : sélectionnez les faces à ébaucher",
+  "Stop the computation": "Arrêter le calcul",
+  "Computation stopped: the operations concerned have an incomplete toolpath (recompute them later).": "Calcul arrêté : les opérations concernées ont un parcours incomplet (recalculez-les plus tard).",
+  "No hole of the part is drilled for a thread this tool can mill (hole diameters: {d} mm): select the holes, or drill them to the tap drill size first": "aucun trou de la pièce n'est percé pour un filet que cet outil peut fraiser (diamètres des trous : {d} mm) : sélectionnez les trous, ou percez-les d'abord au diamètre d'avant-trou",
+  "Thread {name} on the {n} hole(s) drilled for it": "Filet {name} sur les {n} trou(s) percé(s) pour lui",
+  "Holes of other diameters left out of the thread milling: {d} mm": "Trous d'autres diamètres laissés hors du filetage : {d} mm",
+  "thread milling in a hole that is not drilled: add a drilling operation at the tap drill size before it": "filetage dans un trou pas encore percé : ajoutez avant lui un perçage au diamètre d'avant-trou",
+  "thread milling in a hole that is not drilled (drill it first)": "filetage dans un trou pas encore percé (percez-le d'abord)"
 }

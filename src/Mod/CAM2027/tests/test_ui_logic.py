@@ -59,6 +59,12 @@ class TestUiLogic(unittest.TestCase):
         box = proj.doc.addObject("Part::Feature", "Flat")
         box.Shape = Part.makeBox(10, 10, 10)
         self.assertEqual(opsmod.auto_geometry("pocket", [box]), [])  # rien de pertinent : l'interface le dit
+        # fond sous un surplomb (rainure en T) : inaccessible par le dessus, la poche usinerait le surplomb
+        V = FreeCAD.Vector
+        tslot = Part.makeBox(40, 20, 20).cut(Part.makeBox(30, 20, 5, V(5, 0, 5))).cut(Part.makeBox(10, 20, 10, V(15, 0, 10)))
+        tee = proj.doc.addObject("Part::Feature", "TSlot")
+        tee.Shape = tslot
+        self.assertEqual(opsmod.pocket_floor_faces(tee), [])
         proj.close()
 
     def test_model_candidates_and_mesh(self):
@@ -146,6 +152,91 @@ class TestUiLogic(unittest.TestCase):
         proj.create_job([merged], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
         self.assertAlmostEqual(proj.stock_bounds()["height"], 47.0, places=3)
         proj.close()
+
+    def test_rough3d_on_a_tray_does_not_freeze(self):
+        """Le gel signalé : ébauche 3D d'un plateau à alvéoles (plus de 1000 faces en relief) = plus de 15 min.
+        Pièce entière -> mode « modèle » de l'adaptative (1.1) : rapide, alvéoles vidées ; 1.0 : refus clair."""
+        import time
+        from tests.test_pipeline import cutting_points
+        from cam2027.i18n import UserError
+
+        tray = Part.makeBox(120, 120, 10)
+        for i in range(10):
+            for j in range(10):
+                tray = tray.cut(Part.makeBox(9, 9, 6, FreeCAD.Vector(2 + i * 11.8, 2 + j * 11.8, 4)))
+        proj = self._project("Tray")
+        obj = proj.doc.addObject("Part::Feature", "Tray")
+        obj.Shape = tray.removeSplitter()
+        proj.doc.recompute()
+        proj.create_job([obj], stock={"kind": "box_margins", "xy": 3.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        self.assertGreater(len(opsmod.raised_faces(clone)), opsmod.MAX_CLASSIC_ROUGH_FACES)
+        lib = proj.library
+        e = lib.search("3 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(e.id)[0]
+        try:
+            op, _rec = proj.add_operation("rough3d", "Rough", asm.id, e.presets[0].id, base=[(clone, [])],
+                                          params={"StepDown": 2.0, "StepOver": 40, "StockToLeave": 0.5})
+        except UserError as exc:  # FreeCAD 1.0 : pas de mode « modèle » -> refus au lieu d'un calcul interminable
+            self.assertIn("select the faces", str(exc))
+            proj.close()
+            return
+        self.assertTrue(op.ModelAwareExperiment)
+        t0 = time.time()
+        proj.compute()
+        self.assertLess(time.time() - t0, 120.0)
+        levels = sorted(set(round(p["Z"], 2) for p in cutting_points(op.Path)))
+        self.assertTrue(any(4.0 < z < 6.0 for z in levels), levels)  # fond des alvéoles (Z 4) + surépaisseur
+        rep = proj.material_check()
+        self.assertLess(rep["gouge_max"], 0.05, rep)
+        proj.close()
+
+    def test_default_params(self):
+        """Réglages initiaux tirés de la matrice stratégies × pièces : finition 3D échantillonnée à 0,1 mm
+        (0,5 mm : 1,45 mm d'entaille sur la plaque), Z constant à 0,5 mm (0,1 mm : plus de 400 s sur le
+        chauffage), liaisons de l'adaptative remontées d'une passe (G0 à travers 3 mm de matière sinon)."""
+        from cam2027.gui.commands import default_params
+
+        lib = starter_library()
+        ball = lib.search("6 mm ball end mill")[0]
+        flat = lib.search("6 mm flat end mill")[0]
+        self.assertEqual(default_params("surface3d", ball, ball.presets[0].resolve(ball))["SampleInterval"], 0.1)
+        self.assertEqual(default_params("waterline", ball, ball.presets[0].resolve(ball))["SampleInterval"], 0.5)
+        for kind in ("adaptive", "rough3d"):
+            p = default_params(kind, flat, flat.presets[0].resolve(flat))
+            self.assertEqual(p["LiftDistance"], p["StepDown"])
+            self.assertGreater(p["LiftDistance"], 0)
+
+    def test_adaptive_projection_fallback(self):
+        """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion
+        des projections face par face est gardée (sinon l'ébauche 3D entière échoue sans parcours)."""
+        import Path.Op.Adaptive as adaptive
+
+        if not hasattr(adaptive, "projectFacesToXY"):
+            self.skipTest("FreeCAD sans mode modèle")
+        opsmod.patch_adaptive_slicing(adaptive)
+        self.assertTrue(adaptive.projectFacesToXY.cam2027_patched)
+        V = FreeCAD.Vector
+        faces = Part.makeBox(10, 10, 5).Faces + Part.makeBox(10, 10, 5, V(20, 0, 0)).Faces
+        import DraftGeomUtils
+
+        saved = DraftGeomUtils.concatenate
+        calls = []
+
+        def failing(shape):
+            calls.append(len(shape.Faces))
+            if len(shape.Faces) > 1:
+                raise RuntimeError("Wire is not closed.")
+            return saved(shape)
+
+        DraftGeomUtils.concatenate = failing
+        try:
+            proj = adaptive.projectFacesToXY(faces)
+        finally:
+            DraftGeomUtils.concatenate = saved
+        self.assertTrue(calls)
+        self.assertAlmostEqual(proj.Area, 200.0, places=3)
+        self.assertAlmostEqual(proj.BoundBox.ZMax, 0.0, places=6)
 
     def test_check_survives_reloading_the_project(self):
         """Le bug : le contrôle était gardé dans l'objet Python, perdu quand l'export relit le projet."""
