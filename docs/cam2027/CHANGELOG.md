@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **Contrôle de collision** (étape 4.4) : le contrôle matière vérifie aussi la longueur de coupe
+  (frottement de la queue), le porte-outil (tronçons de la bibliothèque) et les brides, rapides
+  compris, avec l'opération, le n° de commande et la position ; marqueurs rouges ; à l'export,
+  collisions bloquantes si les parcours n'ont pas changé, sinon « non vérifiable » ; jamais « OK »
+  pour un contrôle non exécuté (sans bride, sans porte-outil, axe A). 62 tests.
 - **Simulation d'enlèvement de matière** (étape 4.3) : « Simuler » lance le simulateur CAM de
   FreeCAD réglé (job choisi, opérations sur A exclues et signalées, lecture lancée) ; nouveau
   « Contrôle matière » : carte de hauteur 3 axes comparée à la pièce (volume enlevé, entailles en

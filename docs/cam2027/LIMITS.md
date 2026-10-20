@@ -111,7 +111,15 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   ignore A : indexées hors A0, enroulées) en le signalant, puis lance la lecture ; sa fenêtre (lecture,
   pause, pas à pas, vitesse) et son panneau sont ceux de FreeCAD. Vérifié par le test graphique
   (fenêtre ouverte et capturée), pas le contenu de son rendu.
-- Contrôle matière (Simuler > Contrôle matière) : carte de hauteur 3 axes à 0,5 mm ; une colonne ne
+- Collisions (même commande) : à chaque mouvement, avant d'enlever sa matière, la queue (de la longueur
+  de coupe à la sortie) et chaque tronçon du porte-outil sont comparés à la matière restante (brut +
+  pièce) dans leur rayon ; l'assemblage entier est comparé aux brides (boîtes englobantes), rapides
+  compris. Première collision de chaque type par opération, avec son n° de commande et la position
+  de la pointe. Tronçons coniques pris à leur rayon maximal (prudent). Sans bride déclarée, sans
+  porte-outil dans l'assemblage ou avec des opérations non simulées (axe A), le contrôle concerné est
+  « non contrôlé », jamais « OK ». À l'export : collisions du dernier contrôle = erreurs bloquantes
+  tant que les parcours sont identiques ; contrôle absent ou périmé = « non vérifiable ».
+- Contrôle matière (Simuler > Contrôle matière et collisions) : carte de hauteur 3 axes à 0,5 mm ; une colonne ne
   voit que le dessus : parois verticales, contre-dépouilles et collisions porte-outil / brides ne sont
   pas contrôlées (dit dans le rapport). Fraises autres que plate / boule / torique / conique simulées
   comme plates (signalé). Brut rond (4e axe) refusé. Une entaille est un écart de plus de 0,02 mm sous

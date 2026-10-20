@@ -162,17 +162,108 @@ class ZMap(object):
         return float((self.initial - self.top).sum() * self.res * self.res)
 
 
+# -- collisions ---------------------------------------------------------------------------------------
+
+
+class Envelope(object):
+    """Volume de révolution de l'assemblage, par tronçons au-dessus de la pointe : ``(z_bas, z_haut, rayon, rôle)``.
+
+    Rôles : ``cutter`` (partie taillée, longueur de coupe), ``shank`` (outil non taillé jusqu'à la
+    sortie), ``holder`` (porte-outil au-dessus de la sortie). Tronçons coniques : rayon maximal
+    (prudent : peut signaler un contact qui n'existe pas, jamais l'inverse).
+    """
+
+    def __init__(self, parts, has_holder):
+        self.parts = parts
+        self.has_holder = has_holder
+
+    @classmethod
+    def from_assembly(cls, asm, tool, holder):
+        parts = []
+        z = 0.0
+        flute = tool.geometry.flute_length
+        stickout = asm.stickout
+        for seg in tool.silhouette():
+            lo, hi = z, min(z + seg.length, stickout)
+            if hi <= lo:
+                break
+            r = max(seg.lower_diameter, seg.upper_diameter) / 2.0
+            if hi <= flute + 1e-9:
+                parts.append((lo, hi, r, "cutter"))
+            elif lo >= flute - 1e-9:
+                parts.append((lo, hi, r, "shank"))
+            else:
+                parts.append((lo, flute, r, "cutter"))
+                parts.append((flute, hi, r, "shank"))
+            z = hi
+        if z < stickout - 1e-6:  # queue au-delà de la silhouette connue
+            parts.append((z, stickout, tool.geometry.shank_diameter / 2.0, "shank"))
+        if holder is not None:
+            z = stickout
+            for seg in holder.segments:
+                parts.append((z, z + seg.length, max(seg.lower_diameter, seg.upper_diameter) / 2.0, "holder"))
+                z += seg.length
+        return cls(parts, holder is not None)
+
+
+def material_excess(zmap, p0, p1, radius, offset):
+    """Plus grand dépassement de matière au-dessus de ``pointe + offset`` dans ``radius`` le long du segment.
+
+    Retourne ``(dépassement, (x, y, z_pointe))`` ; dépassement <= 0 : pas de contact."""
+    np = _np()
+    win = zmap._window(min(p0[0], p1[0]) - radius, max(p0[0], p1[0]) + radius,
+                       min(p0[1], p1[1]) - radius, max(p0[1], p1[1]) + radius)
+    if win is None:
+        return 0.0, None
+    i0, i1, j0, j1, (X, Y) = win
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    L2 = dx * dx + dy * dy
+    t = np.zeros_like(X) if L2 < 1e-18 else np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
+    d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
+    z_tip = min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + t * (p1[2] - p0[2])
+    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1] - (z_tip + offset), -np.inf)
+    k = int(np.argmax(excess))
+    worst = float(excess.flat[k])
+    if not np.isfinite(worst) or worst <= 0:
+        return worst if np.isfinite(worst) else 0.0, None
+    tk = float(np.asarray(t).flat[k]) if L2 >= 1e-18 else 0.0
+    at = (p0[0] + tk * dx, p0[1] + tk * dy, min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + tk * (p1[2] - p0[2]))
+    return worst, at
+
+
+def clamp_contacts(p0, p1, envelope, boxes, step=1.0):
+    """Contacts entre l'assemblage (toutes ses parties) et des brides (``FreeCAD.BoundBox``) le long du segment.
+
+    Retourne une liste ``(bride, rôle, pénétration, (x, y, z_pointe))`` (premier point de chaque bride)."""
+    length = math.dist(p0, p1)
+    n = max(1, int(math.ceil(length / step)))
+    hits = {}
+    for k in range(n + 1):
+        q = [p0[c] + (p1[c] - p0[c]) * k / n for c in range(3)]
+        for name, bb in boxes:
+            if name in hits:
+                continue
+            ex = max(bb.XMin - q[0], 0.0, q[0] - bb.XMax)
+            ey = max(bb.YMin - q[1], 0.0, q[1] - bb.YMax)
+            dist = math.hypot(ex, ey)
+            for lo, hi, r, role in envelope.parts:
+                if q[2] + lo < bb.ZMax - 1e-6 and q[2] + hi > bb.ZMin + 1e-6 and dist < r - 1e-6:
+                    hits[name] = (name, role, r - dist, tuple(q))
+                    break
+    return list(hits.values())
+
+
 # -- parcours -----------------------------------------------------------------------------------------
 
 
-def path_segments(commands, start=None):
+def path_segments(commands, start=None, with_index=False):
     """``(rapid, p0, p1)`` en coordonnées machine depuis des commandes Path (arcs G17 découpés).
 
     ``start`` : position avant le premier mouvement ; inconnue (None) -> le premier mouvement fixe
     seulement la position (aucun balayage depuis une origine supposée)."""
     pos = list(start) if start is not None else None
     out = []
-    for c in commands:
+    for index, c in enumerate(commands, 1):
         name = c.Name.upper()
         p = c.Parameters
         if name not in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03"):
@@ -197,10 +288,11 @@ def path_segments(commands, start=None):
             for k in range(1, n + 1):
                 a = a0 + sweep * k / n
                 q = [cx + radius * math.cos(a), cy + radius * math.sin(a), pos[2] + (end[2] - pos[2]) * k / n]
-                out.append((False, prev, q))
+                out.append((False, prev, q, index) if with_index else (False, prev, q))
                 prev = q
         else:
-            out.append((name in ("G0", "G00"), list(pos), end))
+            seg = (name in ("G0", "G00"), list(pos), end)
+            out.append(seg + (index,) if with_index else seg)
         pos = end
     return out, pos
 

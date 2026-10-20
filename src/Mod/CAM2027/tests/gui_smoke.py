@@ -319,6 +319,10 @@ def run():
         mrep["simulated"], mrep["skipped"], mrep["gouge_max"], mrep["leftover_max"], mrep["removed_volume"],
         mrep["rapid_hits"]))
     log("material report: %s" % commands.material_report_text(mrep).splitlines()[1:3])
+    mcol = mrep["collisions"]
+    log("collisions: flute %s, holder %s, clamps %s (%s), rapids %s, events %d" % (
+        mcol["flute_length"], mcol["holder"], mcol["clamps"], mcol["clamps_defined"], mcol["rapids"], len(mcol["events"])))
+    assert mcol["clamps"] != "ok" or mcol["clamps_defined"], "clamps reported ok without any clamp"
     for o in proj.doc.Objects:
         if o.Name not in ("CAM2027SimStock", "CAM2027SimGouges") and o.ViewObject is not None and o.Name != "Job":
             o.ViewObject.Visibility = False

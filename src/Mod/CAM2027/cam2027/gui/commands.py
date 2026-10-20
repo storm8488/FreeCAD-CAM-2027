@@ -674,8 +674,8 @@ def start_simulator(proj, play=True):
 
 class MaterialCheck(_Base):
     atelier = "measure"
-    text = "Material check"
-    tooltip = "Simulate material removal on a height map and compare with the part: gouges, stock left, rapids in the material"
+    text = "Material and collision check"
+    tooltip = "Simulate material removal on a height map: gouges, stock left, flute length, tool holder and clamp collisions, rapids in the material"
 
     def Activated(self):
         proj = _need_project()
@@ -715,6 +715,17 @@ def show_material_result(proj, rep):
             obj.ViewObject.ShapeColor = colour
             obj.ViewObject.Visibility = mesh.CountFacets > 0
         objs.append(obj)
+    import Part
+
+    events = [e for e in rep.get("collisions", {}).get("events", []) if e[3]]
+    marker = doc.getObject("CAM2027SimCollisions") or doc.addObject("Part::Feature", "CAM2027SimCollisions")
+    marker.Label = tr("Collisions")
+    marker.Shape = Part.Compound([Part.makeSphere(2.0, FreeCAD.Vector(*e[3])) for e in events]) if events \
+        else Part.Shape()
+    if FreeCAD.GuiUp and marker.ViewObject is not None:
+        marker.ViewObject.ShapeColor = (1.0, 0.1, 0.1)
+        marker.ViewObject.Visibility = bool(events)
+    objs.append(marker)
     doc.recompute()
     return objs
 
@@ -738,7 +749,24 @@ def material_report_text(rep):
         lines.append(tr("Not simulated: {op} ({reason})", op=label, reason=reason))
     for label, note in rep["approximations"]:
         lines.append(tr("Approximation: {op}: {note}", op=label, note=note))
-    lines.append(tr("Not checked: vertical walls, undercuts, holder and clamp collisions."))
+    col = rep.get("collisions")
+    if col:
+        words = {"ok": tr("OK"), "collision": tr("COLLISION"), "not_checked": tr("NOT CHECKED")}
+        for key, label in (("flute_length", tr("Flute length (shank rubbing)")), ("holder", tr("Tool holder")),
+                           ("clamps", tr("Clamps")), ("rapids", tr("Rapid moves"))):
+            lines.append("%s : %s" % (label, words[col[key]]))
+        if col["no_holder"]:
+            lines.append(tr("No holder in the assembly: {ops}", ops=", ".join(col["no_holder"])))
+        if not col["clamps_defined"]:
+            lines.append(tr("No clamp defined: clamps not checked (Stock & fixture)."))
+        kinds = {"flute_length": tr("material above the flute length"), "holder": tr("tool holder in the material"),
+                 "clamp": tr("clamp"), "rapid": tr("rapid into the material")}
+        for e in col["events"]:
+            x, y, z = e[3] if e[3] else (0.0, 0.0, 0.0)
+            what = kinds[e[0]] + (" %s (%s)" % (e[5], e[6]) if e[0] == "clamp" else "")
+            lines.append(tr("COLLISION: {what} - {op}, command {n}, tip at X {x} Y {y} Z {z}",
+                            what=what, op=e[1], n=e[2], x="%.2f" % x, y="%.2f" % y, z="%.2f" % z))
+    lines.append(tr("Not checked: vertical walls and undercuts (height map), A axis operations."))
     return "\n".join(lines)
 
 

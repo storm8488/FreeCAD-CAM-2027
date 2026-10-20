@@ -362,6 +362,11 @@ class Project(object):
         self.compute()
         zmap = sim.ZMap.from_bounds(self.stock_bounds(), resolution)
         simulated, skipped, approximations = [], [], []
+        from . import stock as stockmod
+
+        boxes = [(c.Label, c.Shape.BoundBox) for c in stockmod.clamps(self.doc) if getattr(c, "Shape", None)]
+        events = []  # (type, opération, n° de commande, position, valeur)
+        no_holder = []
         pos = None
         for obj in self.operations():
             if indexing.is_index_op(obj):
@@ -381,22 +386,109 @@ class Project(object):
             if not rec.get("tool_id"):
                 skipped.append((obj.Label, "unknown tool"))
                 continue
-            profile, note = sim.ToolProfile.from_library_tool(self.library.tool(rec["tool_id"]))
+            asm, tool, holder = self.library.resolve_assembly(rec["assembly_id"])
+            profile, note = sim.ToolProfile.from_library_tool(tool)
             if note:
                 approximations.append((obj.Label, note))
-            segments, pos = sim.path_segments(obj.Path.Commands, pos)
-            for rapid, p0, p1 in segments:
+            envelope = sim.Envelope.from_assembly(asm, tool, holder)
+            if holder is None:
+                no_holder.append(obj.Label)
+            seen = set()
+            segments, pos = sim.path_segments(obj.Path.Commands, pos, with_index=True)
+            top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
+            clamp_top = max([bb.ZMax for _n, bb in boxes] or [-float("inf")])
+            for rapid, p0, p1, index in segments:
+                z_low = min(p0[2], p1[2])
+                # avant d'enlever la matière de ce mouvement : ce qui est devant la fraise est encore là
+                for lo, _hi, r, role in envelope.parts:
+                    if role == "cutter" or (role, "material") in seen or z_low + lo >= top_max:
+                        continue
+                    excess, at = sim.material_excess(zmap, p0, p1, r, lo)
+                    if excess > tolerance + 0.03:
+                        events.append(("holder" if role == "holder" else "flute_length", obj.Label, index, at, excess))
+                        seen.add((role, "material"))
+                for name, role, depth, at in (sim.clamp_contacts(p0, p1, envelope, boxes) if z_low < clamp_top else ()):
+                    if ("clamp", name) not in seen:
+                        events.append(("clamp", obj.Label, index, at, depth, name, role))
+                        seen.add(("clamp", name))
+                before = zmap.rapid_hits
                 zmap.sweep(p0, p1, profile, rapid=rapid)
+                if zmap.rapid_hits > before and "rapid" not in seen:
+                    events.append(("rapid", obj.Label, index, tuple(p1), 0.0))
+                    seen.add("rapid")
             simulated.append(obj.Label)
         heights = sim.model_heights(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)])
         report = sim.compare(zmap, heights, tolerance)
+        checked = bool(simulated)
+        not_run = [label for label, _r in skipped]
+
+        def status(kind, extra_unchecked=()):
+            if any(e[0] == kind for e in events):
+                return "collision"
+            if not checked or extra_unchecked or not_run:
+                return "not_checked"
+            return "ok"
+
+        report["collisions"] = {
+            "events": events,
+            "flute_length": status("flute_length"),
+            "holder": status("holder", no_holder),
+            "clamps": status("clamp", () if boxes else ("no clamp",)),
+            "rapids": status("rapid"),
+            "no_holder": no_holder,
+            "clamps_defined": [name for name, _bb in boxes],
+            "not_run": not_run,
+        }
         report.update(removed_volume=zmap.removed_volume(), rapid_hits=zmap.rapid_hits,
                       rapid_hit_at=zmap.rapid_hit_at, simulated=simulated, skipped=skipped,
                       approximations=approximations, resolution=resolution, tolerance=tolerance,
                       cells=(zmap.nx, zmap.ny))
         self.last_zmap = zmap
         self.last_heights = heights
+        self._collision_check = (self._paths_fingerprint(), report["collisions"])
         return report
+
+    def _paths_fingerprint(self):
+        """Empreinte des parcours actifs (un contrôle de collisions ne vaut que pour ces parcours-là)."""
+        import hashlib
+
+        h = hashlib.sha1()
+        for obj in self.operations():
+            base = dressupmod.base_operation(obj)
+            h.update(obj.Name.encode())
+            h.update(b"1" if getattr(base, "Active", True) else b"0")
+            h.update(obj.Path.toGCode().encode())
+        return h.hexdigest()
+
+    def collision_issues(self):
+        """Contrôles d'export issus du dernier contrôle de collisions : erreur si collision ; « non vérifiable »
+        si le contrôle n'a pas été lancé, si les parcours ont changé depuis, ou pour ce qu'il n'a pas pu contrôler."""
+        last = getattr(self, "_collision_check", None)
+        if last is None or last[0] != self._paths_fingerprint():
+            return [("unverifiable", "collisions not checked for these toolpaths: run Simulate > Material and "
+                                     "collision check")]
+        col = last[1]
+        issues = []
+        for event in col["events"]:
+            kind, label, index, at = event[0], event[1], event[2], event[3]
+            where = "X%.2f Y%.2f Z%.2f" % at if at else "?"
+            what = {"flute_length": "material above the flute length (shank rubbing)",
+                    "holder": "tool holder touches the material",
+                    "clamp": "collision with clamp %s (%s)" % (event[5], event[6]) if kind == "clamp" else "",
+                    "rapid": "rapid move into the material"}[kind]
+            issues.append(("error", "%s: %s, command %d, tip at %s" % (label, what, index, where)))
+        for key, label in (("flute_length", "flute length"), ("holder", "tool holder"), ("clamps", "clamps"),
+                           ("rapids", "rapid moves")):
+            if col[key] == "not_checked":
+                reason = []
+                if key == "holder" and col["no_holder"]:
+                    reason.append("no holder in the assembly of %s" % ", ".join(col["no_holder"]))
+                if key == "clamps" and not col["clamps_defined"]:
+                    reason.append("no clamp defined")
+                if col["not_run"]:
+                    reason.append("not simulated: %s" % ", ".join(col["not_run"]))
+                issues.append(("unverifiable", "%s collisions not checked (%s)" % (label, "; ".join(reason) or "-")))
+        return issues
 
     def wrapped_operations(self):
         return [o for o in self.operations() if wrapmod.is_wrap_op(o)]
@@ -643,7 +735,8 @@ class Project(object):
         sections = exportmod.postprocess(job, post_processor, post_args)
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
-        issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self)
+        issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self) \
+            + self.collision_issues()
         if any(level == "error" for level, _m in issues):
             raise ExportBlocked(issues, sections, analysis)
         written = exportmod.write_gcode(sections, path)
@@ -669,7 +762,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None) \
-            + indexing.order_issues(self)
+            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else [])
         return text, analysis, issues
 
     # -- sauvegarde -----------------------------------------------------------
