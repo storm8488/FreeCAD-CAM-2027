@@ -39,6 +39,18 @@ G-code prévisualisé, projet sauvegardé, FreeCAD fermé sans erreur ; onglet �
 attaches » : 3 attaches ajoutées depuis l'éditeur. Même résultat sur 1.0.2 (PySide2, profil
 temporaire : 19 ateliers masqués, thème sombre « FreeCAD Dark.qss »).
 
+## Démonstration guidée
+
+```bat
+scripts\cam2027.cmd src\Mod\CAM2027	ests\gui_demo.py
+```
+
+Dix étapes commentées (bibliothèque, projet, brut, surfaçage, poche et contour, chanfrein,
+filetage, export, éditeur d'opération, flux 2D). Avec `CAM2027_DEMO_AUTO=1`, les boîtes ne
+s'affichent pas, le journal est écrit dans `tests/screenshots/gui_demo.txt` (doit finir par
+`OK`) et FreeCAD se ferme. Dernier passage automatique (2026-10-20, 1.1.4, profil temporaire) :
+10 étapes, `OK`.
+
 ## Non couvert
 
 - Interface : dialogues (brut, opération, export, machine) non exercés automatiquement ;

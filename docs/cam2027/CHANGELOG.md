@@ -25,6 +25,9 @@
 - Disposition vérifiée à 1280 × 800 (capture `main_window_1280x800.png`) : actions de la
   bibliothèque regroupées (Nouveau / Dupliquer / Supprimer + menus « Plus... » et
   « Bibliothèque... »), étapes du flux sur deux lignes, proportions du séparateur conservées.
+- Démonstration guidée : étapes « éditeur d'opération » et « flux 2D », outils assurés avant la
+  création des projets (corrige un échec possible avec une bibliothèque sans fraise 6 mm),
+  mode automatique `CAM2027_DEMO_AUTO=1`.
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

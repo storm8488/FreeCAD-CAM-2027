@@ -23,16 +23,22 @@ import FreeCADGui
 
 from PySide import QtCore, QtWidgets  # PySide2 ou PySide6 selon la version de FreeCAD
 
-TOTAL = 8
+TOTAL = 10
+AUTO = os.environ.get("CAM2027_DEMO_AUTO") == "1"  # vérification sans clic : boîtes non affichées, FreeCAD fermé à la fin
+AUTO_LOG = os.path.join(HERE, "screenshots", "gui_demo.txt")
+_lines = []
 
 
 def log(msg):
+    _lines.append(str(msg))
     FreeCAD.Console.PrintMessage("[gui_demo] %s\n" % msg)
 
 
 def step(n, title, text):
     log("étape %d : %s" % (n, title))
     QtWidgets.QApplication.processEvents()
+    if AUTO:
+        return
     QtWidgets.QMessageBox.information(FreeCADGui.getMainWindow(), "CAM2027 — étape %d/%d : %s" % (n, TOTAL, title), text)
 
 
@@ -78,6 +84,11 @@ def run():
     from tests.test_pipeline import make_part, plate_top_face, plate_top_outer_edges, hole_face
 
     lib = state.library()
+    # outils de la démo présents AVANT de créer les projets (chaque projet fige une copie de la bibliothèque)
+    ensure_tool(lib, "endmill", lambda t: abs(t.geometry.diameter - 6.0) < 1e-6)
+    ensure_tool(lib, "endmill", lambda t: abs(t.geometry.diameter - 3.0) < 1e-6)
+    ensure_tool(lib, "vbit", lambda t: abs(t.geometry.tip_included_angle_deg - 90.0) < 1e-6)
+    ensure_tool(lib, "threadmill")
     panels.show_tool_library()
     step(1, "Bibliothèque d'outils",
          "L'atelier CAM2027 est actif (barre d'outils et menu « CAM2027 »).\n\n"
@@ -193,10 +204,53 @@ def run():
          "« non vérifiable » signifie que la donnée machine (courses, broche) n'est pas renseignée dans "
          "« Profil machine » : rien n'est inventé. L'export écrit le fichier .nc et une fiche de préparation ; "
          "aucun envoi automatique à CNCjs.\n\nProjet enregistré : %s\n\n"
-         "Fin de la démonstration : FreeCAD reste ouvert, à vous de jouer."
+         "OK : l'éditeur d'opération, puis le flux 2D."
          % (analysis["lines"], analysis["bbox"]["X"][0], analysis["bbox"]["X"][1], analysis["bbox"]["Y"][0],
             analysis["bbox"]["Y"][1], analysis["bbox"]["Z"][0], analysis["bbox"]["Z"][1], analysis["max_feed"],
             lines or "- aucun", fcstd))
+    # éditeur d'opération (non modal) sur le contour
+    from cam2027.gui import opeditor
+    contour = [o for o in proj.operations() if proj.base_operation(o).Label == "Contour extérieur"][0]
+    editor = opeditor.open_editor(proj, proj.base_operation(contour))
+    editor.tabs.setCurrentIndex(editor.tabs.count() - 1)
+    step(9, "Éditeur d'opération",
+         "Double-clic sur une opération (ou « Modifier ») ouvre cet éditeur à onglets : Outil (assemblage, "
+         "préréglage et valeurs copiées), Géométrie (prendre la sélection 3D), Hauteurs, Passes, Stratégie, "
+         "et Entrée / sortie / attaches (attaches, rampe, dogbones).\n\n"
+         "La colonne « État » de la liste indique À calculer / Calculé / À recalculer / Avertissement / Échec ; "
+         "« Recalculer » devient le bouton principal quand un calcul est périmé.\n\nOK : le flux 2D (dessin SVG).")
+    editor.reject()
+
+    # flux 2D « à la Aspire » : dessin SVG posé sur un panneau
+    from tests.test_import import SVG
+    from cam2027.project import sheet as sheetmod
+    svg = os.path.join(tmp, "dessin.svg")
+    with open(svg, "w", encoding="utf-8") as fp:
+        fp.write(SVG)
+    proj2 = Project.create("Démo 2D", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj2.doc.Name)
+    proj2.import_model(svg)
+    vecs = sheetmod.vector_objects(proj2.doc)
+    proj2.create_sheet_job(thickness=12.0)
+    rect = [v for v in vecs if len(v.Shape.Edges) == 4][0]
+    circle = [v for v in vecs if len(v.Shape.Edges) == 1][0]
+    small, sasm, spreset = ensure_tool(lib, "endmill", lambda t: abs(t.geometry.diameter - 3.0) < 1e-6)
+    proj2.add_operation("profile", "Découpe", asm.id, preset.id, base=[(rect, [])],
+                        params={"Side": "Outside", "StartDepth": 0.0, "FinalDepth": -12.0, "StepDown": 4.0})
+    proj2.add_operation("pocket2d", "Poche cercle", sasm.id, spreset.id, base=[(circle, [])],
+                        params={"StartDepth": 0.0, "FinalDepth": -3.0, "StepDown": 1.5})
+    r2 = proj2.compute()
+    view = FreeCADGui.getDocument(proj2.doc.Name).activeView()
+    view.viewIsometric()
+    view.fitAll()
+    panels.refresh_project_panel()
+    log("2D: %s" % [(r["name"], r["commands"], round(r["zmin"] or 0, 2)) for r in r2])
+    step(10, "Flux 2D (dessin dans un panneau)",
+         "Importer un SVG ou un DXF, puis « Brut et montage » > « Panneau sous le dessin 2D » : le dessin est posé "
+         "sur un panneau de 12 mm (dessus à Z 0), une face est créée pour chaque contour fermé.\n\n"
+         "Il suffit ensuite de cliquer un contour et d'ajouter une opération : %s.\n\n"
+         "Fin de la démonstration : FreeCAD reste ouvert avec les deux projets, à vous de jouer."
+         % ", ".join("%s (%d commandes, Z min %.1f)" % (r["name"], r["commands"], r["zmin"] or 0) for r in r2))
     log("OK")
 
 
@@ -206,7 +260,15 @@ def main():
     except Exception:
         tb = traceback.format_exc()
         log("FAILED\n" + tb)
-        QtWidgets.QMessageBox.critical(FreeCADGui.getMainWindow(), "CAM2027 — démonstration interrompue", tb)
+        if not AUTO:
+            QtWidgets.QMessageBox.critical(FreeCADGui.getMainWindow(), "CAM2027 — démonstration interrompue", tb)
+    if AUTO:
+        os.makedirs(os.path.dirname(AUTO_LOG), exist_ok=True)
+        with open(AUTO_LOG, "w", encoding="utf-8") as fp:
+            fp.write("\n".join(_lines) + "\n")
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+        QtCore.QTimer.singleShot(500, lambda: QtWidgets.QApplication.instance().quit())
 
 
 # laisser la fenêtre principale se montrer avant la première boîte de dialogue
