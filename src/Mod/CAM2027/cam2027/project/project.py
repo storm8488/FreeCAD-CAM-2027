@@ -28,6 +28,12 @@ from . import dressups as dressupmod
 from . import sheet as sheetmod
 from . import indexing
 from . import wrap as wrapmod
+#: mouvements de coupe balayés d'un coup par le contrôle matière (paquets vectorisés)
+PENDING_SEGMENTS = 4096
+#: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
+LEVEL_BATCH_MIN = 64
+#: strategies qui acceptent une surface 3D issue d'un maillage (pas un solide)
+SURFACE_STRATEGIES = ("surface3d", "waterline")
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -115,6 +121,18 @@ class Project(object):
 
     # -- modèle ---------------------------------------------------------------
 
+    def surface_models(self):
+        """Modeles du job qui sont des surfaces 3D issues d'un maillage (clones -> objets d'origine)."""
+        if not self.has_job:
+            return []
+        out = []
+        for clone in self.job.Model.Group:
+            for src in getattr(clone, "Objects", None) or []:
+                if importers.is_mesh_surface(src):
+                    out.append(clone)
+                    break
+        return out
+
     def model_candidates(self):
         """Ce que « Brut et montage » usine sans sélection : solides et maillages importés, hors objets techniques
         (brut, clones du job, brides, panneau, copies tournées, aperçus) ; un maillage converti en solide ne
@@ -132,10 +150,10 @@ class Project(object):
                     and self.doc.getObject(o.Name.rsplit("_A", 1)[0]) is not None:
                 continue
             if o.TypeId.startswith("Mesh::"):
-                if o.Mesh.CountFacets and self.doc.getObject(o.Name + "_solid") is None:
+                if o.Mesh.CountFacets and self.doc.getObject(o.Name + "_solid") is None                         and self.doc.getObject(o.Name + "_surface") is None:
                     out.append(o)
-            elif o.TypeId.startswith("Part::") and getattr(o, "Shape", None) is not None and not o.Shape.isNull() \
-                    and o.Shape.Solids:
+            elif (o.TypeId.startswith("Part::") and getattr(o, "Shape", None) is not None and not o.Shape.isNull()
+                  and (o.Shape.Solids or importers.is_mesh_surface(o) and o.Shape.Faces)):
                 out.append(o)
         return out
 
@@ -167,10 +185,13 @@ class Project(object):
         if self.info.Job is not None:
             raise ValueError("le projet a déjà un job")
         for m in models:  # une boîte invalide fait boucler le brut de FreeCAD (Stock.execute) jusqu'au plantage
-            geom = getattr(m, "Mesh", None) if m.TypeId.startswith("Mesh::") else getattr(m, "Shape", None)
+            if m.TypeId.startswith("Mesh::"):
+                # le clone du job n'a pas de forme pour un maillage : brut sans boite (plantage du 2026-10-20)
+                raise UserError("{name}: mesh not converted to a solid ({n} triangles), it cannot be the part of a job: import it again (closed meshes are converted, large or open ones become a 3D surface)",
+                                name=m.Label, n=m.Mesh.CountFacets)
+            geom = getattr(m, "Shape", None)
             bb = geom.BoundBox if geom is not None else None
-            if geom is None or (hasattr(geom, "isNull") and geom.isNull()) or bb is None or not bb.isValid() \
-                    or (bb.XLength <= 0 and bb.YLength <= 0):
+            if geom is None or geom.isNull() or bb is None or not bb.isValid() or (bb.XLength <= 0 and bb.YLength <= 0):
                 raise UserError("{name}: empty shape, it cannot be machined", name=m.Label)
         previous = FreeCAD.ActiveDocument
         FreeCAD.setActiveDocument(self.doc.Name)
@@ -246,6 +267,13 @@ class Project(object):
         les avertissements (approximations de forme, paramètres ignorés).
         """
         job = self.job
+        if kind not in SURFACE_STRATEGIES and self.surface_models():
+            raise UserError("{op}: the part is a 3D surface from a mesh (not a solid): only 3D surface finishing (surface, waterline) can machine it",
+                            op=opsmod.STRATEGIES[kind]["label"])
+        if self.surface_models():
+            # BaseBoundBox : FreeCAD calcule l'enveloppe (booleen) de la forme, 18 Go et des heures sur 215 000 faces
+            params = dict(params or {})
+            params.setdefault("BoundBox", "Stock")
         asm, tool, holder = self.library.resolve_assembly(assembly_id)
         preset = tool.preset(preset_id)
         values = preset.resolve(tool)
@@ -636,8 +664,7 @@ class Project(object):
             segments, pos = sim.path_segments(obj.Path.Commands, pos, with_index=True)
             top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
             clamp_top = max([bb.ZMax for _n, bb in boxes] or [-float("inf")])
-            for rapid, p0, p1, index in segments:
-                z_low = min(p0[2], p1[2])
+            def excess_events(p0, p1, index, z_low):
                 # avant d'enlever la matière de ce mouvement : ce qui est devant la fraise est encore là
                 for lo, _hi, r, role in envelope.parts:
                     if role == "cutter" or (role, "material") in seen or z_low + lo >= top_max:
@@ -650,15 +677,71 @@ class Project(object):
                         elif "undrilled" not in seen:
                             events.append(("undrilled", obj.Label, index, at, excess))
                             seen.add("undrilled")
-                for name, role, depth, at in (sim.clamp_contacts(p0, p1, envelope, boxes) if z_low < clamp_top else ()):
-                    if ("clamp", name) not in seen:
-                        events.append(("clamp", obj.Label, index, at, depth, name, role))
-                        seen.add(("clamp", name))
+
+            def sweep_one(rapid, p0, p1, index):
                 before = zmap.rapid_hits
                 zmap.sweep(p0, p1, profile, rapid=rapid)
                 if zmap.rapid_hits > before and "rapid" not in seen and not (threading and "undrilled" in seen):
                     events.append(("undrilled" if threading else "rapid", obj.Label, index, tuple(p1), 0.0))
                     seen.add("undrilled" if threading else "rapid")
+
+            pending = []  # mouvements en attente : balayés par paquets vectorisés
+
+            def flush():
+                if not pending:
+                    return
+                np = sim._np()
+                P0 = np.array([q[0] for q in pending], dtype=float)
+                P1 = np.array([q[1] for q in pending], dtype=float)
+                rapids = np.array([q[3] for q in pending], dtype=bool)
+                # pré-contrôles sur l'état avant le paquet (queue / porte-outil dans la matière, rapides dans
+                # la matière) : la matière ne fait que baisser, donc rien ici = rien en séquentiel ; sinon
+                # le paquet est repris en séquentiel (queue / porte-outil, rare) ou jusqu'au rapide signalé
+                parts = [(lo, r, role) for lo, _hi, r, role in envelope.parts
+                         if role != "cutter" and (role, "material") not in seen
+                         and float(np.minimum(P0[:, 2], P1[:, 2]).min()) + lo < top_max]
+                for lo, r, _role in parts:
+                    if zmap.excess_any(P0, P1, r, lo, tolerance + 0.03, profile.kind == "flat"):
+                        for q0, q1, idx, rapid in pending:
+                            excess_events(q0, q1, idx, min(q0[2], q1[2]))
+                            sweep_one(rapid, q0, q1, idx)
+                        del pending[:]
+                        return
+                sel = np.nonzero(rapids)[0]
+                flagged = []  # rapides à vérifier sur l'état réel, dans l'ordre
+                if len(sel):
+                    R0, R1 = P0[sel], P1[sel]
+                    for start, stop in sim.chunk_bounds(R0, R1, zmap.res, profile.radius):
+                        hits = zmap.rapid_hits_many(R0[start:stop], R1[start:stop], profile)
+                        flagged.extend(sel[start:stop][hits].tolist())
+                cursor = 0
+                for m in flagged:
+                    zmap.sweep_arrays(P0[cursor:m], P1[cursor:m], profile)  # ce qui le précède, d'un coup
+                    q0, q1, idx, _rapid = pending[m]
+                    sweep_one(True, q0, q1, idx)  # lui seul, sur l'état réel
+                    cursor = m + 1
+                zmap.sweep_arrays(P0[cursor:], P1[cursor:], profile)
+                del pending[:]
+
+            level = None  # Z des mouvements de coupe horizontaux en attente (fraise plate)
+            for rapid, p0, p1, index in segments:
+                z_low = min(p0[2], p1[2])
+                for name, role, depth, at in (sim.clamp_contacts(p0, p1, envelope, boxes) if z_low < clamp_top else ()):
+                    if ("clamp", name) not in seen:
+                        events.append(("clamp", obj.Label, index, at, depth, name, role))
+                        seen.add(("clamp", name))
+                if not rapid and profile.kind == "flat" and p0[2] == p1[2]:
+                    # un paquet par niveau de profondeur : les liaisons rapides et la queue du niveau suivant
+                    # trouvent alors le niveau précédent déjà usiné dans l'état d'avant le paquet (sinon le
+                    # pré-contrôle renvoie le paquet au séquentiel). Les plongées et pentes entre deux niveaux
+                    # ne comptent pas ; un niveau minuscule rejoint le suivant.
+                    if level is not None and p0[2] != level and len(pending) >= LEVEL_BATCH_MIN:
+                        flush()
+                    level = p0[2]
+                pending.append((p0, p1, index, rapid))
+                if len(pending) >= PENDING_SEGMENTS:
+                    flush()
+            flush()
             simulated.append(obj.Label)
         heights, low = sim.model_heights(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)],
                                          lateral=sim.WALL_TOLERANCE)

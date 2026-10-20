@@ -2,6 +2,25 @@
 
 ## Non publié
 
+- **Contrôle matière et calcul des parcours accélérés** (demande de l'utilisateur : « le simulateur et la
+  génération de parcours sont bien trop lents »). Contrôle matière : balayage par paquets vectorisés
+  (segments consécutifs sur leur fenêtre commune, limitée en cellules et en gaspillage), formule exacte de
+  la fraise plate et de la boule sur les pentes (plus de découpe en morceaux de 0,5 mm), pré-contrôles
+  vectorisés de la queue, du porte-outil et des rapides sur l'état d'avant le paquet (repli séquentiel
+  exact quand ils signalent quelque chose), dessus de la pièce rastérisé par groupes de triangles et sur
+  une copie sans triangulation (une finition 3D en laissait une dix fois plus dense). Mesuré sur les
+  pièces de l'utilisateur : finition 3D du plateau 96 s -> 7,9 s, du chauffage 66 s -> 6,4 s, adaptative du
+  plateau 21 s -> 12 s, ébauche 3D 24 s -> 19 s et 12-16 s -> 8,5 s (voir TESTS.md). Ébauche 3D (mode « modèle ») : les régions déjà connues ne sont plus comparées par une
+  découpe booléenne quand leur boîte ou leur aire l'exclut (73 000 découpes -> 1 100 sur le plateau,
+  calcul 78 s -> 47 s). Même résultat (tests d'équivalence paquet / séquentiel, remplissage / fenêtres ; 84 tests).
+- **Plantage à la création du brut, 3e cause** : un STL resté maillage (ouvert, ou plus de 200 000 triangles,
+  trop gros pour la conversion en solide) passait au job ; le clone FreeCAD d'un maillage n'a pas de forme,
+  le brut bouclait jusqu'au débordement de pile. Désormais un tel maillage devient une **surface 3D**
+  (faces non cousues : 14 s pour 215 552 triangles, contre 10 min cousu) qui accepte le brut et les finitions
+  3D (surface 46 s, Z constant 26 s sur ce fichier, `BoundBox = Stock` imposé : l'enveloppe de FreeCAD sur
+  215 000 faces prenait 18 Go) ; les autres stratégies la refusent avec un message. Un maillage ne peut plus
+  être la pièce d'un job (refus explicite, FreeCAD 1.0 : conversion impossible, signalé), et le brut de
+  FreeCAD ne boucle plus sur une boîte invalide (garde de réentrance). 81 tests.
 - **Ébauche 3D et toutes les stratégies vérifiées sur les pièces de l'utilisateur** (matrice stratégies ×
   pièces, chaque case dans son propre CAM2027.exe, `tests/run_strategy_matrix.py`). Ébauche 3D de la pièce
   entière : mode « modèle » de FreeCAD 1.1 (plus de 15 min figé auparavant), calcul arrêtable

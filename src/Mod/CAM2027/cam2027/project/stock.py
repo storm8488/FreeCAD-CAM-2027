@@ -14,6 +14,32 @@ import Path.Main.Stock as PathStock
 ORIGIN_CHOICES = ("stock_top_front_left", "stock_top_center", "stock_bottom_front_left", "model_origin")
 
 
+def _guard_stock_recursion():
+    """``StockFromBase.execute`` de FreeCAD : sur une boîte englobante invalide (clone sans forme), la hauteur
+    calculée est négative, ``execute`` corrige ``ExtZneg``, ``onChanged`` rappelle ``execute``... jusqu'au
+    débordement de pile (plantages du 2026-10-20). Un appel réentrant est ignoré : le brut reste sans forme
+    et CAM2027 le signale au lieu de planter."""
+    cls = PathStock.StockFromBase
+    original = cls.execute
+    if getattr(original, "cam2027_guarded", False):
+        return
+
+    def execute(self, obj):
+        if getattr(self, "_cam2027_executing", False):
+            return
+        self._cam2027_executing = True
+        try:
+            original(self, obj)
+        finally:
+            self._cam2027_executing = False
+
+    execute.cam2027_guarded = True
+    cls.execute = execute
+
+
+_guard_stock_recursion()
+
+
 def _active(doc):
     previous = FreeCAD.ActiveDocument
     FreeCAD.setActiveDocument(doc.Name)

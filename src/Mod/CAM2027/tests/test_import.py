@@ -98,8 +98,14 @@ class TestImport(unittest.TestCase):
         open_path = os.path.join(self.tmp, "open.stl")
         Mesh.Mesh(tris[:-2]).write(open_path)
         res2 = importers.import_file(self.doc, open_path)
-        self.assertEqual(res2.kind, "mesh")
-        self.assertTrue(any("open mesh" in w for w in res2.warnings), res2.warnings)
+        self.assertTrue(any("open mesh" in str(w) for w in res2.warnings), res2.warnings)
+        if res2.kind == "surface":  # FreeCAD 1.1 : surface 3D (faces non cousues), jamais un maillage dans le job
+            surf = res2.objects[0]
+            self.assertTrue(importers.is_mesh_surface(surf))
+            self.assertEqual(len(surf.Shape.Faces), len(tris) - 2)
+            self.assertFalse(surf.Shape.Solids)
+        else:  # FreeCAD 1.0 : pas de conversion sans couture, le maillage reste (et ne peut pas etre usine)
+            self.assertEqual(res2.kind, "mesh")
 
     def test_svg(self):
         path = os.path.join(self.tmp, "shapes.svg")

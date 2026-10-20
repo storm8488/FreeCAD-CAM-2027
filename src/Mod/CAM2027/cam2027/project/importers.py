@@ -105,6 +105,8 @@ def import_file(doc, path, label=None):
         warnings.extend(mesh_warnings)
         if any(getattr(o, "Shape", None) is not None and o.Shape.Solids for o in objects):
             kind = "solid"
+        elif any(is_mesh_surface(o) for o in objects):
+            kind = "surface"
     if kind == "solid":
         # repères, axes, plans et groupes du fichier STEP : ce ne sont pas des pièces, ne rien en dire
         parts = [o for o in objects if o.TypeId.startswith("Part::")]
@@ -123,23 +125,61 @@ MESH_SOLID_MAX_FACETS = 200000
 
 def meshes_to_solids(doc, objects):
     """Maillages fermés -> solides affinés (faces coplanaires fusionnées : les fonds de poche redeviennent des
-    faces planes) ; le maillage d'origine est masqué. Retourne ``(objets, avertissements)``."""
+    faces planes) ; le maillage d'origine est masqué. Maillage ouvert ou trop gros pour la conversion ->
+    **surface 3D** (faces du maillage, non cousues : rapide et exacte) : brut et finitions 3D seulement.
+    Un maillage ne peut pas rester la pièce d'un job (son clone FreeCAD n'a pas de forme : le brut bouclait
+    jusqu'au plantage, 2026-10-20). Retourne ``(objets, avertissements)``."""
     out, warnings = [], []
     for o in objects:
         mesh = getattr(o, "Mesh", None)
         if mesh is None:
             out.append(o)
             continue
-        if not mesh.isSolid():
-            warnings.append(Msg("{name}: open mesh, kept as a mesh: only 3D surface operations can use it", name=o.Label))
-            out.append(o)
-        elif mesh.CountFacets > MESH_SOLID_MAX_FACETS:
-            warnings.append(Msg("{name}: {n} triangles, kept as a mesh (too large to convert): only 3D surface operations can use it",
-                                name=o.Label, n=mesh.CountFacets))
-            out.append(o)
-        else:
+        if mesh.isSolid() and mesh.CountFacets <= MESH_SOLID_MAX_FACETS:
             out.append(mesh_to_solid(doc, o))
+            continue
+        why = (Msg("open mesh") if not mesh.isSolid()
+               else Msg("{n} triangles, too large to convert to a solid", n=mesh.CountFacets))
+        try:
+            surface = mesh_to_surface(doc, o)
+        except TypeError:  # FreeCAD 1.0 : pas de conversion sans couture (trop lente sur un gros maillage)
+            warnings.append(Msg("{name}: {why}, kept as a mesh: it cannot be machined with this FreeCAD version",
+                                name=o.Label, why=why))
+            out.append(o)
+            continue
+        warnings.append(Msg("{name}: {why}, imported as a 3D surface: only 3D surface finishing (surface, waterline) can machine it",
+                            name=o.Label, why=why))
+        out.append(surface)
     return out, warnings
+
+
+#: propriété qui marque une surface issue d'un maillage (pas un solide : finitions 3D seulement)
+MESH_SURFACE_PROPERTY = "CAM2027MeshSurface"
+
+
+def mesh_to_surface(doc, mesh_obj, tolerance=0.05):
+    """Faces du maillage dans un ``Part::Feature`` sans couture (14 s pour 215 000 triangles, contre 10 min
+    cousu et converti en solide) ; le maillage est masqué. ``TypeError`` sur FreeCAD 1.0 (pas de paramètre
+    ``sewShape``)."""
+    import Part
+
+    shape = Part.Shape()
+    shape.makeShapeFromMesh(mesh_obj.Mesh.Topology, tolerance, False)
+    obj = doc.addObject("Part::Feature", mesh_obj.Name + "_surface")
+    obj.Shape = shape
+    obj.addProperty("App::PropertyBool", MESH_SURFACE_PROPERTY, "CAM2027", "3D surface from a mesh: not a solid")
+    setattr(obj, MESH_SURFACE_PROPERTY, True)
+    name = mesh_obj.Label
+    mesh_obj.Label = tr("{name} (mesh)", name=name)
+    obj.Label = name
+    if FreeCAD.GuiUp and mesh_obj.ViewObject is not None:
+        mesh_obj.ViewObject.Visibility = False
+    doc.recompute()
+    return obj
+
+
+def is_mesh_surface(obj):
+    return bool(getattr(obj, MESH_SURFACE_PROPERTY, False))
 
 
 def mesh_to_solid(doc, mesh_obj, tolerance=0.05):

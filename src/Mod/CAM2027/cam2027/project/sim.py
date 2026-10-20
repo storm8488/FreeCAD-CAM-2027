@@ -111,7 +111,7 @@ class ZMap(object):
     def from_bounds(cls, bounds, resolution=DEFAULT_RESOLUTION):
         return cls(bounds["xmin"], bounds["ymin"], bounds["xmax"], bounds["ymax"], bounds["zmax"], resolution)
 
-    def _window(self, xlo, xhi, ylo, yhi):
+    def _window(self, xlo, xhi, ylo, yhi, grid=True):
         np = _np()
         i0 = max(0, int(math.floor((xlo - self.x0) / self.res)))
         i1 = min(self.nx, int(math.ceil((xhi - self.x0) / self.res)) + 1)
@@ -119,55 +119,334 @@ class ZMap(object):
         j1 = min(self.ny, int(math.ceil((yhi - self.y0) / self.res)) + 1)
         if i0 >= i1 or j0 >= j1:
             return None
-        return i0, i1, j0, j1, np.meshgrid(self.xs[i0:i1], self.ys[j0:j1], indexing="ij")
+        return i0, i1, j0, j1, np.meshgrid(self.xs[i0:i1], self.ys[j0:j1], indexing="ij") if grid else None
 
     def sweep(self, p0, p1, tool, rapid=False):
         """Balaye le segment p0 -> p1 (pointe de la fraise) ; retourne True si de la matière est touchée."""
         np = _np()
-        length = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-        dz = abs(p1[2] - p0[2])
-        if length > 1e-9 and (length > _SLOPE_STEP_MM and dz > 1e-9 or dz > _SLOPE_DZ_MM):
-            # pente : découpe en morceaux courts et peu inclinés (Z pris au point le plus proche)
-            n = int(math.ceil(max(length / _SLOPE_STEP_MM, dz / _SLOPE_DZ_MM)))
-            hit = False
-            for k in range(n):
-                a = [p0[c] + (p1[c] - p0[c]) * k / n for c in range(3)]
-                b = [p0[c] + (p1[c] - p0[c]) * (k + 1) / n for c in range(3)]
-                hit = self.sweep(a, b, tool, rapid) or hit
-            return hit
-        r = tool.radius
-        win = self._window(min(p0[0], p1[0]) - r, max(p0[0], p1[0]) + r,
-                           min(p0[1], p1[1]) - r, max(p0[1], p1[1]) + r)
-        if win is None:
-            return False
-        i0, i1, j0, j1, (X, Y) = win
-        dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-        L2 = dx * dx + dy * dy
-        if L2 < 1e-18:  # mouvement vertical : la pointe descend jusqu'au plus bas des deux points
-            t = np.zeros_like(X)
-            z_tip = min(p0[2], p1[2])
-        else:
-            t = np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
-            z_tip = p0[2] + t * (p1[2] - p0[2])
-        d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
-        inside = d <= r + 1e-9
-        if not inside.any():
-            return False
-        z = z_tip + tool.lift(np.minimum(d, r))
-        z = np.where(inside, z, np.inf)
+        P0, P1 = split_segments(np.array([p0], dtype=float), np.array([p1], dtype=float), tool)
+        return self._sweep_chunk(P0, P1, tool, rapid)
+
+    def sweep_many(self, segments, tool):
+        """Balaye des segments de coupe ``(p0, p1)`` : même résultat que ``sweep`` sur chacun dans l'ordre."""
+        np = _np()
+        self.sweep_arrays(np.array([q[0] for q in segments], dtype=float),
+                          np.array([q[1] for q in segments], dtype=float), tool)
+
+    def sweep_arrays(self, P0, P1, tool):
+        """Balayage de ``n`` segments (tableaux ``(n, 3)``) : même résultat que ``sweep`` sur chacun dans
+        l'ordre (le minimum ne dépend pas de l'ordre), bien plus vite sur les parcours de dizaines de
+        milliers de commandes.
+
+        Fraise plate : les segments horizontaux (et les verticaux, disque au point bas) sont regroupés par
+        hauteur, quel que soit leur ordre, et chaque groupe est rempli par colonnes (``_sweep_flat_level``) ;
+        les segments inclinés, et tout pour les autres profils, passent par fenêtres communes
+        (``_sweep_chunk``)."""
+        np = _np()
+        P0, P1 = split_segments(P0, P1, tool)
+        if tool.kind == "flat" and len(P0):
+            P0, P1, rest0, rest1 = flat_groups_ready(P0, P1)
+            for z in np.unique(P0[:, 2]):
+                sel = P0[:, 2] == z
+                self._sweep_flat_level(P0[sel], P1[sel], float(z), tool.radius)
+            P0, P1 = rest0, rest1
+        for start, stop in chunk_bounds(P0, P1, self.res, tool.radius):
+            self._sweep_chunk(P0[start:stop], P1[start:stop], tool)
+
+    def excess_any(self, P0, P1, radius, offset, threshold, flat):
+        """Vrai si, sur l'état courant, de la matière dépasse ``pointe + offset`` de plus de ``threshold`` dans
+        ``radius`` autour d'un des segments (queue, porte-outil). ``flat`` : fraise plate (les segments
+        horizontaux sont regroupés par hauteur et remplis par colonnes, comme le balayage)."""
+        np = _np()
+        if flat and len(P0):
+            P0, P1, rest0, rest1 = flat_groups_ready(P0, P1)
+            for z in np.unique(P0[:, 2]):
+                sel = P0[:, 2] == z
+                cov = self._flat_cover(P0[sel], P1[sel], radius)
+                if cov is None:
+                    continue
+                i0, i1, j0, j1, covered = cov
+                if (self.top[i0:i1, j0:j1][covered] > float(z) + offset + threshold).any():
+                    return True
+            P0, P1 = rest0, rest1
+        for start, stop in chunk_bounds(P0, P1, self.res, radius):
+            if (material_excess_many(self, P0[start:stop], P1[start:stop], radius, offset) > threshold).any():
+                return True
+        return False
+
+    def _sweep_flat_level(self, P0, P1, zlev, r):
+        """Fraise plate, segments horizontaux à la hauteur ``zlev`` : les cellules couvertes descendent à
+        ``zlev`` (voir ``_flat_cover``)."""
+        np = _np()
+        cov = self._flat_cover(P0, P1, r)
+        if cov is None:
+            return
+        i0, i1, j0, j1, covered = cov
         block = self.top[i0:i1, j0:j1]
-        touched = z < block - 1e-6
-        # rapide : dégagement vertical vers le haut (la fraise quitte l'endroit qu'elle vient d'usiner) jamais
-        # compté ; ailleurs, au-delà de RAPID_TOLERANCE (les pentes découpées laissent quelques microns)
-        if rapid and not (L2 < 1e-18 and p1[2] > p0[2]) and (z < block - RAPID_TOLERANCE).any():
+        np.minimum(block, np.where(covered, zlev, np.inf), out=block)
+
+    def _flat_cover(self, P0, P1, r):
+        """Cellules couvertes par des segments horizontaux élargis de ``r`` : dans chaque colonne de cellules,
+        la capsule couvre un intervalle de Y, union de ses trois morceaux (disque de départ, disque d'arrivée,
+        bande entre les perpendiculaires aux extrémités) ; les intervalles sont cumulés par colonne
+        (``add.at`` puis somme cumulée) : une cellule est couverte si son centre est dans l'un d'eux,
+        exactement comme ``d <= r`` dans ``_bottom``. Retourne ``(i0, i1, j0, j1, masque)`` ou None."""
+        np = _np()
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return None
+        i0, i1, j0, j1, _grid = win
+        rr = r + 1e-9
+        res = self.res
+        xA, yA, xB, yB = P0[:, 0], P0[:, 1], P1[:, 0], P1[:, 1]
+        cmin = np.clip(np.floor((np.minimum(xA, xB) - rr - self.x0) / res).astype(int), i0, i1 - 1)
+        cmax = np.clip(np.ceil((np.maximum(xA, xB) + rr - self.x0) / res).astype(int), i0, i1 - 1)
+        K = int((cmax - cmin).max()) + 1
+        cols = cmin[:, None] + np.arange(K)[None, :]  # (n, K)
+        valid = cols <= cmax[:, None]
+        xc = self.xs[np.clip(cols, 0, self.nx - 1)]
+        inf = np.inf
+        # disques aux extrémités
+        hA = rr * rr - (xc - xA[:, None]) ** 2
+        hB = rr * rr - (xc - xB[:, None]) ** 2
+        sA = np.sqrt(np.maximum(hA, 0.0))
+        sB = np.sqrt(np.maximum(hB, 0.0))
+        loA = np.where(hA >= 0, yA[:, None] - sA, inf)
+        hiA = np.where(hA >= 0, yA[:, None] + sA, -inf)
+        loB = np.where(hB >= 0, yB[:, None] - sB, inf)
+        hiB = np.where(hB >= 0, yB[:, None] + sB, -inf)
+        # bande entre les perpendiculaires : 0 <= t <= 1 et |perp| <= r, deux contraintes linéaires en y
+        dx, dy = (xB - xA)[:, None], (yB - yA)[:, None]
+        L2 = dx * dx + dy * dy
+        L = np.sqrt(L2)
+        u = xc - xA[:, None]
+        eps = 1e-12
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t_a = yA[:, None] + (0.0 - u * dx) / dy
+            t_b = yA[:, None] + (L2 - u * dx) / dy
+            p_a = yA[:, None] + (u * dy - rr * L) / dx
+            p_b = yA[:, None] + (u * dy + rr * L) / dx
+        dy_ok = np.abs(dy) > eps
+        dx_ok = np.abs(dx) > eps
+        t_lo = np.where(dy_ok, np.minimum(t_a, t_b), np.where((u * dx >= 0) & (u * dx <= L2), -inf, inf))
+        t_hi = np.where(dy_ok, np.maximum(t_a, t_b), np.where((u * dx >= 0) & (u * dx <= L2), inf, -inf))
+        p_lo = np.where(dx_ok, np.minimum(p_a, p_b), np.where(np.abs(u * dy) <= rr * L, -inf, inf))
+        p_hi = np.where(dx_ok, np.maximum(p_a, p_b), np.where(np.abs(u * dy) <= rr * L, inf, -inf))
+        loS = np.maximum(t_lo, p_lo)
+        hiS = np.minimum(t_hi, p_hi)
+        degenerate = L2 < eps
+        loS = np.where(degenerate | (loS > hiS), inf, loS)
+        hiS = np.where(degenerate | (loS > hiS), -inf, hiS)
+        lo = np.minimum(np.minimum(loA, loB), loS)
+        hi = np.maximum(np.maximum(hiA, hiB), hiS)
+        ok = valid & np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)
+        # cellules dont le centre y0 + (j + 0.5) res est dans [lo, hi]
+        jlo = np.ceil((lo - self.y0) / res - 0.5)
+        jhi = np.floor((hi - self.y0) / res - 0.5)
+        jlo = np.clip(np.where(ok, jlo, 0), j0, j1).astype(int)
+        jhi = np.clip(np.where(ok, jhi, -1), j0 - 1, j1 - 1).astype(int)
+        ok &= jlo <= jhi
+        if not ok.any():
+            return None
+        ci = (cols - i0)[ok]
+        D = np.zeros((i1 - i0, j1 - j0 + 1), dtype=np.int32)
+        np.add.at(D, (ci, jlo[ok] - j0), 1)
+        np.add.at(D, (ci, jhi[ok] - j0 + 1), -1)
+        return i0, i1, j0, j1, np.cumsum(D, axis=1)[:, :-1] > 0
+
+    def _bottom(self, P0, P1, tool):
+        """Fenêtre commune et hauteur du dessous de la fraise ``(n, w, h)`` pour chaque segment (inf hors de sa
+        couverture).
+
+        Sur une pente, la fraise plate est au plus bas à l'extrémité basse de la plage de paramètres où son
+        disque couvre la colonne ; la boule, sphère balayée le long du segment 3D (capsule), au paramètre
+        ``t* - dz/L * sqrt((r² - d⊥²) / (L² + dz²))`` borné à cette plage (fonction convexe). Les autres
+        profils sont découpés avant (``split_segments``) et pris au point le plus proche."""
+        np = _np()
+        r = tool.radius
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return None
+        i0, i1, j0, j1, _grid = win
+        X = self.xs[i0:i1][None, :, None]
+        Y = self.ys[j0:j1][None, None, :]
+        x0, y0, z0 = (P0[:, k][:, None, None] for k in range(3))
+        x1, y1, z1 = (P1[:, k][:, None, None] for k in range(3))
+        dx, dy, dz = x1 - x0, y1 - y0, z1 - z0
+        L2 = dx * dx + dy * dy
+        vertical = L2 < 1e-18
+        L2s = np.where(vertical, 1.0, L2)
+        t_foot = ((X - x0) * dx + (Y - y0) * dy) / L2s  # paramètre du pied de la colonne sur la droite
+        t = np.where(vertical, 0.0, np.clip(t_foot, 0.0, 1.0))
+        d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))  # distance au segment (couverture)
+        inside = d <= r + 1e-9
+        if tool.kind == "flat" and not (dz != 0).any():  # fraise plate à plat : le dessous est au Z du segment
+            z = z0 + np.zeros_like(d)
+        elif tool.kind in ("flat", "ball"):
+            d_perp = np.hypot(X - (x0 + t_foot * dx), Y - (y0 + t_foot * dy))
+            reach = np.sqrt(np.maximum(r * r - d_perp * d_perp, 0.0))
+            half = reach / np.sqrt(L2s)  # demi-plage de couverture
+            lo = np.maximum(t_foot - half, 0.0)
+            hi = np.minimum(t_foot + half, 1.0)
+            if tool.kind == "flat":
+                t_low = np.where(dz < 0, hi, lo)  # extrémité basse de la plage
+            else:
+                t_low = np.clip(t_foot - dz / np.sqrt(L2s) * reach / np.sqrt(L2s + dz * dz), lo, hi)
+            t_low = np.where(vertical, 0.0, t_low)
+            d_low = np.where(vertical, d, np.hypot(X - (x0 + t_low * dx), Y - (y0 + t_low * dy)))
+            z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t_low * dz)
+            z = z_tip + tool.lift(np.minimum(d_low, r))
+        else:
+            z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * dz)
+            z = z_tip + tool.lift(np.minimum(d, r))
+        return i0, i1, j0, j1, np.where(inside, z, np.inf), vertical[:, 0, 0]
+
+    def _sweep_chunk(self, P0, P1, tool, rapid=False):
+        np = _np()
+        res = self._bottom(P0, P1, tool)
+        if res is None:
+            return False
+        i0, i1, j0, j1, z, vertical = res
+        block = self.top[i0:i1, j0:j1]
+        zmin = z.min(axis=0)
+        touched = zmin < block - 1e-6
+        if rapid and not (vertical.all() and (P1[:, 2] > P0[:, 2]).all()) and (zmin < block - RAPID_TOLERANCE).any():
+            # rapide : dégagement vertical vers le haut jamais compté ; ailleurs au-delà de RAPID_TOLERANCE
             self.rapid_hits += 1
             if self.rapid_hit_at is None:
-                self.rapid_hit_at = tuple(p1)
-        np.minimum(block, z, out=block)
+                self.rapid_hit_at = tuple(P1[-1])
+        np.minimum(block, zmin, out=block)
         return bool(touched.any())
+
+    def rapid_hits_many(self, P0, P1, tool):
+        """Pour chaque rapide, True s'il entrerait dans la matière sur l'état courant (sans la modifier)."""
+        np = _np()
+        res = self._bottom(P0, P1, tool)
+        if res is None:
+            return np.zeros(len(P0), dtype=bool)
+        i0, i1, j0, j1, z, vertical = res
+        up = vertical & (P1[:, 2] > P0[:, 2])
+        return (z < self.top[i0:i1, j0:j1][None, :, :] - RAPID_TOLERANCE).any(axis=(1, 2)) & ~up
 
     def removed_volume(self):
         return float((self.initial - self.top).sum() * self.res * self.res)
+
+
+#: paquets vectorisés : segments × cellules de la fenêtre commune au plus (~100 Mo de tableaux temporaires)
+CHUNK_CELLS = 1_500_000
+CHUNK_SEGMENTS = 512
+#: suites de segments plats au même Z traitées par colonnes : au moins / au plus tant de segments d'un coup
+FLAT_RUN_MIN = 4
+FLAT_RUN_MAX = 20000
+#: la fenêtre commune ne doit pas dépasser ce multiple de la somme des fenêtres propres (sinon les segments
+#: alignés d'une longue ligne font calculer, pour chacun, les cellules de toute la ligne)
+CHUNK_WASTE = 3.0
+
+
+def chunk_bounds(P0, P1, res, radius):
+    """Bornes ``(début, fin)`` de paquets de segments consécutifs (tableaux ``(n, 3)``) dont la fenêtre commune
+    (boîte des segments élargie de ``radius``) reste petite : ``n × largeur × hauteur <= CHUNK_CELLS`` et au
+    plus ``CHUNK_WASTE`` fois la somme des fenêtres propres des segments."""
+    out = []
+    start = 0
+    total = len(P0)
+    xs0, ys0, xs1, ys1 = P0[:, 0].tolist(), P0[:, 1].tolist(), P1[:, 0].tolist(), P1[:, 1].tolist()
+    pad = 2 * radius
+
+    def own(k):
+        return ((abs(xs1[k] - xs0[k]) + pad) / res + 2) * ((abs(ys1[k] - ys0[k]) + pad) / res + 2)
+
+    while start < total:
+        xlo, xhi = min(xs0[start], xs1[start]), max(xs0[start], xs1[start])
+        ylo, yhi = min(ys0[start], ys1[start]), max(ys0[start], ys1[start])
+        n = 1
+        own_sum = own(start)
+        while start + n < total and n < CHUNK_SEGMENTS:
+            k = start + n
+            nxlo, nxhi = min(xlo, xs0[k], xs1[k]), max(xhi, xs0[k], xs1[k])
+            nylo, nyhi = min(ylo, ys0[k], ys1[k]), max(yhi, ys0[k], ys1[k])
+            cells = ((nxhi - nxlo + pad) / res + 2) * ((nyhi - nylo + pad) / res + 2)
+            total_cells = (n + 1) * cells
+            if total_cells > CHUNK_CELLS or total_cells > CHUNK_WASTE * (own_sum + own(k)):
+                break
+            xlo, xhi, ylo, yhi = nxlo, nxhi, nylo, nyhi
+            own_sum += own(k)
+            n += 1
+        out.append((start, start + n))
+        start += n
+    return out
+
+
+def flat_groups_ready(P0, P1):
+    """Sépare les segments d'une fraise plate : ``(H0, H1, R0, R1)`` avec les horizontaux (et les verticaux,
+    ramenés à un point à leur Z le plus bas : même disque, même hauteur que dans ``_bottom``) prêts pour le
+    remplissage par colonnes, et le reste (pentes) pour les fenêtres communes."""
+    np = _np()
+    horizontal = P0[:, 2] == P1[:, 2]
+    vertical = (P0[:, 0] == P1[:, 0]) & (P0[:, 1] == P1[:, 1]) & ~horizontal
+    H0 = P0[horizontal | vertical].copy()
+    H1 = P1[horizontal | vertical].copy()
+    v = vertical[horizontal | vertical]
+    if v.any():
+        zmin = np.minimum(H0[v, 2], H1[v, 2])
+        H0[v, 2] = zmin
+        H1[v] = H0[v]
+    rest = ~(horizontal | vertical)
+    return H0, H1, P0[rest], P1[rest]
+
+
+def split_segments(P0, P1, tool):
+    """Profils sans formule exacte sur une pente (torique, conique) : découpe des segments inclinés en morceaux
+    courts et peu inclinés ; fraise plate et boule : inchangés."""
+    np = _np()
+    if tool.kind in ("flat", "ball") or not len(P0):
+        return P0, P1
+    length = np.hypot(P1[:, 0] - P0[:, 0], P1[:, 1] - P0[:, 1])
+    dz = np.abs(P1[:, 2] - P0[:, 2])
+    needs = (length > 1e-9) & ((length > _SLOPE_STEP_MM) & (dz > 1e-9) | (dz > _SLOPE_DZ_MM))
+    if not needs.any():
+        return P0, P1
+    outs0, outs1 = [], []
+    for k in range(len(P0)):
+        if not needs[k]:
+            outs0.append(P0[k])
+            outs1.append(P1[k])
+            continue
+        n = int(math.ceil(max(length[k] / _SLOPE_STEP_MM, dz[k] / _SLOPE_DZ_MM)))
+        steps = np.arange(n + 1)[:, None] / n
+        pts = P0[k][None, :] + (P1[k] - P0[k])[None, :] * steps
+        outs0.extend(pts[:-1])
+        outs1.extend(pts[1:])
+    return np.array(outs0, dtype=float), np.array(outs1, dtype=float)
+
+
+def material_excess(zmap, p0, p1, radius, offset):
+    """Plus grand dépassement de matière au-dessus de ``pointe + offset`` dans ``radius`` le long du segment.
+
+    Retourne ``(dépassement, (x, y, z_pointe))`` ; dépassement <= 0 : pas de contact."""
+    np = _np()
+    win = zmap._window(min(p0[0], p1[0]) - radius, max(p0[0], p1[0]) + radius,
+                       min(p0[1], p1[1]) - radius, max(p0[1], p1[1]) + radius)
+    if win is None:
+        return 0.0, None
+    i0, i1, j0, j1, (X, Y) = win
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    L2 = dx * dx + dy * dy
+    t = np.zeros_like(X) if L2 < 1e-18 else np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
+    d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
+    z_tip = min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + t * (p1[2] - p0[2])
+    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1] - (z_tip + offset), -np.inf)
+    k = int(np.argmax(excess))
+    worst = float(excess.flat[k])
+    if not np.isfinite(worst) or worst <= 0:
+        return worst if np.isfinite(worst) else 0.0, None
+    tk = float(np.asarray(t).flat[k]) if L2 >= 1e-18 else 0.0
+    at = (p0[0] + tk * dx, p0[1] + tk * dy, min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + tk * (p1[2] - p0[2]))
+    return worst, at
 
 
 # -- collisions ---------------------------------------------------------------------------------------
@@ -214,29 +493,31 @@ class Envelope(object):
         return cls(parts, holder is not None)
 
 
-def material_excess(zmap, p0, p1, radius, offset):
-    """Plus grand dépassement de matière au-dessus de ``pointe + offset`` dans ``radius`` le long du segment.
-
-    Retourne ``(dépassement, (x, y, z_pointe))`` ; dépassement <= 0 : pas de contact."""
+def material_excess_many(zmap, P0, P1, radius, offset):
+    """``material_excess`` vectorisé : plus grand dépassement par segment (tableau ``(n,)``), sur l'état courant
+    de la carte. Les positions ne sont pas retournées : sert de pré-contrôle d'un paquet (aucun dépassement =
+    aucun événement, car la matière ne fait que baisser)."""
     np = _np()
-    win = zmap._window(min(p0[0], p1[0]) - radius, max(p0[0], p1[0]) + radius,
-                       min(p0[1], p1[1]) - radius, max(p0[1], p1[1]) + radius)
+    win = zmap._window(min(P0[:, 0].min(), P1[:, 0].min()) - radius, max(P0[:, 0].max(), P1[:, 0].max()) + radius,
+                       min(P0[:, 1].min(), P1[:, 1].min()) - radius, max(P0[:, 1].max(), P1[:, 1].max()) + radius,
+                       grid=False)
     if win is None:
-        return 0.0, None
-    i0, i1, j0, j1, (X, Y) = win
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+        return np.zeros(len(P0))
+    i0, i1, j0, j1, _grid = win
+    X = zmap.xs[i0:i1][None, :, None]
+    Y = zmap.ys[j0:j1][None, None, :]
+    x0, y0, z0 = (P0[:, k][:, None, None] for k in range(3))
+    x1, y1, z1 = (P1[:, k][:, None, None] for k in range(3))
+    dx, dy = x1 - x0, y1 - y0
     L2 = dx * dx + dy * dy
-    t = np.zeros_like(X) if L2 < 1e-18 else np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
-    d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
-    z_tip = min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + t * (p1[2] - p0[2])
-    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1] - (z_tip + offset), -np.inf)
-    k = int(np.argmax(excess))
-    worst = float(excess.flat[k])
-    if not np.isfinite(worst) or worst <= 0:
-        return worst if np.isfinite(worst) else 0.0, None
-    tk = float(np.asarray(t).flat[k]) if L2 >= 1e-18 else 0.0
-    at = (p0[0] + tk * dx, p0[1] + tk * dy, min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + tk * (p1[2] - p0[2]))
-    return worst, at
+    vertical = L2 < 1e-18
+    t = np.clip(((X - x0) * dx + (Y - y0) * dy) / np.where(vertical, 1.0, L2), 0.0, 1.0)
+    t = np.where(vertical, 0.0, t)
+    z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * (z1 - z0))
+    d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))
+    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1][None, :, :] - (z_tip + offset), -np.inf)
+    worst = excess.max(axis=(1, 2))
+    return np.where(np.isfinite(worst), worst, 0.0)
 
 
 def clamp_contacts(p0, p1, envelope, boxes, step=1.0):
@@ -318,38 +599,67 @@ def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
     ``lateral`` > 0 : retourne ``(hauteurs au centre, hauteurs basses)``, les basses étant la plus basse des
     hauteurs au centre et à ``lateral`` mm de lui (4 directions). Sert au contrôle d'entaille : une colonne
     dont le centre tombe pile sur une paroi verticale (grille alignée sur les cotes de la pièce) prendrait
-    le haut de la paroi alors que la fraise passe tangente à côté."""
+    le haut de la paroi alors que la fraise passe tangente à côté.
+
+    Triangles rastérisés par groupes de même fenêtre (vectorisé : 215 000 triangles en quelques secondes)."""
     np = _np()
     offsets = [(0.0, 0.0)]
     if lateral > 0:
         offsets += [(lateral, 0.0), (-lateral, 0.0), (0.0, lateral), (0.0, -lateral)]
     hs = [np.full((zmap.nx, zmap.ny), -np.inf) for _o in offsets]
-    pad = max(abs(o[0]) + abs(o[1]) for o in offsets)
     for shape in shapes:
-        points, triangles = shape.tessellate(deflection)
-        pts = np.array([[v.x, v.y, v.z] for v in points]) if points else np.zeros((0, 3))
-        for tri in triangles:
-            a, b, c = pts[tri[0]], pts[tri[1]], pts[tri[2]]
-            det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-            if abs(det) < 1e-12:
-                continue  # face verticale vue de dessus
-            win = zmap._window(min(a[0], b[0], c[0]) - pad, max(a[0], b[0], c[0]) + pad,
-                               min(a[1], b[1], c[1]) - pad, max(a[1], b[1], c[1]) + pad)
-            if win is None:
-                continue
-            i0, i1, j0, j1, (X0, Y0) = win
-            for (ox, oy), h in zip(offsets, hs):
-                X, Y = X0 + ox, Y0 + oy
-                l1 = ((b[1] - c[1]) * (X - c[0]) + (c[0] - b[0]) * (Y - c[1])) / det
-                l2 = ((c[1] - a[1]) * (X - c[0]) + (a[0] - c[0]) * (Y - c[1])) / det
-                l3 = 1.0 - l1 - l2
-                eps = -1e-9
-                inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
-                if not inside.any():
-                    continue
-                z = np.where(inside, l1 * a[2] + l2 * b[2] + l3 * c[2], -np.inf)
-                block = h[i0:i1, j0:j1]
-                np.maximum(block, z, out=block)
+        # copie sans triangulation : OCC garde la triangulation la plus fine demandée (une finition 3D à
+        # 0,0025 mm en laisse une dix fois plus dense, 8 s de rastérisation au lieu de 1,5)
+        try:
+            fresh = shape.copy(True, False)
+        except TypeError:
+            fresh = shape
+        points, triangles = fresh.tessellate(deflection)
+        if not triangles:
+            continue
+        pts = np.array([[v.x, v.y, v.z] for v in points])
+        tri = np.asarray(triangles, dtype=int)
+        a, b, c = pts[tri[:, 0]], pts[tri[:, 1]], pts[tri[:, 2]]
+        det = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
+        keep = np.abs(det) >= 1e-12  # faces verticales vues de dessus
+        a, b, c, det = a[keep], b[keep], c[keep], det[keep]
+        if not len(det):
+            continue
+        xmin = np.minimum(np.minimum(a[:, 0], b[:, 0]), c[:, 0])
+        xmax = np.maximum(np.maximum(a[:, 0], b[:, 0]), c[:, 0])
+        ymin = np.minimum(np.minimum(a[:, 1], b[:, 1]), c[:, 1])
+        ymax = np.maximum(np.maximum(a[:, 1], b[:, 1]), c[:, 1])
+        for (ox, oy), h in zip(offsets, hs):
+            # colonne (i, j) décalée de (ox, oy) : même fenêtre que ``_window`` sur le triangle décalé de -o
+            i0 = np.clip(np.floor((xmin - ox - zmap.x0) / zmap.res).astype(int), 0, zmap.nx)
+            i1 = np.clip(np.ceil((xmax - ox - zmap.x0) / zmap.res).astype(int) + 1, 0, zmap.nx)
+            j0 = np.clip(np.floor((ymin - oy - zmap.y0) / zmap.res).astype(int), 0, zmap.ny)
+            j1 = np.clip(np.ceil((ymax - oy - zmap.y0) / zmap.res).astype(int) + 1, 0, zmap.ny)
+            w, hh = i1 - i0, j1 - j0
+            valid = (w > 0) & (hh > 0)
+            flat = h.reshape(-1)
+            for (wk, hk) in {(int(x), int(y)) for x, y in zip(w[valid], hh[valid])}:
+                sel = np.nonzero(valid & (w == wk) & (hh == hk))[0]
+                step = max(1, int(1_500_000 // (wk * hk)))
+                for s0 in range(0, len(sel), step):
+                    k = sel[s0:s0 + step]
+                    ii = i0[k][:, None] + np.arange(wk)[None, :]  # (n, w)
+                    jj = j0[k][:, None] + np.arange(hk)[None, :]  # (n, h)
+                    X = (zmap.xs[ii] + ox)[:, :, None]
+                    Y = (zmap.ys[jj] + oy)[:, None, :]
+                    ak, bk, ck, dk = a[k], b[k], c[k], det[k][:, None, None]
+                    l1 = ((bk[:, 1] - ck[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
+                          + (ck[:, 0] - bk[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
+                    l2 = ((ck[:, 1] - ak[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
+                          + (ak[:, 0] - ck[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
+                    l3 = 1.0 - l1 - l2
+                    eps = -1e-9
+                    inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
+                    if not inside.any():
+                        continue
+                    z = l1 * ak[:, 2][:, None, None] + l2 * bk[:, 2][:, None, None] + l3 * ck[:, 2][:, None, None]
+                    cells = (ii[:, :, None] * zmap.ny + jj[:, None, :])
+                    np.maximum.at(flat, cells[inside], z[inside])
     if len(hs) == 1:
         return hs[0]
     low = hs[0].copy()

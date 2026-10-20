@@ -272,6 +272,11 @@ def scenario_solid(scenario, path, tmp, strategy="profile"):
         return
     if not steps_done().get("stock"):
         problem(scenario, "step 2 (stock) not checked")
+    if proj.surface_models() and strategy not in ("surface3d", "waterline"):
+        # surface 3D issue d'un gros maillage : seules les finitions 3D l'usinent (les autres sont refusées
+        # avec un message, vérifié dans test_ui_logic)
+        log("  3D surface from a mesh: %s replaced by surface3d" % strategy)
+        strategy = "surface3d"
     FreeCADGui.Selection.clearSelection()
     driver.handlers[tr("Add operation")] = lambda dlg: (combo_select(find_combo_with(dlg, strategy), strategy), True)[1]
     run_command(scenario, "CAM2027_AddOperation")

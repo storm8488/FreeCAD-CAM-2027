@@ -141,6 +141,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   le dessus de la pièce au centre d'une colonne, ou à 0,05 mm de lui (colonne pile sur une paroi
   verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
   dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
+  Balayage : fraise plate et boule exactes sur les pentes (disque et sphère balayés le long du segment 3D) ;
+  torique et conique prises au point le plus proche sur des morceaux de 0,5 mm / 0,05 mm de dénivelé.
+  Segments traités par paquets vectorisés (pré-contrôles de la queue, du porte-outil et des rapides sur
+  l'état d'avant le paquet, repli séquentiel quand ils signalent quelque chose : même résultat qu'un à un).
+  Ordre de grandeur : 10 à 20 000 commandes par seconde.
 - Fiche de préparation en Markdown (pas de PDF).
 
 ## Interface
@@ -158,9 +163,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Import et pièce
 
-- STL / OBJ fermé de 200 000 triangles au plus : converti en solide affiné à l'import (triangles
-  coplanaires fusionnés) ; au-delà ou ouvert : reste un maillage, utilisable par les opérations 3D de
-  surface seulement (message à l'import).
+- Maillages (STL, OBJ...) : fermé et jusqu'à 200 000 triangles -> solide affiné ; ouvert ou plus gros ->
+  **surface 3D** (faces du maillage, non cousues) : brut et finitions 3D (surface, Z constant) seulement,
+  avec `BoundBox = Stock` ; contour, poche, adaptative, ébauche 3D, perçage, gravure... refusés sur une
+  surface. Sur FreeCAD 1.0 (pas de conversion sans couture), un tel maillage reste un maillage et ne peut pas
+  être usiné (dit à l'import et au brut). Une surface de 215 000 faces pèse dans la vue 3D et dans le fichier.
 - Un fichier importé deux fois est signalé ; ses corps en double sont ignorés par « Brut et montage ».
   Une fusion qui ne donne pas un solide plausible est refusée (corps laissés séparés) : une forme vide
   fait boucler le brut de FreeCAD jusqu'au plantage.

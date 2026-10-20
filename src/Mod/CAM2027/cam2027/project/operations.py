@@ -378,6 +378,94 @@ def patch_adaptive_slicing(mod=None):
 
     projection.cam2027_patched = True
     mod.projectFacesToXY = projection
+    _patch_roughing_regions(mod)
+
+
+#: empreinte SHA-1 de ``_workingEdgeHelperRoughing`` de FreeCAD 1.1.4 (le remplacement n'est installé que sur
+#: cette version exacte du code)
+ROUGHING_HELPER_SHA1 = "dba8a4f537de339e8a419ff74a3291e9e5447226"
+
+
+def _patch_roughing_regions(mod):
+    """Ébauche 3D en mode « modèle » : à chaque niveau, FreeCAD compare chaque nouvelle face aux régions déjà
+    connues par une découpe booléenne complète (``region.cut(f)``), soit 73 000 découpes et 37 s des 97 s de
+    calcul sur un plateau à 135 alvéoles. Une région incluse dans ``f`` a forcément sa boîte dans celle de
+    ``f`` et une aire au plus égale : ces deux tests évitent presque toutes les découpes, sans changer le
+    résultat. Copie de la fonction FreeCAD avec ce filtre, installée seulement si le code d'origine est
+    exactement celui attendu."""
+    import hashlib
+    import inspect
+
+    original = getattr(mod, "_workingEdgeHelperRoughing", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+    try:
+        if hashlib.sha1(inspect.getsource(original).encode()).hexdigest() != ROUGHING_HELPER_SHA1:
+            return
+    except Exception:
+        return
+    import Part
+    import TechDraw
+    import DraftGeomUtils
+    import FreeCAD
+
+    def _included(region, f, tol=1e-4):
+        rb, fb = region.BoundBox, f.BoundBox
+        return (rb.XMin >= fb.XMin - tol and rb.XMax <= fb.XMax + tol and rb.YMin >= fb.YMin - tol
+                and rb.YMax <= fb.YMax + tol and region.Area <= f.Area + tol)
+
+    def helper(op, obj, depths):
+        insideRegions = list()
+        outsideRegions = list()
+        shps = op.model[0].Shape.fuse([k.Shape for k in op.model[1:]])
+        projdir = FreeCAD.Vector(0, 0, 1)
+        modelOutlineFaces = [Part.makeFace(TechDraw.findShapeOutline(s, 1, projdir)) for s in shps.Solids]
+        lastdepth = obj.StartDepth.Value
+        for depth in depths:
+            if depth >= op.stock.Shape.BoundBox.ZMax:
+                lastdepth = depth
+                continue
+            stockface = mod._getSolidProjection(op.stock.Shape, depth - obj.ZStockToLeave.Value)
+            aboveRefined = mod._getSolidProjection(shps, depth - obj.ZStockToLeave.Value)
+            if aboveModelFaces := [Part.makeFace(TechDraw.findShapeOutline(f, 1, projdir)) for f in aboveRefined.Faces]:
+                aboveModelFaces = aboveModelFaces[0].fuse(aboveModelFaces[1:])
+            else:
+                aboveModelFaces = Part.Shape()
+            if (outsideRegions and outsideRegions[-1]["region"].Wires and aboveModelFaces.Wires
+                    and not aboveModelFaces.cut(outsideRegions[-1]["region"]).Wires):
+                outsideRegions[-1]["depths"].append(depth)
+            else:
+                outsideRegions.append({"region": aboveModelFaces, "depths": [depth]})
+            if aboveModelFaces.Wires:
+                outsideface = stockface.cut(outsideRegions[-1]["region"].Faces)
+                if outsideface.Wires:
+                    belowFaces = [f.cut(outsideface) for f in modelOutlineFaces]
+                else:
+                    belowFaces = [f for f in modelOutlineFaces]
+                if belowFaces:
+                    belowCut = belowFaces[0].fuse(belowFaces[1:]).cut(aboveRefined)
+                    if belowCut.Wires:
+                        finalCut = DraftGeomUtils.concatenate(belowCut.removeSplitter())
+                    else:
+                        finalCut = Part.Shape()
+                else:
+                    finalCut = Part.Shape()
+                for f in finalCut.Faces:
+                    addNew = True
+                    for rdict in insideRegions:
+                        if not _included(rdict["region"], f):  # CAM2027 : filtre avant la découpe
+                            continue
+                        if not rdict["region"].cut(f).Wires:
+                            rdict["depths"].append(depth)
+                            addNew = False
+                            break
+                    if addNew:
+                        insideRegions.append({"region": f, "depths": [depth]})
+            lastdepth = depth
+        return insideRegions, outsideRegions
+
+    helper.cam2027_patched = True
+    mod._workingEdgeHelperRoughing = helper
 
 
 def create_operation(job, kind, name, tool_controller, base=None, params=None):

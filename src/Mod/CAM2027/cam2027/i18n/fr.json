@@ -974,5 +974,11 @@
   "Thread {name} on the {n} hole(s) drilled for it": "Filet {name} sur les {n} trou(s) percé(s) pour lui",
   "Holes of other diameters left out of the thread milling: {d} mm": "Trous d'autres diamètres laissés hors du filetage : {d} mm",
   "thread milling in a hole that is not drilled: add a drilling operation at the tap drill size before it": "filetage dans un trou pas encore percé : ajoutez avant lui un perçage au diamètre d'avant-trou",
-  "thread milling in a hole that is not drilled (drill it first)": "filetage dans un trou pas encore percé (percez-le d'abord)"
+  "thread milling in a hole that is not drilled (drill it first)": "filetage dans un trou pas encore percé (percez-le d'abord)",
+  "{name}: mesh not converted to a solid ({n} triangles), it cannot be the part of a job: import it again (closed meshes are converted, large or open ones become a 3D surface)": "{name} : maillage non converti en solide ({n} triangles), il ne peut pas être la pièce d'un job : importez-le de nouveau (les maillages fermés sont convertis, les gros ou ouverts deviennent une surface 3D)",
+  "open mesh": "maillage ouvert",
+  "{n} triangles, too large to convert to a solid": "{n} triangles, trop gros pour la conversion en solide",
+  "{name}: {why}, kept as a mesh: it cannot be machined with this FreeCAD version": "{name} : {why}, gardé en maillage : il ne peut pas être usiné avec cette version de FreeCAD",
+  "{name}: {why}, imported as a 3D surface: only 3D surface finishing (surface, waterline) can machine it": "{name} : {why}, importé comme surface 3D : seules les finitions 3D (surface, Z constant) peuvent l'usiner",
+  "{op}: the part is a 3D surface from a mesh (not a solid): only 3D surface finishing (surface, waterline) can machine it": "{op} : la pièce est une surface 3D issue d'un maillage (pas un solide) : seules les finitions 3D (surface, Z constant) peuvent l'usiner"
 }

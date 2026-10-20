@@ -99,6 +99,100 @@ class TestZMap(unittest.TestCase):
         self.assertAlmostEqual(sim.compare(z, heights, gouge_heights=low)["gouge_max"], 5.0)
 
 
+    def test_batched_sweeps_match_sequential(self):
+        """Balayage par paquets vectorisés = balayage segment par segment (plate, boule, conique, pentes,
+        verticales, rapides), et rapides pré-contrôlés = rapides comptés en séquentiel."""
+        import random
+
+        rng = random.Random(7)
+        segs = []
+        p = [10.0, 10.0, 2.0]
+        for _k in range(300):
+            q = [p[0] + rng.uniform(-6, 6), p[1] + rng.uniform(-6, 6), rng.choice([p[2], p[2] - rng.uniform(0, 1.5), 8.0, -3.0])]
+            q = [min(max(q[0], 2.0), 48.0), min(max(q[1], 2.0), 48.0), max(q[2], -3.0)]
+            if rng.random() < 0.1:
+                q[0], q[1] = p[0], p[1]  # vertical
+            segs.append((list(p), q))
+            p = q
+        for tool in (sim.ToolProfile("flat", 6.0), sim.ToolProfile("ball", 6.0),
+                     sim.ToolProfile("cone", 6.0, included_angle_deg=60.0)):
+            one = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            for p0, p1 in segs:
+                one.sweep(p0, p1, tool)
+            many = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            many.sweep_many(segs, tool)
+            import numpy
+            self.assertTrue(numpy.allclose(one.top, many.top, atol=1e-9), tool.kind)
+            self.assertLess(one.top.min(), 0.0)  # il y a bien eu de la coupe
+        # rapides : pré-contrôle sur l'état avant le paquet = même verdict que le balayage séquentiel
+        flat = sim.ToolProfile("flat", 6.0)
+        z = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+        z.sweep((5, 25, -2), (45, 25, -2), flat)  # rainure
+        import numpy
+        P0 = numpy.array([[5, 25, -2], [5, 25, -2], [5, 40, 10], [25, 25, -2]], dtype=float)
+        P1 = numpy.array([[45, 25, -2], [45, 25, -1.9], [5, 40, -2], [25, 25, 10]], dtype=float)
+        hits = z.rapid_hits_many(P0, P1, flat)
+        self.assertEqual(hits.tolist(), [False, False, True, False])  # rainure déjà vide ; plongée ; remontée
+
+    def test_flat_level_fill_matches_windows(self):
+        """Fraise plate à Z constant : remplissage par colonnes (poche, adaptative) = balayage par fenêtres,
+        cellule par cellule, sur des polylignes aléatoires (segments minuscules, longs, verticaux, points)."""
+        import random
+
+        import numpy
+
+        rng = random.Random(11)
+        flat = sim.ToolProfile("flat", 6.0)
+        for trial in range(6):
+            p = [rng.uniform(5, 45), rng.uniform(5, 45)]
+            segs = []
+            for _k in range(400):
+                step = rng.choice([0.05, 0.3, 0.3, 2.0, 12.0])
+                ang = rng.uniform(0, 2 * math.pi)
+                q = [min(max(p[0] + step * math.cos(ang), 1.0), 49.0), min(max(p[1] + step * math.sin(ang), 1.0), 49.0)]
+                if rng.random() < 0.05:
+                    q = list(p)  # point (mouvement nul)
+                if rng.random() < 0.1:
+                    q[0] = p[0]  # segment vertical en Y
+                if rng.random() < 0.1:
+                    q[1] = p[1]  # segment horizontal en X
+                segs.append((p + [-2.0], q + [-2.0]))
+                p = q
+            P0 = numpy.array([a for a, _b in segs]); P1 = numpy.array([b for _a, b in segs])
+            ref = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            for start, stop in sim.chunk_bounds(P0, P1, ref.res, flat.radius):
+                ref._sweep_chunk(P0[start:stop], P1[start:stop], flat)
+            fill = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            fill._sweep_flat_level(P0, P1, -2.0, flat.radius)
+            diff = int((ref.top != fill.top).sum())
+            self.assertEqual(diff, 0, "essai %d : %d cellules différentes" % (trial, diff))
+            self.assertLess(fill.top.min(), 0.0)
+            # et par sweep_arrays (choix automatique du remplissage)
+            auto = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            auto.sweep_arrays(P0, P1, flat)
+            self.assertEqual(int((ref.top != auto.top).sum()), 0)
+
+    def test_model_heights_vectorized(self):
+        """Dessus de la pièce rastérisé par groupes = valeurs attendues (boîte, sphère, parois, hors pièce)."""
+        z = sim.ZMap(-5, -5, 25, 25, 20.0, 0.5)
+        shapes = [Part.makeBox(10, 10, 5), Part.makeSphere(4, FreeCAD.Vector(18, 18, 0)),
+                  Part.makeCone(3, 0, 6, FreeCAD.Vector(4, 18, 0))]  # pointe en haut
+        h, low = sim.model_heights(z, shapes, lateral=sim.WALL_TOLERANCE)
+        i, j, _x, _y = _cell(z, 5, 5)
+        self.assertAlmostEqual(h[i, j], 5.0)
+        self.assertAlmostEqual(low[i, j], 5.0)
+        i, j, x, y = _cell(z, 18, 18)
+        self.assertAlmostEqual(h[i, j], math.sqrt(16 - (x - 18) ** 2 - (y - 18) ** 2), delta=0.05)
+        i, j, x, y = _cell(z, 4, 18)
+        self.assertAlmostEqual(h[i, j], 6.0 - math.hypot(x - 4, y - 18) * 2.0, delta=0.1)  # cône pointe en haut
+        i, j, _x, _y = _cell(z, 0.0, 5)  # colonne pile sur la paroi x = 0 : centre 0,25 dedans, 0,05 à gauche dehors
+        self.assertAlmostEqual(h[i, j], 5.0)
+        self.assertAlmostEqual(low[i, j], 5.0)
+        i, j, _x, _y = _cell(z, -0.3, 5)  # centre -0,25 : dehors, mais à +0,05... toujours dehors
+        self.assertEqual(h[i, j], -float("inf"))
+        i, j, _x, _y = _cell(z, 12, 3)
+        self.assertEqual(h[i, j], -float("inf"))
+
 
 class TestMaterialCheck(unittest.TestCase):
     @classmethod

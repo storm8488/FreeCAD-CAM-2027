@@ -2,6 +2,7 @@
 """Logique derrière l'interface (bugs trouvés par les scénarios utilisateur) : pièces détectées, maillages,
 outils compatibles, géométrie automatique, fusion d'assemblage, contrôle mémorisé dans le document, messages."""
 
+import math
 import os
 import tempfile
 import unittest
@@ -131,6 +132,69 @@ class TestUiLogic(unittest.TestCase):
         proj.create_job([merged] if merged is not None else unique,
                         stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
         self.assertTrue(proj.stock_bounds()["height"] > 0)
+        proj.close()
+
+    def test_mesh_model_does_not_crash_the_stock(self):
+        """Les plantages du 2026-10-20 au soir : un STL resté maillage (ouvert, ou trop gros pour la conversion)
+        passait au job ; le clone FreeCAD d'un maillage n'a pas de forme, le brut bouclait jusqu'au
+        débordement de pile. Refus explicite, et le brut de FreeCAD ne boucle plus sur une boîte invalide."""
+        import Mesh
+
+        from cam2027.i18n import UserError
+        from cam2027.project import stock as stockmod
+
+        proj = self._project("Mesh")
+        m = Mesh.createBox(40, 30, 10)
+        m.removeFacets([0, 1])  # maillage ouvert : reste un maillage à l'import
+        path = os.path.join(self.tmp, "open_box.stl")
+        m.write(path)
+        res = proj.import_model(path)
+        meshes = [o for o in res.objects if o.TypeId.startswith("Mesh::")]
+        if meshes:  # (après la correction de l'import, un maillage ouvert devient une surface : plus de maillage)
+            with self.assertRaises(UserError):
+                proj.create_job(meshes)
+        self.assertFalse(proj.has_job)
+        # garde de récursion : clone sans forme après la création du job (boîte invalide) = pas de plantage
+        self.assertTrue(stockmod.PathStock.StockFromBase.execute.cam2027_guarded)
+        part = proj.import_model(self.step).objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        saved = clone.Shape
+        clone.Shape = Part.Shape()
+        proj.job.Stock.touch()
+        proj.doc.recompute()  # avant la garde : débordement de pile ici
+        clone.Shape = saved
+        proj.job.Stock.touch()
+        proj.doc.recompute()
+        self.assertGreater(proj.stock_bounds()["height"], 0)
+        proj.close()
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(os.path.expanduser("~"), "Downloads",
+                                                     "Not So XL Male Nutcracker 26 (1).stl")),
+                         "fichier de l'utilisateur absent")
+    def test_user_big_stl_becomes_a_surface(self):
+        """Le cas reel du 2026-10-20 au soir : STL ferme de 215 552 triangles (au-dela de la conversion en
+        solide), garde en maillage -> brut en boucle -> plantage. Il devient une surface 3D (14 s), le brut
+        se cree, et seules les finitions 3D sont acceptees."""
+        from cam2027.i18n import UserError
+        from cam2027.project import importers
+
+        proj = self._project("Nut")
+        res = proj.import_model(os.path.join(os.path.expanduser("~"), "Downloads", "Not So XL Male Nutcracker 26 (1).stl"))
+        if res.kind == "mesh":
+            self.skipTest("FreeCAD sans conversion de maillage sans couture")
+        self.assertEqual(res.kind, "surface")
+        self.assertTrue(any("triangles" in str(w) for w in res.warnings), res.warnings)
+        cands = proj.model_candidates()
+        self.assertEqual([importers.is_mesh_surface(c) for c in cands], [True])
+        proj.create_job(cands, stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        self.assertAlmostEqual(proj.stock_bounds()["height"], 12.12, delta=0.05)
+        self.assertEqual(len(proj.surface_models()), 1)
+        lib = proj.library
+        flat = lib.search("6 mm flat end mill")[0]
+        with self.assertRaises(UserError):
+            proj.add_operation("profile", "Contour", lib.assemblies_for_tool(flat.id)[0].id, flat.presets[0].id,
+                               base=[(proj.job.Model.Group[0], [])])
         proj.close()
 
     @unittest.skipUnless(os.path.isfile(os.path.join(os.path.expanduser("~"), "Downloads",
