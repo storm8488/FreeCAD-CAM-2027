@@ -28,6 +28,8 @@
 - Changement d'assemblage / de préréglage sur une opération existante (onglet Outil de
   l'éditeur, `Project.change_operation_tool`) : même coupant = contrôleur mis à jour, autre
   coupant = ToolBit + ToolController remplacés. Test `test_change_operation_tool` (36 tests).
+- Dogbones (`Path.Dressup.DogboneII`) comme troisième habillage (contour, poche, adaptatif) ;
+  test `test_dogbones` (37 tests).
 
 ## 0.1.3 — 2026-10-20
 

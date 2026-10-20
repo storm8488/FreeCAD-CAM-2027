@@ -563,5 +563,22 @@
   "Open a project...": "Ouvrir un projet...",
 
   "_section_tooltab": "ajouts",
-  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre assemblage ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés)."
+  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre assemblage ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés).",
+
+  "_section_dogbone": "ajouts",
+  "Dogbones (sharp inner corners)": "Dogbones (angles intérieurs vifs)",
+  "Adds a bone at every inner corner so a round cutter clears a square corner (joinery); profile and pocket paths, corners detected on the computed path.": "Ajoute un os à chaque angle intérieur pour qu'une fraise ronde dégage un angle droit (assemblages bois) ; parcours de contour et de poche, angles détectés sur le parcours calculé.",
+  "Bone style": "Style d'os",
+  "Side of the path": "Côté du parcours",
+  "Bone length": "Longueur d'os",
+  "Custom length": "Longueur personnalisée",
+  "Dogbone": "Dogbone (diagonal)",
+  "T-bone horizontal": "T-bone horizontal",
+  "T-bone vertical": "T-bone vertical",
+  "T-bone long edge": "T-bone sur le grand côté",
+  "T-bone short edge": "T-bone sur le petit côté",
+  "Left": "Gauche",
+  "Right": "Droite",
+  "fixed": "fixe",
+  "custom": "personnalisée"
 }

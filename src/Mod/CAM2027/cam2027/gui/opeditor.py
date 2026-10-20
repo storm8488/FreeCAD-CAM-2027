@@ -23,8 +23,15 @@ _DRESSUP_KINDS = ("profile", "pocket", "adaptive", "slot", "millface")
 _DRESSUP_CHOICES = {
     "Method": ("RampMethod1", "RampMethod2", "RampMethod3", "Helix"),
     "RampFeedRate": ("Horizontal Feed Rate", "Vertical Feed Rate", "Ramp Feed Rate", "Custom"),
+    "Style": ("Dogbone", "T-bone horizontal", "T-bone vertical", "T-bone long edge", "T-bone short edge"),
+    "Side": ("Left", "Right"),
+    "Incision": ("adaptive", "fixed", "custom"),
 }
 _DRESSUP_LABELS = {
+    "Style": "Bone style",
+    "Side": "Side of the path",
+    "Incision": "Bone length",
+    "Custom": "Custom length",
     "Width": "Tag width",
     "Height": "Tag height",
     "Angle": "Angle",
@@ -293,8 +300,10 @@ class OperationEditor(QtWidgets.QDialog):
         info.setWordWrap(True)
         lay.addWidget(info)
         existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
-        for key in ("tags", "ramp"):
+        for key in ("tags", "ramp", "dogbone"):
             if key == "tags" and self.kind != "profile":
+                continue
+            if key == "dogbone" and self.kind not in ("profile", "pocket", "adaptive"):
                 continue
             meta = dressupmod.DRESSUPS[key]
             box = QtWidgets.QGroupBox(tr(meta["label"]))

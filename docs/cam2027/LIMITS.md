@@ -80,13 +80,15 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   sélection 3D dans l'onglet Géométrie n'est vérifiée que visuellement.
 - Les paramètres non pris en charge par une stratégie sont listés (`ignored_params`) et
   affichés dans le panneau projet.
-- Habillages : attaches (contours fermés seulement) et rampe d'entrée. L'habillage
+- Habillages : attaches (contours fermés seulement), rampe d'entrée et dogbones. L'habillage
   **remplace** l'opération dans le groupe « Operations » du job (sinon FreeCAD exporterait
   le parcours deux fois) ; l'opération de base reste dans le document et le registre reste
   indexé par son nom. Positions des attaches réparties automatiquement (nombre, largeur,
   hauteur, angle, rayon réglables ; déplacement individuel = panneau FreeCAD « Holding
-  Tags » dans l'atelier CAM standard). Pas de dogbones, pas d'entrées/sorties en arc
-  (LeadInOut), pas de rampe sur perçage/hélice/filetage. Dupliquer une opération ne copie
+  Tags » dans l'atelier CAM standard). Dogbones : angles détectés sur le parcours calculé
+  (styles dogbone / T-bone, longueur adaptative, fixe ou personnalisée). Pas d'entrées/sorties
+  en arc (LeadInOut : propriétés différentes entre 1.0 et 1.1, non exposé), pas de rampe sur
+  perçage/hélice/filetage. Dupliquer une opération ne copie
   pas ses habillages.
 
 ## Export et contrôles

@@ -34,9 +34,17 @@ DRESSUPS = {
                    ("DressupStartDepth", "length")),
         "limits": "Replaces vertical plunges by ramps along the path; not for drilling, helix or thread milling.",
     },
+    "dogbone": {
+        "module": "Path.Dressup.DogboneII",
+        "label": "Dogbones (sharp inner corners)",
+        "suffix": "_DressupDogbone",
+        "params": (("Style", "enum"), ("Side", "enum"), ("Incision", "enum"), ("Custom", "length")),
+        "limits": "Adds a bone at every inner corner so a round cutter clears a square corner (joinery); "
+                  "profile and pocket paths, corners detected on the computed path.",
+    },
 }
 
-ORDER = ("ramp", "tags")  # ordre d'empilement : la rampe au plus près de l'opération, les attaches au-dessus
+ORDER = ("dogbone", "ramp", "tags")  # ordre d'empilement : du plus proche de l'opération au plus haut
 
 
 def is_dressup(obj):
@@ -95,6 +103,9 @@ def add_dressup(job, op, kind, params=None, count=None):
                 raise ValueError("FreeCAD refuse les attaches sur %s (contour fermé requis)" % op.Label)
             if count:
                 obj.Proxy.generateTags(obj, int(count))
+        elif kind == "dogbone":
+            obj = mod.Create(current, name)
+            job.Proxy.addOperation(obj, current)
         else:
             obj = doc.addObject("Path::FeaturePython", name)
             dbo = mod.ObjectDressup(obj)
@@ -116,6 +127,10 @@ def add_dressup(job, op, kind, params=None, count=None):
                 import Path.Dressup.Gui.Tags as TagsGui
 
                 obj.ViewObject.Proxy = TagsGui.PathDressupTagViewProvider(obj.ViewObject)
+            elif kind == "dogbone":
+                import Path.Dressup.Gui.DogboneII as DogboneGui
+
+                obj.ViewObject.Proxy = DogboneGui.ViewProviderDressup(obj.ViewObject)
             else:
                 obj.ViewObject.Proxy = mod.ViewProviderDressup(obj.ViewObject)
             current.ViewObject.Visibility = False

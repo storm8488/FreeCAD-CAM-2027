@@ -596,6 +596,34 @@ class TestPipeline(unittest.TestCase):
             proj.change_operation_tool(top, asm.id, rough.id)
         proj.close()
 
+    def test_dogbones(self):
+        """Dogbones sur la poche rectangulaire : le centre de l'outil entre dans les angles au-delà du décalage."""
+        proj, lib, clone = self._project_with_job("Dogbone test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        bottom = None
+        for i, f in enumerate(clone.Shape.Faces, 1):
+            if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 4.0) < 1e-6 and abs(f.BoundBox.ZMin - 4.0) < 1e-6:
+                bottom = "Face%d" % i
+        op, _rec = proj.add_operation("pocket", "Pocket", asm.id, endmill.presets[0].id, base=[(clone, [bottom])],
+                                      params={"StepDown": 2.0, "StepOver": 40, "FinalDepth": 4.0})
+        r0 = proj.compute()[0]
+        radius = endmill.geometry.diameter / 2.0
+        self.assertAlmostEqual(r0["bbox"]["X"][0], 15.0 + radius, places=2)  # paroi de la poche à X = 15
+        bones, ignored = proj.add_dressup(op, "dogbone", params={"Style": "Dogbone", "Incision": "adaptive"})
+        self.assertEqual(ignored, [])
+        self.assertEqual(bones.Style, "Dogbone")
+        r1 = proj.compute()[0]
+        self.assertGreater(r1["commands"], r0["commands"])
+        # un os à 45° dans chaque angle : le centre dépasse le décalage d'environ r·(√2 − 1) ≈ 1,24 mm
+        self.assertLess(r1["bbox"]["X"][0], 15.0 + radius - 0.5)
+        self.assertGreater(r1["bbox"]["X"][0], 15.0)
+        self.assertGreater(r1["bbox"]["X"][1], 65.0 - radius + 0.5)
+        self.assertAlmostEqual(r1["zmin"], 4.0, places=3)
+        proj.remove_dressup(op, "dogbone")
+        self.assertEqual(proj.compute()[0]["commands"], r0["commands"])
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json
