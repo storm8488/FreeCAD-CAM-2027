@@ -332,6 +332,45 @@ class TestPipeline(unittest.TestCase):
         self.assertAlmostEqual(bb["Y"][1], 60.0 + offset, places=2)
         proj.close()
 
+    def test_param_specs(self):
+        """Chaque paramètre de chaque stratégie a une spec traduite ; lecture/écriture typée sur une opération."""
+        import json
+        from cam2027 import i18n
+        from cam2027.project import operations as opsmod
+        from cam2027.project import paramspec
+
+        self.assertEqual(paramspec.unknown_params(opsmod.STRATEGIES), [])
+        with open(os.path.join(os.path.dirname(i18n.__file__), "i18n", "fr.json"), "r", encoding="utf-8") as fp:
+            catalog = json.load(fp)
+        for _key, label in paramspec.GROUPS:
+            self.assertIn(label, catalog)
+        for name, (label, group, help_text) in paramspec.PARAM_SPECS.items():
+            self.assertIn(group, dict(paramspec.GROUPS), name)
+            self.assertIn(label, catalog, name)
+            if help_text:
+                self.assertIn(help_text, catalog, name)
+
+        proj, lib, clone = self._project_with_job("Params test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op, _rec = proj.add_operation("profile", "Contour", asm.id, endmill.presets[0].id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0, "Side": "Outside"})
+        self.assertEqual(opsmod.param_kind(op, "StepDown")[0], "length")
+        kind, choices = opsmod.param_kind(op, "Side")
+        self.assertEqual(kind, "enum")
+        self.assertIn("Inside", choices)
+        self.assertEqual(opsmod.param_kind(op, "processHoles")[0], "bool")
+        values = opsmod.read_params(op, opsmod.STRATEGIES["profile"]["params"])
+        self.assertAlmostEqual(values["StepDown"], 5.0)
+        self.assertAlmostEqual(values["FinalDepth"], 0.0)
+        self.assertEqual(values["Side"], "Outside")
+        self.assertIs(values["processHoles"], False)
+        ignored = opsmod.set_params(op, {"StepDown": 2.5, "Side": "Inside", "Nope": 1})
+        self.assertEqual(ignored, ["Nope"])
+        self.assertAlmostEqual(opsmod.read_params(op, ["StepDown"])["StepDown"], 2.5)
+        self.assertEqual(op.Side, "Inside")
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

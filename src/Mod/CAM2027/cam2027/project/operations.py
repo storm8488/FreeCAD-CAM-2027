@@ -231,20 +231,71 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         op.ViewObject.Visibility = True
     if base:
         op.Base = [(_model_clone(job, obj), list(subs)) for obj, subs in base]
+    ignored = set_params(op, params)
+    if getattr(op, "Active", None) is False:
+        op.Active = True
+    return op, ignored
+
+
+def set_params(op, params):
+    """Applique des propriétés à une opération ; retourne la liste des noms inconnus (ignorés)."""
     ignored = []
     for key, value in (params or {}).items():
         if key not in op.PropertiesList:
             ignored.append(key)
             continue
-        if key in ("StartDepth", "FinalDepth", "StepDown", "ClearanceHeight", "SafeHeight", "FinishDepth",
-                   "OffsetExtra", "ExtraOffset", "StockToLeave", "StepOver", "PeckDepth", "RetractHeight",
-                   "LiftDistance", "StartRadius", "Tolerance"):
+        if op.getTypeIdOfProperty(key) in _QUANTITY_TYPES:
             # couper l'expression héritée de la feuille de réglage avant d'imposer une valeur
             op.setExpression(key, None)
         setattr(op, key, value)
-    if getattr(op, "Active", None) is False:
-        op.Active = True
-    return op, ignored
+    return ignored
+
+
+_QUANTITY_TYPES = ("App::PropertyLength", "App::PropertyDistance", "App::PropertyAngle", "App::PropertyQuantity",
+                   "App::PropertySpeed", "App::PropertyTime")
+
+#: type de propriété FreeCAD -> genre simple pour l'éditeur
+_KINDS = {
+    "App::PropertyLength": "length",
+    "App::PropertyDistance": "length",
+    "App::PropertyAngle": "angle",
+    "App::PropertyPercent": "percent",
+    "App::PropertyInteger": "int",
+    "App::PropertyIntegerConstraint": "int",
+    "App::PropertyBool": "bool",
+    "App::PropertyEnumeration": "enum",
+    "App::PropertyFloat": "float",
+    "App::PropertyFloatConstraint": "float",
+    "App::PropertyQuantity": "float",
+    "App::PropertyTime": "float",
+    "App::PropertyString": "string",
+}
+
+
+def param_kind(op, name):
+    """Retourne (genre, choix) d'une propriété : genre parmi length/angle/percent/int/bool/enum/float/string/other."""
+    type_id = op.getTypeIdOfProperty(name)
+    kind = _KINDS.get(type_id, "other")
+    choices = tuple(op.getEnumerationsOfProperty(name)) if kind == "enum" else ()
+    return kind, choices
+
+
+def read_params(op, names):
+    """Valeurs courantes (nombres en mm / degrés, chaînes, booléens) des propriétés existantes."""
+    values = {}
+    for name in names:
+        if name not in op.PropertiesList:
+            continue
+        kind, _choices = param_kind(op, name)
+        value = getattr(op, name)
+        if kind in ("length", "angle"):
+            value = float(value.getValueAs("mm" if kind == "length" else "deg")) if hasattr(value, "getValueAs") else float(value)
+        elif kind == "float" and hasattr(value, "Value"):
+            value = float(value.Value)
+        elif kind == "other":
+            continue
+        values[name] = value
+    return values
 
 
 class _ForcedToolController(object):
