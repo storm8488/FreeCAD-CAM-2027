@@ -1,5 +1,15 @@
 # CAM2027 — Historique
 
+## 0.1.2 — 2026-10-20
+
+- Import Fusion validé sur un export réel (Fusion 2.16, version 37) : angle inclus = 2 × `TA`,
+  longueur de jauge `assemblyGaugeLength`, sortie = `LB`, `tapered-type`, sens par `HAND`,
+  `use-stepdown`/`use-stepover`, matière de préréglage, arrosage `tool-coolant` ; clés `CSP`,
+  `DCX`, `shoulder-diameter`, `upper-radius` reconnues. Fixture + test
+  `test_fusion_import_real_export` (26 tests).
+- Bibliothèque utilisateur du lanceur pré-remplie : 11 outils Fusion (T1–T11) + outils de
+  démarrage renumérotés T21–T27 ; rapport dans `fusion-import-report.txt`.
+
 ## 0.1.1 — 2026-10-20
 
 - FreeCAD 1.1.4 portable installé à part (`%LOCALAPPDATA%\CAM2027\FreeCAD-1.1.4`, SHA256

@@ -21,7 +21,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Séparation définition / assemblage / préréglage / valeurs d'opération | disponible | registre projet | auto (`test_full_chain`) | — |
 | Instantané versionné par projet | disponible | `LibrarySnapshot` | auto (`test_snapshot_is_frozen`) | Diff / mise à jour contrôlée depuis la bibliothèque courante (interface) |
 | Recherche, filtres, favoris, duplication, édition groupée | disponible | `ToolLibrary` | auto | — |
-| Import/export | partiel | JSON `.cam2027tools`, import Fusion | auto (synthétique) | **Valider sur un export Fusion réel** ; export vers Fusion absent |
+| Import/export | partiel | JSON `.cam2027tools`, import Fusion `.json`/`.tools` | auto (export réel 2.16 : 11 outils, 4 types) | types non couverts par l'export réel (voir LIMITS), expressions Fusion, export vers Fusion absent |
 | Aperçu 3D coté | partiel | `gui/preview.py` (2D coté) + ToolBit 3D | visuel | Cotes dans la vue 3D |
 
 ## Opérations 2D / 2,5D (cible : Fusion + Aspire)

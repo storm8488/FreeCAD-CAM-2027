@@ -234,6 +234,56 @@ class TestLibrary(unittest.TestCase):
         self.assertAlmostEqual(drill.geometry.diameter, 3.175)
         self.assertIn("drill", report.to_text().lower() + drill.tool_type)
 
+    def test_fusion_import_real_export(self):
+        """Export réel de Fusion 2.16 (fixture fusion-library-lunyee.tools, 11 outils, version 37)."""
+        path = os.path.join(os.path.dirname(__file__), "fixtures", "fusion-library-lunyee.tools")
+        lib = ToolLibrary("real")
+        report = import_fusion_library(path, lib)
+        self.assertEqual(len(report.imported), 11, report.to_text())
+        self.assertEqual(report.skipped, [], report.to_text())
+        self.assertEqual(report.unknown_fields, {}, report.to_text())
+        self.assertEqual(sorted(a.output.tool_number for a in lib.assemblies.values()), list(range(1, 12)))
+        vbit = lib.search("Fraise en V")[0]
+        self.assertEqual(vbit.tool_type, "chamfer")
+        self.assertAlmostEqual(vbit.geometry.tip_included_angle_deg, 60.0)
+        self.assertAlmostEqual(vbit.geometry.tip_diameter, 0.0)
+        self.assertEqual(vbit.flute_count, 3)
+        graver = lib.search("Pointe")[0]
+        self.assertAlmostEqual(graver.geometry.tip_included_angle_deg, 30.0)
+        taper = lib.search("Gravure en relief")[0]
+        self.assertEqual((taper.tool_type, taper.geometry.taper_tip), ("taper", "bullnose"))
+        self.assertAlmostEqual(taper.geometry.taper_half_angle_deg, 5.4)
+        self.assertAlmostEqual(taper.geometry.corner_radius, 0.5)
+        self.assertAlmostEqual(taper.geometry.body_length, 25.0)
+        self.assertAlmostEqual(taper.geometry.shoulder_length, 20.0)
+        asm = lib.assemblies_for_tool(taper.id)[0]
+        self.assertAlmostEqual(asm.gauge_length, 25.0)
+        self.assertAlmostEqual(asm.stickout, 25.0)
+        self.assertEqual(asm.output.tool_number, 2)
+        self.assertFalse(asm.output.manual_tool_change)
+        self.assertEqual(asm.output.post_properties, {"break-control": False, "live": True, "turret": 0})
+        face = lib.search(tool_type="facemill")[0]
+        self.assertAlmostEqual(face.geometry.diameter, 24.0)
+        self.assertAlmostEqual(face.geometry.shank_diameter, 6.35)
+        alu = lib.search("Double-Flute ALU")[0]
+        p = alu.presets[0]
+        self.assertEqual(p.coolant, "mist")
+        self.assertAlmostEqual(p.spindle_rpm, 18000)
+        self.assertAlmostEqual(p.feed_mm_min, 900)
+        self.assertAlmostEqual(p.plunge_feed_mm_min, 200)
+        self.assertAlmostEqual(p.ramp_spindle_rpm, 18000)
+        self.assertAlmostEqual(p.transition_feed_mm_min, 900)
+        self.assertAlmostEqual(p.ramp_angle_deg, 2.0)
+        self.assertIsNone(p.axial_engagement_mm)  # use-stepdown = false
+        r = p.resolve(alu)
+        self.assertAlmostEqual(r["feed_per_tooth_mm"], 0.025)
+        self.assertEqual(alu.product_url, "https://www.sorotec.de/shop/End-Mill-Double-Flute-ALU--3-0mm.html")
+        self.assertEqual(alu.product_id, "L2SA.0300")
+        self.assertTrue(all(t.rotation == "cw" for t in lib.tools.values()))
+        self.assertTrue(all(t.presets[0].coolant in ("flood", "none", "mist") for t in lib.tools.values()))
+        # noms accentués conservés
+        self.assertTrue(any("é" in t.name for t in lib.tools.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

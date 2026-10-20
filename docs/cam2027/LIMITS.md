@@ -20,10 +20,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   dans `warnings`) : aucune stratégie FreeCAD n'exploite ces profils.
 - L'aperçu coté est **2D** (profil de révolution, cotes D / Lc / L / sortie). L'aperçu 3D
   (bouton « Afficher en 3D ») n'est pas coté.
-- Import Fusion : **non validé sur un export réel**. Mapping des clés JSON (`DC`, `SFDM`,
-  `OAL`, `LB`, `LCF`, `RE`, `TA`, `SIG`, `NOF`, presets `n`/`v_f`/`f_z`…) d'après la
-  structure connue ; rapport de conversion listant les champs inconnus. Fournir un export
-  `.json`/`.tools` réel pour valider.
+- Import Fusion : **validé sur un export réel** (Fusion 2.16, `tools.json` version 37,
+  11 outils : fraises deux tailles, à surfacer, à chanfreiner/graver, conique torique)
+  — fixture `tests/fixtures/fusion-library-lunyee.tools`, aucun champ inconnu, aucun
+  outil ignoré. Non vérifié sur export réel : porte-outils et queues par segments
+  (absents de cet export), sphérique/torique/tonneau/lentille/ogive/queue d'aronde/
+  lollipop/rainurer/rayonner/tarauder/forets, unités pouces, autres versions de Fusion.
+  Les `expressions` Fusion (formules liant les champs) ne sont pas importées.
 - Expressions entre paramètres : seulement les deux relations `n = 1000·Vc/(π·D)` et
   `Vf = n·z·fz` avec grandeur pilote déclarée. Pas de moteur d'expressions général,
   pas de détection de cycles (jalon C).

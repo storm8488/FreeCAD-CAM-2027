@@ -45,11 +45,23 @@ _TYPE_MAP = {
     "counter sink": ("chamfer", "counter sink imported as chamfer mill"),
 }
 
+# Clés vues dans un export réel (Fusion 2.16, version 37) : DC, DCX, SFDM, OAL, LB, LCF, NOF,
+# RE, TA (demi-angle), HAND, CSP, assemblyGaugeLength, shoulder-diameter, shoulder-length,
+# upper-radius, tip-diameter. Les autres restent des hypothèses.
 _KNOWN_GEOMETRY_KEYS = {
-    "DC", "SFDM", "OAL", "LCF", "LB", "RE", "TA", "SIG", "NOF", "HAND", "shoulder-length",
-    "tip-length", "tip-diameter", "DCX", "TP", "tip-angle", "taper-angle", "corner-radius",
-    "body-length", "flute-length", "overall-length", "shaft-diameter", "diameter", "thread-pitch",
-    "thread-profile-angle", "TA2", "LU", "LF",
+    "DC", "SFDM", "OAL", "LCF", "LB", "RE", "TA", "SIG", "NOF", "HAND", "CSP", "shoulder-length",
+    "shoulder-diameter", "assemblyGaugeLength", "upper-radius", "lower-radius", "profile-radius",
+    "axial-distance", "tip-length", "tip-diameter", "tip-offset", "DCX", "TP", "NT", "tip-angle",
+    "taper-angle", "corner-radius", "body-length", "flute-length", "overall-length", "shaft-diameter",
+    "diameter", "thread-pitch", "thread-pitch-min", "thread-pitch-max", "thread-profile-angle",
+    "TA2", "LU", "LF", "RE2", "number-of-teeth",
+}
+
+# « tapered-type » d'un « tapered mill » -> (type CAM2027, pointe)
+_TAPERED_TYPES = {
+    "tapered_flat": ("taper", "flat"),
+    "tapered_bull_nose": ("taper", "bullnose"),
+    "tapered_ball": ("taperedball", "ball"),
 }
 
 
@@ -134,6 +146,12 @@ def import_fusion_library(path, library, holder_cache=None):
             continue
         if note:
             report.warnings.append("%s: %s" % (name, note))
+        taper_tip = None
+        if ttype == "taper":
+            sub = str(raw.get("tapered-type") or "tapered_flat").lower()
+            if sub not in _TAPERED_TYPES:
+                report.warnings.append("%s: unknown tapered-type %r, imported as flat taper" % (name, sub))
+            ttype, taper_tip = _TAPERED_TYPES.get(sub, ("taper", "flat"))
         g = raw.get("geometry", {}) or {}
         report.add_unknown(name, set(g) - _KNOWN_GEOMETRY_KEYS)
         geom = {
@@ -149,11 +167,18 @@ def import_fusion_library(path, library, holder_cache=None):
                 geom[key] *= scale
         if ttype == "bullnose":
             geom["corner_radius"] = _num(g, "RE", "corner-radius", default=0) * scale
-        if ttype == "taper":
+        if ttype in ("taper", "taperedball"):
             geom["taper_half_angle_deg"] = _num(g, "TA", "taper-angle", default=0)
             geom["corner_radius"] = _num(g, "RE", "corner-radius", default=0) * scale
+            if ttype == "taper":
+                geom["taper_tip"] = taper_tip
         if ttype in ("chamfer", "vbit", "engrave"):
-            geom["tip_included_angle_deg"] = _num(g, "SIG", "tip-angle", default=90)
+            # Fusion stocke le demi-angle (« angle de dépouille », TA) ; l'angle inclus vaut 2 x TA
+            half = _num(g, "TA", "taper-angle", default=None)
+            if half is not None:
+                geom["tip_included_angle_deg"] = 2.0 * half
+            else:
+                geom["tip_included_angle_deg"] = _num(g, "SIG", "tip-angle", default=90)
             geom["tip_diameter"] = _num(g, "tip-diameter", default=0) * scale
         if ttype == "drill":
             geom["tip_included_angle_deg"] = _num(g, "SIG", "tip-angle", default=118)
@@ -197,10 +222,14 @@ def import_fusion_library(path, library, holder_cache=None):
         presets = []
         for p in (raw.get("start-values", {}) or {}).get("presets", []) or []:
             try:
+                material = p.get("material")
+                if isinstance(material, dict):
+                    material = material.get("query") or ("" if material.get("category") in (None, "all") else material.get("category"))
                 presets.append(
                     CuttingPreset(
                         p.get("name") or "Fusion preset",
-                        description=p.get("description", ""),
+                        description=p.get("description", "") or "",
+                        material=material or "",
                         spindle_rpm=_num(p, "n"),
                         surface_speed_m_min=_num(p, "v_c"),
                         feed_mm_min=_num(p, "v_f"),
@@ -215,8 +244,8 @@ def import_fusion_library(path, library, holder_cache=None):
                         plunge_feed_per_rev_mm=_num(p, "f_n_plunge"),
                         retract_feed_mm_min=_num(p, "v_f_retract"),
                         feed_per_rev_mm=_num(p, "f_n"),
-                        axial_engagement_mm=_num(p, "stepdown"),
-                        radial_engagement_mm=_num(p, "stepover"),
+                        axial_engagement_mm=_num(p, "stepdown") if p.get("use-stepdown", True) else None,
+                        radial_engagement_mm=_num(p, "stepover") if p.get("use-stepover", True) else None,
                         coolant=_coolant(p),
                     )
                 )
@@ -262,11 +291,13 @@ def import_fusion_library(path, library, holder_cache=None):
                     report.warnings.append("%s: holder ignored (%s)" % (name, exc))
             holder_id = holder_cache.get(key)
         post = raw.get("post-process", {}) or {}
+        gauge = _num(g, "assemblyGaugeLength", default=None)
         asm = ToolAssembly(
             "T%s %s" % (post.get("number", "?"), name),
             tool.id,
             holder_id,
-            stickout=None,
+            stickout=geom.get("body_length"),
+            gauge_length=gauge * scale if gauge is not None else None,
             output={
                 "tool_number": int(post.get("number", 1) or 1),
                 "length_offset": post.get("length-offset"),
