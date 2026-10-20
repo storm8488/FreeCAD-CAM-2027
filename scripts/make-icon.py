@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Fabrique un .ico multi-résolutions (16 à 256 px) à partir d'un SVG, avec le Qt de FreeCAD.
+"""Fabrique un .ico multi-résolutions (16 à 256 px) à partir d'un SVG ou d'un PNG, avec le Qt de FreeCAD.
 
-    set CAM2027_ICON_SVG=<entrée.svg>
+    set CAM2027_ICON_SRC=<entrée.png ou .svg>
     set CAM2027_ICON_OUT=<sortie.ico>
     CAM2027Cmd.exe scripts/make-icon.py
 
-(chemins passés par variables d'environnement : FreeCADCmd ouvrirait un .svg passé en argument)
+(chemins passés par variables d'environnement : FreeCADCmd ouvrirait un fichier passé en argument)
 
-Les images sont rendues par QSvgRenderer (plateforme Qt « offscreen ») puis assemblées en ICO
-(PNG embarqués, format reconnu par Windows Vista et suivants). Aucune dépendance externe.
+Les images sont rendues par QSvgRenderer ou réduites depuis le PNG (lissage), plateforme Qt
+« offscreen », puis assemblées en ICO (PNG embarqués, format reconnu par Windows Vista et suivants).
 """
 
 import os
@@ -18,10 +18,26 @@ import sys
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
-def main(svg, ico):
+def main(src, ico):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide import QtCore, QtGui
 
+    if src.lower().endswith(".png"):
+        app = QtGui.QGuiApplication.instance() or QtGui.QGuiApplication([sys.argv[0], "-platform", "offscreen"])
+        source = QtGui.QImage(src)
+        if source.isNull():
+            raise SystemExit("PNG illisible : %s" % src)
+        images = []
+        for size in SIZES:
+            img = source.scaled(size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            buf = QtCore.QBuffer()
+            buf.open(QtCore.QIODevice.WriteOnly)
+            img.save(buf, "PNG")
+            images.append((size, bytes(buf.data())))
+        write_ico(images, ico)
+        del app
+        return
+    svg = src
     try:
         from PySide import QtSvg
     except ImportError:  # selon la version du shim PySide de FreeCAD
@@ -45,6 +61,11 @@ def main(svg, ico):
         buf.open(QtCore.QIODevice.WriteOnly)
         img.save(buf, "PNG")
         images.append((size, bytes(buf.data())))
+    write_ico(images, ico)
+    del app
+
+
+def write_ico(images, ico):
     header = struct.pack("<HHH", 0, 1, len(images))
     offset = 6 + 16 * len(images)
     entries = b""
@@ -56,7 +77,6 @@ def main(svg, ico):
     with open(ico, "wb") as fp:
         fp.write(header + entries + payload)
     print("icône écrite : %s (%s px)" % (ico, ", ".join(str(s) for s in SIZES)))
-    del app
 
 
-main(os.environ["CAM2027_ICON_SVG"], os.environ["CAM2027_ICON_OUT"])
+main(os.environ.get("CAM2027_ICON_SRC") or os.environ["CAM2027_ICON_SVG"], os.environ["CAM2027_ICON_OUT"])

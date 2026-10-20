@@ -2,6 +2,9 @@
 
 ## Non publié
 
+- **Logo validé** (étape 4.6) : proposition horizontale du dossier d'assets, symbole recadré et
+  texte remplacé par « CAM2027 · FAO · USINAGE CNC » ; `scripts/make-branding.py` produit symbole,
+  logos clair / sombre, petit logo, écran de démarrage et icône ; `.ico` 16 à 256 px depuis le PNG.
 - **Flux 2D avancé** (étape 4.5) : V-carving à **fond plat** (fraise plate à la profondeur limite,
   contour et angles vifs au V-bit) ; **incrustation en V** mâle / femelle (mâle miroir dans un
   nouveau projet, jeux de colle affichés) ; **imbrication** des pièces 2D sur un panneau (rectangles

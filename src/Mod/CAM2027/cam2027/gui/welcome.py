@@ -12,7 +12,12 @@ from . import theme
 from .qt import QtCore, QtGui, QtWidgets
 
 MOD_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOGO = os.path.join(MOD_DIR, "Resources", "branding", "cam2027-logo.svg")
+BRANDING = os.path.join(MOD_DIR, "Resources", "branding")
+
+
+def logo_path(effective_theme):
+    """Logo horizontal adapté au fond : texte clair sur thème sombre, texte foncé sur thème clair."""
+    return os.path.join(BRANDING, "cam2027-logo-%s.png" % ("dark" if effective_theme == "dark" else "light"))
 DEMO = os.path.join(MOD_DIR, "tests", "gui_demo.py")
 MAX_RECENT = 8
 
@@ -40,13 +45,8 @@ class WelcomePage(QtWidgets.QWidget):
         box.setMaximumWidth(560)
         lay = QtWidgets.QVBoxLayout(box)
         lay.setSpacing(12)
-        logo = QtWidgets.QLabel()
-        if os.path.isfile(LOGO):
-            logo.setPixmap(QtGui.QIcon(LOGO).pixmap(QtCore.QSize(360, 96)))
-        else:
-            logo.setText("CAM2027")
-            theme.set_role(logo, "section")
-        lay.addWidget(logo, 0, QtCore.Qt.AlignHCenter)
+        self.logo = QtWidgets.QLabel()
+        lay.addWidget(self.logo, 0, QtCore.Qt.AlignHCenter)
         sub = QtWidgets.QLabel(tr("CAM software: prepare, machine, simulate, export."))
         sub.setAlignment(QtCore.Qt.AlignHCenter)
         theme.set_role(sub, "muted")
@@ -80,8 +80,17 @@ class WelcomePage(QtWidgets.QWidget):
         lay.addWidget(self.empty)
         outer.addWidget(box, 0, QtCore.Qt.AlignHCenter)
         outer.addStretch(2)
-        theme.apply(self)
+        self.restyle()
         self.refresh()
+
+    def restyle(self):
+        effective = theme.apply(self)
+        path = logo_path(effective)
+        if os.path.isfile(path):
+            self.logo.setPixmap(QtGui.QPixmap(path).scaledToWidth(400, QtCore.Qt.SmoothTransformation))
+        else:
+            self.logo.setText("CAM2027")
+            theme.set_role(self.logo, "section")
 
     def refresh(self):
         self.recent.clear()
@@ -149,4 +158,4 @@ def install():
 
 def restyle():
     if _page is not None:
-        theme.apply(_page)
+        _page.restyle()

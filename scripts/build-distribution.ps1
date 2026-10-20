@@ -78,7 +78,7 @@ Copy-Item "$Dest\bin\FreeCAD.exe" "$Dest\bin\CAM2027.exe" -Force
 Copy-Item "$Dest\bin\FreeCADCmd.exe" "$Dest\bin\CAM2027Cmd.exe" -Force
 
 Write-Host "Icône Windows (.ico 16 à 256 px)..."
-$env:CAM2027_ICON_SVG = "$Dest\branding\cam2027-icon.svg"
+$env:CAM2027_ICON_SRC = "$Dest\branding\cam2027-icon.png"
 $env:CAM2027_ICON_OUT = "$Dest\branding\cam2027.ico"
 & "$Dest\bin\CAM2027Cmd.exe" "$Root\scripts\make-icon.py" 2>&1 | Out-Null
 if (-not (Test-Path "$Dest\branding\cam2027.ico")) { Write-Warning "icône .ico non générée" }

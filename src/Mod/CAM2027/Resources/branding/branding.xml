@@ -6,12 +6,12 @@
   <WindowTitle>CAM2027</WindowTitle>
   <CopyrightInfo>CAM2027 - fork indépendant basé sur FreeCAD et son atelier CAM (LGPL-2.1+)</CopyrightInfo>
   <MaintainerUrl>https://github.com/storm8488/FreeCAD-CAM-2027</MaintainerUrl>
-  <WindowIcon>branding/cam2027-icon.svg</WindowIcon>
-  <ProgramLogo>branding/cam2027-logo.svg</ProgramLogo>
-  <AboutImage>branding/cam2027-splash.svg</AboutImage>
-  <SplashScreen>branding/cam2027-splash.svg</SplashScreen>
-  <SplashTextColor>#F1F5FA</SplashTextColor>
-  <SplashInfoColor>#AFBDCE</SplashInfoColor>
+  <WindowIcon>branding/cam2027-icon.png</WindowIcon>
+  <ProgramLogo>branding/cam2027-programlogo.png</ProgramLogo>
+  <AboutImage>branding/cam2027-splash.png</AboutImage>
+  <SplashScreen>branding/cam2027-splash.png</SplashScreen>
+  <SplashTextColor>#182433</SplashTextColor>
+  <SplashInfoColor>#4B5563</SplashInfoColor>
   <StartWorkbench>CAM2027Workbench</StartWorkbench>
   <ExeName>CAM2027</ExeName>
   <ExeVendor>CAM2027</ExeVendor>

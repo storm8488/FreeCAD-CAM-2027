@@ -29,7 +29,7 @@ Source : `src/Mod/CAM2027/Resources/branding/`.
 |---|---|
 | `ExeName`, `ExeVendor`, `Application`, `WindowTitle` | CAM2027 |
 | `ExeVersion` | version de `cam2027/version.py` (titre « CAM2027 0.1.3 ») |
-| `WindowIcon`, `ProgramLogo`, `SplashScreen`, `AboutImage` | SVG de `branding/` (icône, logo de secours, écran de démarrage) |
+| `WindowIcon`, `ProgramLogo`, `SplashScreen`, `AboutImage` | PNG de `branding/` : symbole, petit logo, écran de démarrage clair |
 | `StartWorkbench` | `CAM2027Workbench` |
 | `AppDataSkipVendor` | dossier de réglages `%APPDATA%\CAM2027` |
 | `UserParameterTemplate` | `branding/user.cfg` : français, écran de démarrage, postprocesseur GRBL |
@@ -39,6 +39,19 @@ CAM2027 (les modules gardés comme bibliothèques en déclarent un), supprime le
 (barre « Workbench » et Affichage > Sélecteur d'atelier, mémorisé masqué) et maintient le titre
 « … - CAM2027 <version> » (FreeCAD y remet sa propre version à chaque document). `branding/cam2027.ico`
 (16 à 256 px) est généré depuis le SVG par `scripts/make-icon.py` avec le Qt de la distribution.
+
+## Logo (étape 4.6)
+
+Logo validé par l'utilisateur : la **proposition horizontale** du dossier de direction artistique
+(`docs/design/brand/logo-proposition.png`, F rouge, engrenage bleu, fraise). Le symbole est recadré
+depuis sa partie gauche ; le texte de la proposition (« FreeCAD CAM ») est remplacé par le nom du
+logiciel, **CAM2027**, et « FAO · USINAGE CNC », dans la même disposition (Segoe UI Black) : le
+logiciel ne se présente pas sous le nom de FreeCAD. `scripts/make-branding.py` (lancé avec
+`CAM2027.exe` ou `FreeCAD.exe`, pour les polices) produit les PNG de `branding/` : symbole 512 px,
+logo pour fond clair et pour fond sombre (page d'accueil selon le thème), petit logo de la fenêtre,
+écran de démarrage, icône 256 px ; `scripts/make-icon.py` en fait `cam2027.ico` (16 à 256 px) à la
+construction. Le symbole reprend la forme du logo de FreeCAD (F et engrenage) : son usage public
+reste à vérifier au regard des règles de marque du projet FreeCAD.
 
 ## Interface propre au logiciel (étape 2)
 
@@ -106,4 +119,5 @@ CAM2027, titre CAM2027, 3D, 4e axe, simulateur enregistré) ; lancement réel : 
 - L'arbre du modèle reste celui de FreeCAD (le panneau Projet liste les opérations) : son
   remplacement complet par un arbre CAM2027 n'est pas fait.
 - Distribution fabriquée sur FreeCAD 1.1.4 seulement (1.0.2 reste testé en atelier).
-- Logo : logo typographique de secours ; le logo définitif reste à choisir.
+- Logo : images matricielles issues d'une proposition PNG (pas de master vectoriel) ; à 16 px, la
+  fraise du symbole n'est plus lisible (F et engrenage restent reconnaissables).
