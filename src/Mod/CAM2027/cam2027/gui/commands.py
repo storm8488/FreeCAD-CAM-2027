@@ -132,6 +132,12 @@ class StockFixture(_Base):
         kind.addItem(tr("Box around the model with margins"), "box_margins")
         kind.addItem(tr("Explicit box"), "box")
         kind.addItem(tr("Cylinder (rotary / round stock)"), "cylinder")
+        kind.addItem(tr("Sheet under the 2D drawing (top at Z 0)"), "sheet")
+        from ..project import sheet as sheetmod
+
+        if not proj.has_job and sheetmod.vector_objects(proj.doc) and not any(
+                getattr(o, "Shape", None) and o.Shape.Solids for o in proj.doc.Objects):
+            kind.setCurrentIndex(kind.count() - 1)
         form.addRow(tr("Stock type"), kind)
         xy = QtWidgets.QDoubleSpinBox(); xy.setRange(0, 1000); xy.setValue(2.0)
         ztop = QtWidgets.QDoubleSpinBox(); ztop.setRange(0, 1000); ztop.setValue(0.0)
@@ -147,6 +153,10 @@ class StockFixture(_Base):
         form.addRow(tr("Width Y (mm)"), width)
         form.addRow(tr("Height Z (mm)"), height)
         form.addRow(tr("Radius (mm)"), radius)
+        thickness = QtWidgets.QDoubleSpinBox(); thickness.setRange(0.1, 500); thickness.setValue(18.0)
+        sheet_margin = QtWidgets.QDoubleSpinBox(); sheet_margin.setRange(0, 1000); sheet_margin.setValue(10.0)
+        form.addRow(tr("Sheet thickness (mm)"), thickness)
+        form.addRow(tr("Sheet margin around the drawing (mm)"), sheet_margin)
         fixture = QtWidgets.QComboBox()
         fixture.addItems(["G54", "G55", "G56", "G57", "G58", "G59"])
         form.addRow(tr("Work coordinate system"), fixture)
@@ -157,6 +167,19 @@ class StockFixture(_Base):
         if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         k = kind.currentData()
+        if k == "sheet":
+            try:
+                if proj.has_job:
+                    _warn(tr("The project already has a job: the sheet is only available for a new 2D project."))
+                    return
+                proj.create_sheet_job(thickness=thickness.value(), margin=sheet_margin.value(),
+                                      fixtures=[fixture.currentText()])
+            except Exception as exc:
+                _warn(str(exc))
+                return
+            FreeCADGui.SendMsgToActiveView("ViewFit")
+            _after_change()
+            return
         if k == "box_margins":
             spec = {"kind": k, "xy": xy.value(), "z_top": ztop.value(), "z_bottom": zbot.value()}
         elif k == "box":

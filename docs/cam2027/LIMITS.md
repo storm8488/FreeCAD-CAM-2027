@@ -91,6 +91,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   perçage/hélice/filetage. Dupliquer une opération ne copie
   pas ses habillages.
 
+- Dessin 2D dans un panneau : le dessin doit être plan ; il est posé à Z 0 (dessus du
+  panneau), le panneau est une boîte englobant le dessin + marge (pas de forme de panneau
+  quelconque). Les faces générées (`<vecteur>_Face`) servent à la poche 2D et au V-carving ;
+  les contours et gravures se font sur les arêtes du vecteur. Contours ouverts : gravure seulement.
+  Un projet a soit une pièce 3D, soit un dessin 2D dans un panneau (un seul job).
+
 ## Export et contrôles
 
 - Contrôles statiques : unités (G21), codes autorisés (liste GRBL 1.1 uniquement ; autres

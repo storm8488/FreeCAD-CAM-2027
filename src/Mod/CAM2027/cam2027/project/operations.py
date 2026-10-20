@@ -34,6 +34,15 @@ STRATEGIES = {
                    "FinishDepth", "ClearanceHeight", "SafeHeight", "HelixAngle", "HelixDiameterLimit"),
         "limits": "Offset/zigzag/spiral patterns are NOT adaptive (no engagement control); use 'adaptive'.",
     },
+    "pocket2d": {
+        "module": "Path.Op.PocketShape",
+        "label": "2D pocket (inside a drawing contour)",
+        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "StartAt", "ExtraOffset",
+                   "KeepToolDown", "MinTravel", "UseOutline", "StepDown", "StartDepth", "FinalDepth",
+                   "FinishDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Works on flat faces (the faces generated from closed drawing contours); depth set by the "
+                  "start / final depth, walls vertical.",
+    },
     "adaptive": {
         "module": "Path.Op.Adaptive",
         "label": "2D adaptive roughing (controlled engagement)",

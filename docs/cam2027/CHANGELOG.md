@@ -39,6 +39,11 @@
   `test_vcarve_and_slot` (39 tests).
 - Rainure : points personnalisés, références et rayon de prolongement dans l'éditeur (champ
   vecteur X/Y/Z) ; panneau de flux de travail : temps d'usinage total.
+- **Flux 2D « à la Aspire »** : dessin SVG/DXF posé sur un panneau généré (dessus à Z 0,
+  épaisseur et marge réglables, semi-transparent), une face par contour fermé ; nouvelle
+  stratégie « Poche 2D » (`Path.Op.PocketShape`) ; option « Panneau sous le dessin 2D » du
+  dialogue Brut et montage. Test `test_sheet_from_drawing` (découpe, poche 2D, V-carving,
+  gravure, export ; 40 tests).
 
 ## 0.1.3 — 2026-10-20
 

@@ -662,6 +662,68 @@ class TestPipeline(unittest.TestCase):
         self.assertAlmostEqual(r2["bbox"]["Y"][0], 50.0, places=3)
         proj.close()
 
+    def test_sheet_from_drawing(self):
+        """Flux 2D : SVG, panneau 12 mm sous le dessin, découpe, poche 2D, V-carving, gravure, export."""
+        from tests.test_import import SVG
+        from cam2027.project import sheet as sheetmod
+
+        svg = os.path.join(self.tmp, "drawing.svg")
+        with open(svg, "w", encoding="utf-8") as fp:
+            fp.write(SVG)
+        lib = starter_library()
+        proj = Project.create("Sheet test", lib, self._machine())
+        res = proj.import_model(svg)
+        self.assertEqual(res.kind, "vector")
+        vectors = sheetmod.vector_objects(proj.doc)
+        self.assertEqual(len(vectors), 3)
+        job = proj.create_sheet_job(thickness=12.0, margin=10.0)
+        sb = proj.stock_bounds()
+        self.assertAlmostEqual(sb["zmax"], 0.0, places=6)
+        self.assertAlmostEqual(sb["zmin"], -12.0, places=6)
+        rect = [v for v in vectors if len(v.Shape.Edges) == 4][0]
+        circle = [v for v in vectors if len(v.Shape.Edges) == 1][0]
+        bbr, bbc = rect.Shape.BoundBox, circle.Shape.BoundBox
+        self.assertAlmostEqual(sb["xmin"], min(v.Shape.BoundBox.XMin for v in vectors) - 10.0, places=3)
+
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        sasm = lib.assemblies_for_tool(small.id)[0]
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+        vasm = lib.assemblies_for_tool(vbit.id)[0]
+        rclone = proj.drawing_clone(rect)
+        proj.add_operation("profile", "Cut out", asm.id, endmill.presets[0].id,
+                           base=[(rclone, ["Edge%d" % i for i in range(1, 5)])],
+                           params={"Side": "Outside", "StartDepth": 0.0, "FinalDepth": -12.0, "StepDown": 4.0})
+        proj.add_operation("pocket2d", "Pocket circle", sasm.id, small.presets[0].id,
+                           base=[(proj.drawing_clone(circle, face=True), ["Face1"])],
+                           params={"StartDepth": 0.0, "FinalDepth": -3.0, "StepDown": 1.5, "StepOver": 40})
+        proj.add_operation("vcarve", "Vcarve rect", vasm.id, vbit.presets[0].id,
+                           base=[(proj.drawing_clone(rect, face=True), ["Face1"])], params={"FinalDepth": -4.0})
+        proj.add_operation("engrave", "Engrave circle", vasm.id, vbit.presets[0].id,
+                           base=[(proj.drawing_clone(circle), ["Edge1"])],
+                           params={"StartDepth": 0.0, "FinalDepth": -1.0, "StepDown": 1.0})
+        results = {r["name"]: r for r in proj.compute()}
+        for r in results.values():
+            self.assertTrue(r["valid"] and r["commands"] > 5, r)
+        cut = results["Cut out"]
+        self.assertAlmostEqual(cut["zmin"], -12.0, places=3)
+        self.assertAlmostEqual(cut["bbox"]["X"][0], bbr.XMin - 3.0, places=2)
+        self.assertAlmostEqual(cut["bbox"]["X"][1], bbr.XMax + 3.0, places=2)
+        pocket = results["Pocket circle"]
+        self.assertAlmostEqual(pocket["zmin"], -3.0, places=3)
+        self.assertGreater(pocket["bbox"]["X"][0], bbc.XMin + 1.5 - 1e-3)
+        self.assertLess(pocket["bbox"]["X"][1], bbc.XMax - 1.5 + 1e-3)
+        carve = results["Vcarve rect"]
+        self.assertAlmostEqual(carve["zmin"], -4.0, places=3)
+        self.assertGreaterEqual(carve["bbox"]["X"][0], bbr.XMin - 1e-3)
+        self.assertAlmostEqual(results["Engrave circle"]["zmin"], -1.0, places=3)
+        out = os.path.join(self.tmp, "sheet.nc")
+        result = proj.export_gcode(out)
+        self.assertNotIn("error", [lvl for lvl, _m in result["issues"]])
+        self.assertAlmostEqual(result["analysis"]["bbox"]["Z"][0], -12.0, places=3)
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

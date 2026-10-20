@@ -54,6 +54,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Fonction cible | Statut | Composant | Travail restant |
 |---|---|---|---|
 | Import SVG / DXF / STEP / STL / OBJ | disponible | Draft `importSVG`, `Import.readDXF`, Part, Mesh | auto (`test_import`) | — |
+| Usinage d'un dessin 2D dans un panneau (découpe, poche, V-carving, gravure) | disponible | `project/sheet.py` + `Path.Op.PocketShape` | auto (`test_sheet_from_drawing`) + visuel | brut depuis panneau réel non rectangulaire ; sélection d'un contour par clic sur le dessin (actuellement sélection de ses arêtes/face) |
 | Édition vectorielle (nœuds, texte, booléens, calques) | absent | Draft / Sketcher FreeCAD | outil dédié dans l'atelier |
 | V-carving profondeur variable | disponible | `Path.Op.Vcarve` | auto (`test_vcarve_and_slot`) | fond plat avec 2e outil ; FreeCAD démarre la gravure au sommet du modèle, pas à la hauteur de la face |
 | Incrustations mâle/femelle | absent | — | jalon C |

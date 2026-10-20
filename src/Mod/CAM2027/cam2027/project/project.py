@@ -23,6 +23,7 @@ from ..tools.library import ToolLibrary
 from ..tools import bridge
 from . import docobjects, importers, stock as stockmod, operations as opsmod, export as exportmod
 from . import dressups as dressupmod
+from . import sheet as sheetmod
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -149,6 +150,27 @@ class Project(object):
         job.PostProcessorArgs = post_args if post_args is not None else (self.machine.post_processor_args or "")
         self.doc.recompute()
         return job
+
+    def create_sheet_job(self, vectors=None, thickness=18.0, margin=10.0, fixtures=("G54",)):
+        """Job « dessin 2D dans un panneau » : panneau sous le dessin (dessus à Z = 0), une face par
+        vecteur fermé, brut = panneau. ``vectors`` par défaut : tous les vecteurs du document."""
+        vectors = list(vectors) if vectors else sheetmod.vector_objects(self.doc)
+        if not vectors:
+            raise ValueError("aucun dessin 2D dans le projet (importer un SVG ou un DXF)")
+        sheet = sheetmod.make_sheet(self.doc, vectors, float(thickness), float(margin))
+        faces = sheetmod.make_faces(self.doc, vectors)
+        self.doc.recompute()
+        return self.create_job([sheet] + vectors + faces,
+                               stock={"kind": "box_margins", "xy": 0.0, "z_top": 0.0, "z_bottom": 0.0},
+                               fixtures=fixtures)
+
+    def drawing_clone(self, source, face=False):
+        """Clone du job d'un vecteur source (``face=True`` : clone de sa face générée)."""
+        name = source.Name + (sheetmod.FACE_SUFFIX if face else "")
+        target = self.doc.getObject(name)
+        if target is None:
+            raise ValueError("pas de %s pour %s" % ("face" if face else "vecteur", source.Label))
+        return opsmod.model_clone(self.job, target)
 
     def set_stock(self, spec):
         return stockmod.set_stock(self.job, spec)

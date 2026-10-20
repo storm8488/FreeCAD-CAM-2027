@@ -141,6 +141,39 @@ def run():
     log("toolbar found: %s, actions: %d" % (bool(tb), len(tb[0].actions()) if tb else 0))
     for name, _cls in commands.COMMANDS:
         log("command %s registered: %s" % (name, name in FreeCADGui.listCommands()))
+    # projet 2D : dessin SVG, panneau sous le dessin, découpe + poche 2D, capture de la vue
+    from tests.test_import import SVG
+    from cam2027.project import sheet as sheetmod
+    svg = os.path.join(tmp, "drawing.svg")
+    with open(svg, "w", encoding="utf-8") as fp:
+        fp.write(SVG)
+    proj2 = Project.create("GUI sheet", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj2.doc.Name)
+    proj2.import_model(svg)
+    vecs = sheetmod.vector_objects(proj2.doc)
+    proj2.create_sheet_job(thickness=12.0)
+    rect = [v for v in vecs if len(v.Shape.Edges) == 4][0]
+    circle = [v for v in vecs if len(v.Shape.Edges) == 1][0]
+    small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+    sasm = lib.assemblies_for_tool(small.id)[0]
+    proj2.add_operation("profile", "Cut out", asm.id, endmill.presets[0].id,
+                        base=[(proj2.drawing_clone(rect), ["Edge%d" % i for i in range(1, 5)])],
+                        params={"Side": "Outside", "StartDepth": 0.0, "FinalDepth": -12.0, "StepDown": 4.0})
+    proj2.add_operation("pocket2d", "Pocket circle", sasm.id, small.presets[0].id,
+                        base=[(proj2.drawing_clone(circle, face=True), ["Face1"])],
+                        params={"StartDepth": 0.0, "FinalDepth": -3.0, "StepDown": 1.5})
+    r2 = proj2.compute()
+    log("sheet project: %s" % [(r["name"], r["commands"], round(r["zmin"] or 0, 2)) for r in r2])
+    gdoc2 = FreeCADGui.getDocument(proj2.doc.Name)
+    view2 = gdoc2.activeView()
+    QtWidgets.QApplication.processEvents()
+    log("sheet view: %s, visible: %s" % (type(view2).__name__, [o.Name for o in proj2.doc.Objects
+                                          if o.ViewObject is not None and o.ViewObject.Visibility][:12]))
+    view2.viewIsometric()
+    view2.fitAll()
+    QtWidgets.QApplication.processEvents()
+    view2.saveImage(os.path.join(OUT, "view3d_sheet.png"), 1000, 700, "White")
+    log("screenshot view3d_sheet.png")
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)

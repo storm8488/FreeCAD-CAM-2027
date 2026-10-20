@@ -606,5 +606,13 @@
   "Long Edge": "Grand côté",
   "Short Edge": "Petit côté",
   "Vertex": "Sommet",
-  "total time": "temps total"
+  "total time": "temps total",
+
+  "_section_sheet": "ajouts",
+  "2D pocket (inside a drawing contour)": "Poche 2D (dans un contour du dessin)",
+  "Works on flat faces (the faces generated from closed drawing contours); depth set by the start / final depth, walls vertical.": "Travaille sur des faces planes (celles générées depuis les contours fermés du dessin) ; profondeur fixée par les profondeurs de départ et finale, parois verticales.",
+  "Sheet under the 2D drawing (top at Z 0)": "Panneau sous le dessin 2D (dessus à Z 0)",
+  "Sheet thickness (mm)": "Épaisseur du panneau (mm)",
+  "Sheet margin around the drawing (mm)": "Marge du panneau autour du dessin (mm)",
+  "The project already has a job: the sheet is only available for a new 2D project.": "Le projet a déjà un job : le panneau n'est disponible que pour un nouveau projet 2D."
 }
