@@ -899,6 +899,101 @@ class TestPipeline(unittest.TestCase):
                 self.assertGreaterEqual(dist, dome_r + tool_r + 0.5 - 0.05, p)
         proj.close()
 
+    def test_indexed_4th_axis(self):
+        """3+1 : poche du dessus à A0, poche du flanc +Y à A90 sur un barreau centré sur l'axe A."""
+        from cam2027.project.machine import RotaryAxis
+        from cam2027.project import indexing
+
+        step = os.path.join(self.tmp, "bar.step")
+        bar = Part.makeBox(80, 30, 30, FreeCAD.Vector(0, -15, -15))
+        bar = bar.cut(Part.makeBox(30, 10, 5, FreeCAD.Vector(25, -5, 10)))   # poche sur +Z, fond à Z 10
+        bar = bar.cut(Part.makeBox(30, 5, 10, FreeCAD.Vector(25, 10, -5)))   # poche sur +Y, fond à Y 10
+        bar.exportStep(step)
+        lib = starter_library()
+        proj = Project.create("4th test", lib, self._machine())
+        part = proj.import_model(step, label="Bar").objects[0]
+        proj.create_job([part], stock={"kind": "cylinder_x", "radius": 22.0, "length": 84.0, "x_start": -2.0,
+                                       "center": (0.0, 0.0)})
+        sb = proj.stock_bounds()
+        self.assertAlmostEqual(sb["ymin"], -22.0, places=3)
+        self.assertAlmostEqual(sb["zmax"], 22.0, places=3)
+        self.assertAlmostEqual(sb["xmin"], -2.0, places=3)
+        clone = proj.job.Model.Group[0]
+
+        def floor(axis, value):
+            for i, f in enumerate(clone.Shape.Faces, 1):
+                bb = f.BoundBox
+                lo, hi = {"y": (bb.YMin, bb.YMax), "z": (bb.ZMin, bb.ZMax)}[axis]
+                if f.Surface.__class__.__name__ == "Plane" and abs(lo - value) < 1e-6 and abs(hi - value) < 1e-6 \
+                        and abs(f.Area - 300.0) < 1e-3:
+                    return "Face%d" % i
+        top_floor, side_floor = floor("z", 10.0), floor("y", 10.0)
+        self.assertIsNotNone(top_floor)
+        self.assertIsNotNone(side_floor)
+        small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        asm = lib.assemblies_for_tool(small.id)[0]
+        pre = small.presets[0]
+        # sans axe A renseigné : refus explicite
+        with self.assertRaises(ValueError):
+            proj.add_operation("pocket", "x", asm.id, pre.id, base=[(clone, [side_floor])], index_deg=90)
+        machine = self._machine()
+        machine.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0),
+                                    positive_direction="right_hand", min_deg=-360.0, max_deg=360.0)
+        proj.set_machine(machine)
+        with self.assertRaises(ValueError):  # « toute la pièce » n'a pas de sens pour un index
+            proj.add_operation("pocket", "x", asm.id, pre.id, base=[(clone, [])], index_deg=90)
+        top, _r1 = proj.add_operation("pocket2d", "Top pocket", asm.id, pre.id, base=[(clone, [top_floor])],
+                                      params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=0)
+        side, rec2 = proj.add_operation("pocket2d", "Side pocket", asm.id, pre.id, base=[(clone, [side_floor])],
+                                        params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=90)
+        self.assertEqual(rec2["index_deg"], 90.0)
+        self.assertEqual(side.Base[0][0].Name, part.Name + "_A90")
+        self.assertNotIn(side.Base[0][0], proj.job.Model.Group)  # la copie tournée reste hors du modèle
+        names = [o.Label for o in proj.operations()]
+        self.assertEqual(names, ["Index A0", "Top pocket", "Index A90", "Side pocket"])
+        results = {r["name"]: r for r in proj.compute()}
+        for label in ("Top pocket", "Side pocket"):
+            r = results[label]
+            self.assertTrue(r["valid"] and r["commands"] > 10, r)
+            o = proj.doc.getObjectsByLabel(label)[0]
+            self.assertAlmostEqual(r["zmin"], 10.0, places=3,
+                                   msg="%s start %s final %s step %s" % (label, o.StartDepth, o.FinalDepth, o.StepDown))
+            # après rotation de +90° autour de X, la poche du flanc +Y occupe X 25..55, Y -5..5
+            self.assertGreaterEqual(r["bbox"]["X"][0], 25.0 - 1e-3)
+            self.assertLessEqual(r["bbox"]["X"][1], 55.0 + 1e-3)
+            self.assertGreaterEqual(r["bbox"]["Y"][0], -5.0 - 1e-3)
+            self.assertLessEqual(r["bbox"]["Y"][1], 5.0 + 1e-3)
+        text, analysis, issues = proj.preview_gcode()
+        lines = [l.strip() for l in text.splitlines()]
+        a_moves = [l for l in lines if l.startswith("G0") and " A" in l]
+        self.assertEqual([l.split("A")[-1] for l in a_moves], ["0.000", "90.000"])
+        self.assertLess(lines.index(a_moves[1]), lines.index("(Begin operation: Side pocket)"))
+        self.assertEqual(analysis["a_feed_lines"], 0)
+        self.assertEqual(analysis["bbox"]["A"], (0.0, 90.0))
+        levels = [lvl for lvl, _m in issues]
+        self.assertNotIn("error", levels, issues)
+        self.assertTrue(any("GRBL 1.1 has no A axis" in m for _l, m in issues))
+        # même géométrie que la pièce : réordonner recrée les positionnements
+        proj.move_operation(side, -1)
+        self.assertEqual([o.Label for o in proj.operations()], ["Index A90", "Side pocket", "Index A0", "Top pocket"])
+        # positionnement manquant -> erreur de cohérence
+        proj.job.Operations.Group = [o for o in proj.job.Operations.Group if o.Label != "Index A90"]
+        self.assertTrue(any("expects A90" in m for _l, m in indexing.order_issues(proj)))
+        indexing.sync(proj)
+        self.assertEqual(indexing.order_issues(proj), [])
+        # plage A dépassée
+        machine.rotary.max_deg = 45.0
+        proj.set_machine(machine)
+        with self.assertRaises(ValueError):
+            proj.add_operation("pocket", "x", asm.id, pre.id, base=[(clone, [side_floor])], index_deg=90)
+        _t, _a, issues2 = proj.preview_gcode()
+        self.assertTrue(any(l == "error" and "outside the A range" in m for l, m in issues2), issues2)
+        # A pendant une coupe = 4 axes simultanés : refusé
+        a2 = exportmod.analyze_gcode("G21 G54\nG0 X0 Y0 Z5 A0\nG1 X10 A15 F500\n")
+        self.assertEqual(a2["a_feed_lines"], 1)
+        self.assertTrue(any("simultaneous" in m for _l, m in exportmod.verify(a2, machine)))
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

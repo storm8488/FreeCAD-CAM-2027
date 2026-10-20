@@ -24,6 +24,7 @@ from ..tools import bridge
 from . import docobjects, importers, stock as stockmod, operations as opsmod, export as exportmod
 from . import dressups as dressupmod
 from . import sheet as sheetmod
+from . import indexing
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -183,9 +184,10 @@ class Project(object):
 
     # -- opérations -----------------------------------------------------------
 
-    def add_operation(self, kind, name, assembly_id, preset_id, base=None, params=None):
+    def add_operation(self, kind, name, assembly_id, preset_id, base=None, params=None, index_deg=None):
         """Crée une opération avec un ToolController dédié issu de (assemblage, préréglage).
 
+        ``index_deg`` : angle A de l'index (4e axe 3+1) ; ``None`` = projet 3 axes / A0 implicite.
         Retourne ``(op, record)`` où ``record`` contient les valeurs copiées et
         les avertissements (approximations de forme, paramètres ignorés).
         """
@@ -195,6 +197,12 @@ class Project(object):
         values = preset.resolve(tool)
         params = opsmod.resolve_params(kind, tool, params)
         base = sheetmod.expand_drawing_base(self.doc, kind, base)
+        if index_deg is not None:
+            index_deg = float(index_deg)
+            indexing.check_machine(self.machine)
+            indexing.check_angle(self.machine, index_deg)
+            if abs(index_deg) > 1e-9:
+                base = indexing.index_base(self, kind, base, index_deg, tool.geometry.diameter)
         toolbit, bit_warnings = bridge.create_toolbit(self.doc, tool, label="%s (T%d)" % (tool.name, asm.output.tool_number))
         tc, _ = bridge.create_tool_controller(self.doc, asm, tool, values, toolbit=toolbit, label="TC: %s" % name)
         job.Proxy.addToolController(tc)
@@ -215,16 +223,45 @@ class Project(object):
             "params": _jsonable(params),
             "ignored_params": ignored,
             "warnings": bit_warnings,
+            "index_deg": index_deg,
         }
         reg[op.Name] = record
         self._save_registry(reg)
+        if index_deg is not None or self.index_angles():
+            indexing.sync(self)
+            self._renumber()
         return op, record
+
+    def index_angles(self):
+        """Angles A utilisés par les opérations (triés)."""
+        return sorted({rec["index_deg"] for rec in self.registry.values() if rec.get("index_deg") is not None})
+
+    def set_operation_index(self, op, index_deg):
+        """Change l'angle d'index d'une opération existante dont la géométrie est sélectionnée."""
+        op = dressupmod.base_operation(op)
+        reg = self.registry
+        rec = reg[op.Name]
+        if index_deg is not None:
+            index_deg = float(index_deg)
+            indexing.check_machine(self.machine)
+            indexing.check_angle(self.machine, index_deg)
+        base = [(indexing.source_of_rotated(self.doc, o), list(subs)) for o, subs in (op.Base or [])]
+        tool = self.library.tool(rec["tool_id"])
+        if index_deg is not None and abs(index_deg) > 1e-9:
+            base = indexing.index_base(self, rec["kind"], base, index_deg, tool.geometry.diameter)
+        self.set_operation_base(op, base)
+        rec["index_deg"] = index_deg
+        self._save_registry(reg)
+        indexing.sync(self)
+        self._renumber()
 
     def operations(self):
         return list(self.job.Operations.Group)
 
     def operation_state(self, obj):
         """État de calcul normalisé de l'objet du groupe Operations (voir ``operations.compute_state``)."""
+        if indexing.is_index_op(obj):
+            return "computed" if obj.Path.Commands and "Touched" not in (obj.State or []) else "todo"
         base = dressupmod.base_operation(obj)
         return opsmod.compute_state(obj, base, self.registry.get(base.Name))
 
@@ -300,12 +337,13 @@ class Project(object):
 
     def move_operation(self, op, delta):
         """Déplace l'opération de ``delta`` rangs dans l'ordre d'usinage ; retourne son nouvel indice."""
-        group = list(self.job.Operations.Group)
+        group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]  # positionnements A recréés
         i = group.index(op)
         j = max(0, min(len(group) - 1, i + delta))
         if j != i:
             group.insert(j, group.pop(i))
             self.job.Operations.Group = group
+            indexing.sync(self)
             self._renumber()
         return j
 
@@ -321,16 +359,28 @@ class Project(object):
         new, record = self.add_operation(rec["kind"], op.Label + " (copy)", rec["assembly_id"], rec["preset_id"],
                                          base=[(obj, list(subs)) for obj, subs in (op.Base or [])], params=params)
         new.Active = op.Active
-        group = list(self.job.Operations.Group)
+        if rec.get("index_deg") is not None:  # la géométrie copiée est déjà celle de l'index
+            reg = self.registry
+            reg[new.Name]["index_deg"] = rec["index_deg"]
+            self._save_registry(reg)
+            record = reg[new.Name]
+        group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
         group.remove(new)
         group.insert(group.index(top) + 1, new)
         self.job.Operations.Group = group
+        indexing.sync(self)
         self._renumber()
         return new, record
 
     def remove_operation(self, op):
         """Supprime l'opération (et ses habillages), son ToolController et son ToolBit, et l'entrée de registre."""
         op = dressupmod.base_operation(op)
+        if indexing.is_index_op(op):
+            raise ValueError("les positionnements A sont gérés automatiquement : supprimer ou réindexer les opérations")
+        self.job.Operations.Group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
+        for idx in [o for o in self.doc.Objects if indexing.is_index_op(o)]:
+            idx.Label = "CAM2027IndexRemoved"
+            self.doc.removeObject(idx.Name)  # libère les contrôleurs d'outil référencés
         for d in self.dressups(op):
             dressupmod.remove_dressup(self.job, d)
         reg = self.registry
@@ -346,6 +396,7 @@ class Project(object):
             if bit_name and self.doc.getObject(bit_name) is not None:
                 self.doc.removeObject(bit_name)
         self._save_registry(reg)
+        indexing.sync(self)
         self._renumber()
 
     def _renumber(self):
@@ -415,7 +466,7 @@ class Project(object):
         sections = exportmod.postprocess(job, post_processor, post_args)
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
-        issues = exportmod.verify(analysis, self.machine, self.stock_bounds())
+        issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self)
         if any(level == "error" for level, _m in issues):
             raise ExportBlocked(issues, sections, analysis)
         written = exportmod.write_gcode(sections, path)
@@ -436,10 +487,12 @@ class Project(object):
         }
 
     def preview_gcode(self, post_processor=None, post_args=None):
+        self.doc.recompute()  # jamais d'aperçu construit sur des parcours périmés
         sections = exportmod.postprocess(self.job, post_processor, post_args)
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
-        issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None)
+        issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None) \
+            + indexing.order_issues(self)
         return text, analysis, issues
 
     # -- sauvegarde -----------------------------------------------------------

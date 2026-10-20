@@ -50,6 +50,12 @@ def set_stock(job, spec):
             origin = spec.get("origin")
             placement = FreeCAD.Placement(FreeCAD.Vector(*origin), FreeCAD.Rotation()) if origin else None
             stock = PathStock.CreateBox(job, extent, placement)
+        elif kind == "cylinder_x":
+            # brut rond pour le 4e axe : cylindre d'axe X, centré sur l'axe A (center = [y, z])
+            cy, cz = spec.get("center", (0.0, 0.0))
+            placement = FreeCAD.Placement(FreeCAD.Vector(float(spec.get("x_start", 0.0)), float(cy), float(cz)),
+                                          FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), 90))  # Z du cylindre -> +X
+            stock = PathStock.CreateCylinder(job, float(spec["radius"]), float(spec["length"]), placement)
         elif kind == "cylinder":
             origin = spec.get("origin")
             placement = FreeCAD.Placement(FreeCAD.Vector(*origin), FreeCAD.Rotation()) if origin else None

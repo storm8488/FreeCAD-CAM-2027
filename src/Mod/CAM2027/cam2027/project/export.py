@@ -85,13 +85,28 @@ def analyze_gcode(text):
     tool_changes = 0
     max_feed = 0.0
     spindle = set()
+    motion = None  # mode de déplacement modal (G0 / G1 / G2 / G3)
+    a_feed_lines = 0  # lignes où A change pendant un mouvement de coupe (4 axes simultanés)
+    a_positions = []  # valeurs successives de A (positionnements)
     for raw in text.splitlines():
         line = raw.split(";")[0]
         line = re.sub(r"\(.*?\)", "", line).strip()
         if not line:
             continue
         lines += 1
-        for letter, number in _WORD.findall(line):
+        words = _WORD.findall(line)
+        for letter, number in words:
+            if letter.upper() == "G":
+                g = str(int(float(number))) if float(number).is_integer() else number
+                if g in ("0", "1", "2", "3"):
+                    motion = "G" + g
+        if any(letter.upper() == "A" for letter, _n in words):
+            a_value = [float(n) for letter, n in words if letter.upper() == "A"][-1]
+            if motion in ("G1", "G2", "G3"):
+                a_feed_lines += 1
+            else:
+                a_positions.append(a_value)
+        for letter, number in words:
             letter = letter.upper()
             if letter in ("G", "M"):
                 code = letter + (number.rstrip("0").rstrip(".") if "." in number else str(int(float(number))))
@@ -123,6 +138,8 @@ def analyze_gcode(text):
         "tool_changes": tool_changes,
         "max_feed": max_feed,
         "spindle_speeds": sorted(spindle),
+        "a_feed_lines": a_feed_lines,
+        "a_positions": a_positions,
     }
 
 
@@ -147,6 +164,8 @@ def verify(analysis, machine, stock_bounds=None):
         issues.append(("error", "rotary axis words %s present but the machine has no rotary axis" % ", ".join(rot)))
     if "B" in rot or "C" in rot:
         issues.append(("error", "B/C words present: only A (about X) is supported"))
+    if "A" in rot and machine.rotary.present:
+        issues.extend(_verify_rotary(analysis, machine))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):
         travel = getattr(machine, attr)
         span = analysis["bbox"].get(axis)
@@ -176,6 +195,28 @@ def verify(analysis, machine, stock_bounds=None):
             issues.append(("warning", "Z goes %.2f mm below the stock bottom" % (stock_bounds["zmin"] - z[0])))
     if not analysis["fixtures"]:
         issues.append(("warning", "no work coordinate system (G54...) in the output"))
+    return issues
+
+
+def _verify_rotary(analysis, machine):
+    """Contrôles 4e axe indexé (3+1) : A positionné en rapide seulement, plage, firmware."""
+    rot = machine.rotary
+    issues = []
+    if rot.about != "X":
+        issues.append(("error", "rotary axis declared about %s: only A about X is supported" % rot.about))
+    if analysis.get("a_feed_lines"):
+        issues.append(("error", "A changes during %d cutting move(s): simultaneous 4-axis motion is not supported "
+                                "(indexed 3+1 only)" % analysis["a_feed_lines"]))
+    lo, hi = analysis["bbox"].get("A", (None, None))
+    if rot.min_deg is None or rot.max_deg is None:
+        issues.append(("unverifiable", "A range unknown: A%.3f..A%.3f not checked" % (lo, hi)))
+    elif lo < rot.min_deg - 1e-6 or hi > rot.max_deg + 1e-6:
+        issues.append(("error", "A%.3f..A%.3f outside the A range %.3f..%.3f deg" % (lo, hi, rot.min_deg, rot.max_deg)))
+    if machine.controller == "grbl":
+        issues.append(("warning", "standard GRBL 1.1 has no A axis: a 4-axis firmware (grblHAL, GRBL 4-axis fork) is "
+                                  "required"))
+    if rot.positive_direction is None:
+        issues.append(("unverifiable", "A positive direction not set in the machine profile"))
     return issues
 
 
