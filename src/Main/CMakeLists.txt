@@ -2,7 +2,9 @@
 
 configure_file(freecad.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecad.rc)
 configure_file(freecadCmd.rc.cmake ${CMAKE_CURRENT_BINARY_DIR}/freecadCmd.rc)
-file(COPY icon.ico DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# CAM2027 : icône des exécutables remplaçable (défaut : icône de FreeCAD, comportement amont inchangé)
+set(FREECAD_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icon.ico" CACHE FILEPATH "Icon compiled into the executables")
+configure_file(${FREECAD_APP_ICON} ${CMAKE_CURRENT_BINARY_DIR}/icon.ico COPYONLY)
 
 ######################## FreeCADMain ########################
 if(BUILD_GUI)
