@@ -406,6 +406,29 @@ def _format_checks(analysis, issues):
     return "\n".join(lines)
 
 
+class Simulate(_Base):
+    icon = "cam2027-simulate.svg"
+    text = "Simulate"
+    tooltip = "Simulate material removal with the FreeCAD CAM simulator"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job or not proj.operations():
+            _warn(tr("No operation to simulate."))
+            return
+        commands = FreeCADGui.listCommands()
+        name = next((c for c in ("CAM_SimulatorGL", "CAM_Simulator") if c in commands), None)
+        if name is None:
+            _warn(tr("No simulator command is available in this FreeCAD (expected CAM_SimulatorGL or CAM_Simulator)."))
+            return
+        proj.doc.recompute()
+        FreeCADGui.Selection.clearSelection()
+        FreeCADGui.Selection.addSelection(proj.job)
+        FreeCADGui.runCommand(name)
+
+
 class Machine(_Base):
     icon = "cam2027-machine.svg"
     text = "Machine profile"
@@ -491,6 +514,7 @@ COMMANDS = [
     ("CAM2027_AddOperation", AddOperation),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
+    ("CAM2027_Simulate", Simulate),
     ("CAM2027_Machine", Machine),
     ("CAM2027_About", About),
 ]

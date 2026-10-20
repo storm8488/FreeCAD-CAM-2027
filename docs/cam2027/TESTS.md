@@ -28,11 +28,14 @@ de tests choisit la 1.1.4 si elle est installée ; `FREECAD_BIN` force une versi
 
 Active l'atelier, déroule la chaîne par l'API, ouvre les panneaux, capture
 `tests/screenshots/*.png` et `gui_smoke.txt` (doit finir par `OK`), puis quitte.
-Dernier résultat (2026-10-20, sur 1.1.4 puis 1.0.2) : atelier activé, 9 commandes
-enregistrées, barre d'outils présente, interface en français, panneaux bibliothèque (3
-onglets, aperçu coté) et projet rendus, parcours visible dans la vue 3D, G-code
-prévisualisé (42 lignes, 5 contrôles « non vérifiable »), projet sauvegardé, FreeCAD
-fermé sans erreur.
+Dernier résultat (2026-10-20, sur 1.1.4 avec un profil de lanceur temporaire, `CAM2027_HOME`
+défini) : atelier activé, profil « FAO seule » appliqué (thème sombre, 20 ateliers masqués),
+10 commandes enregistrées, barre d'outils présente, interface en français, panneaux
+bibliothèque (3 onglets, aperçu coté) et flux de travail rendus (4 étapes, liste des
+opérations, duplication et déplacement d'une opération), éditeur d'opération ouvert
+(5 onglets, passe axiale appliquée et relue sur l'objet), parcours visible dans la vue 3D,
+G-code prévisualisé, projet sauvegardé, FreeCAD fermé sans erreur. 1.0.2 : dernier passage
+avant le panneau de flux de travail et l'éditeur (à refaire).
 
 ## Non couvert
 

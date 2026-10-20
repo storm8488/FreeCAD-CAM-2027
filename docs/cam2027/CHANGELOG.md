@@ -14,6 +14,12 @@
 - Projet : `update_operation`, `set_operation_base`, `set_operation_active`,
   `move_operation`, `duplicate_operation`, `remove_operation` (tests `test_operation_edits`,
   `test_param_specs` ; 32 tests).
+- Panneau projet remplacé par un **panneau de flux de travail** : étapes Pièce → Brut et
+  montage → Opérations → Contrôle et export avec statut et bouton, liste des opérations
+  (case Actif, stratégie, outil, commandes, Z, temps ; Modifier / Monter / Descendre /
+  Dupliquer / Supprimer), recalcul et simulation.
+- Commande « Simuler » : lance le simulateur FreeCAD (`CAM_SimulatorGL`, sinon
+  `CAM_Simulator`) sur le job du projet.
 
 ## 0.1.3 — 2026-10-20
 

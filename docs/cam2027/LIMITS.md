@@ -86,7 +86,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   contrôleurs « non vérifiable »), mots A/B/C vs axe rotatif déclaré, enveloppe XYZ vs
   courses, avance max, plage broche, Z sous le brut, présence d'un repère. Toute donnée
   machine inconnue produit « non vérifiable », jamais un « OK ».
-- Pas de simulation d'enlèvement de matière, pas de contrôle de collision outil /
+- Simulation = le simulateur CAM de FreeCAD lancé sur le job (commande « Simuler »,
+  `CAM_SimulatorGL` en 1.1, repli `CAM_Simulator`) ; son panneau est celui de FreeCAD
+  (en anglais ou dans la langue de FreeCAD), vérifié seulement par l'enregistrement de la
+  commande (gui_smoke), pas visuellement. Pas de contrôle de collision outil /
   porte-outil / brides, pas de cinématique.
 - Fiche de préparation en Markdown (pas de PDF).
 

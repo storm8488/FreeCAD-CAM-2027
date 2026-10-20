@@ -84,7 +84,16 @@ def run():
     grab(lib_panel, "tool_assembly.png")
     panels.refresh_project_panel()
     QtWidgets.QApplication.processEvents()
-    grab(panels._docks["Project"].widget(), "project_panel.png")
+    project_panel = panels._docks["Project"].widget()
+    log("workflow rows: %d operations listed, steps: %s" % (
+        project_panel.tree.topLevelItemCount(),
+        [project_panel.step_rows[k][1].text()[:40] for k in ("model", "stock", "ops", "export")]))
+    project_panel.tree.setCurrentItem(project_panel.tree.topLevelItem(0))
+    project_panel.duplicate_selected()
+    log("after duplicate: %d operations" % len(proj.operations()))
+    project_panel.move_selected(-1)
+    log("after move up: %s" % [o.Label for o in proj.operations()])
+    grab(project_panel, "project_panel.png")
     # éditeur d'opération (non modal) : onglets générés, lecture des valeurs, application
     from cam2027.gui import opeditor
     op = proj.operations()[0]

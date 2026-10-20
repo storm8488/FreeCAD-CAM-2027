@@ -46,14 +46,18 @@ src/Mod/CAM2027/
       docobjects.py            objet CAM2027Project (instantané, machine, registre)
       importers.py             STEP/STL/OBJ/SVG/DXF
       stock.py                 brut (Path.Main.Stock), repères G54.., brides visuelles
-      operations.py            stratégies FreeCAD exposées + limites, résumé de parcours
+      operations.py            stratégies FreeCAD exposées + limites, résumé de parcours,
+                               lecture/écriture typée des propriétés, tables de filets
+      paramspec.py             libellés / onglets / aides des paramètres d'opération
       export.py                postprocesseur, analyse G-code, contrôles, fiche
       project.py               Project : create/open, import, job, opérations, export, save
     gui/
       qt.py, state.py          PySide2/6, bibliothèque et projet actifs
       preview.py               aperçu 2D coté de l'assemblage
-      panels.py                panneau bibliothèque (3 onglets) + panneau projet
-      commands.py              9 commandes (barre d'outils / menu)
+      panels.py                panneau bibliothèque (3 onglets) + panneau de flux de travail
+      opeditor.py              éditeur d'opération à onglets (généré depuis paramspec + objet)
+      prefs.py                 profil « FAO seule » du lanceur (thème, ateliers masqués)
+      commands.py              10 commandes (barre d'outils / menu), dont Simuler
     i18n/fr.json
   tests/                       unittest exécutés par FreeCADCmd ; gui_smoke.py pour FreeCAD.exe
 ```

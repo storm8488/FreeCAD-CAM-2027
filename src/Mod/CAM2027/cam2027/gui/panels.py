@@ -805,94 +805,256 @@ class ToolLibraryPanel(QtWidgets.QWidget):
 
 
 class ProjectPanel(QtWidgets.QWidget):
-    """Arbre lisible du projet actif : modèle, brut, outils, opérations, résumé des parcours."""
+    """Panneau de flux de travail : étapes Pièce → Brut & montage → Opérations → Contrôle & export,
+    liste des opérations (actif, ordre, dupliquer, supprimer, modifier) et données machine manquantes."""
+
+    STEPS = (
+        ("model", "1. Part", "Import model / drawing", "CAM2027_ImportModel"),
+        ("stock", "2. Stock & fixture", "Stock & fixture", "CAM2027_StockFixture"),
+        ("ops", "3. Operations", "Add operation", "CAM2027_AddOperation"),
+        ("export", "4. Check & export", "Export G-code", "CAM2027_Export"),
+    )
 
     def __init__(self, parent=None):
         super(ProjectPanel, self).__init__(parent)
         lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setContentsMargins(6, 6, 6, 6)
         self.title = QtWidgets.QLabel()
+        self.title.setWordWrap(True)
         lay.addWidget(self.title)
+        self.step_rows = {}
+        steps = QtWidgets.QGridLayout()
+        steps.setColumnStretch(1, 1)
+        for i, (key, label, button, command) in enumerate(self.STEPS):
+            status = QtWidgets.QLabel()
+            status.setFixedWidth(22)
+            status.setAlignment(QtCore.Qt.AlignCenter)
+            text = QtWidgets.QLabel()
+            text.setWordWrap(True)
+            btn = QtWidgets.QPushButton(tr(button))
+            btn.clicked.connect(lambda _c=False, cmd=command: FreeCADGui.runCommand(cmd))
+            steps.addWidget(status, i, 0)
+            steps.addWidget(text, i, 1)
+            steps.addWidget(btn, i, 2)
+            self.step_rows[key] = (status, text, btn, label)
+        lay.addLayout(steps)
+
         self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels([tr("Item"), tr("Details")])
+        self.tree.setHeaderLabels([tr("Operation"), tr("Strategy"), tr("Tool"), tr("Commands"), tr("Z"), tr("Time")])
+        self.tree.setRootIsDecorated(False)
+        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
-        lay.addWidget(self.tree)
+        self.tree.itemChanged.connect(self.on_item_changed)
+        self.tree.itemSelectionChanged.connect(self._select_in_3d)
+        lay.addWidget(self.tree, 1)
+        row = QtWidgets.QHBoxLayout()
+        self.buttons = {}
+        for key, label, slot in (
+            ("edit", "Edit", self.edit_selected),
+            ("up", "Up", lambda: self.move_selected(-1)),
+            ("down", "Down", lambda: self.move_selected(1)),
+            ("dup", "Duplicate", self.duplicate_selected),
+            ("del", "Delete", self.delete_selected),
+        ):
+            b = QtWidgets.QPushButton(tr(label))
+            b.clicked.connect(slot)
+            row.addWidget(b)
+            self.buttons[key] = b
+        lay.addLayout(row)
+        row2 = QtWidgets.QHBoxLayout()
+        recompute = QtWidgets.QPushButton(tr("Recompute toolpaths"))
+        recompute.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Compute"))
+        row2.addWidget(recompute)
+        simulate = QtWidgets.QPushButton(tr("Simulate"))
+        simulate.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Simulate"))
+        row2.addWidget(simulate)
+        lay.addLayout(row2)
         self.steps = QtWidgets.QLabel()
         self.steps.setWordWrap(True)
+        self.steps.setStyleSheet("color: #e0b050;")
         lay.addWidget(self.steps)
-        refresh = QtWidgets.QPushButton(tr("Refresh"))
-        refresh.clicked.connect(self.refresh)
-        lay.addWidget(refresh)
+        self._updating = False
         self.refresh()
 
+    # -- affichage -------------------------------------------------------------
+
+    def _set_step(self, key, done, detail=""):
+        status, text, btn, label = self.step_rows[key]
+        status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % ("#5ec8a0" if done else "#9aa7b8", "✔" if done else "○"))
+        text.setText("<b>%s</b>%s" % (tr(label), (" <span style='color:#9aa7b8'>%s</span>" % detail) if detail else ""))
+
     def refresh(self):
+        self._updating = True
+        try:
+            self._refresh()
+        finally:
+            self._updating = False
+
+    def _refresh(self):
         self.tree.clear()
         proj = state.active_project()
+        has_project = proj is not None
+        for key in self.step_rows:
+            self.step_rows[key][2].setEnabled(has_project)
+        for b in self.buttons.values():
+            b.setEnabled(has_project)
         if proj is None:
-            self.title.setText(tr("No CAM2027 project in the active document."))
-            self.steps.setText(tr("Workflow: Project > Model > Stock & fixture > Operations > Export"))
+            self.title.setText("<b>%s</b><br>%s" % (tr("No CAM2027 project in the active document."),
+                                                     tr("Workflow: Project > Model > Stock & fixture > Operations > Export")))
+            for key in self.step_rows:
+                self._set_step(key, False)
+            self.steps.setText("")
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
-        from ..project.operations import toolpath_summary
+        from ..project.operations import toolpath_summary, STRATEGIES
 
-        models = QtWidgets.QTreeWidgetItem([tr("Model"), ""])
         if proj.has_job:
-            for m in proj.job.Model.Group:
-                QtWidgets.QTreeWidgetItem(models, [m.Label, tr("solid") if getattr(m, "Shape", None) and m.Shape.Solids else ""])
+            models = [m.Label for m in proj.job.Model.Group]
         else:
-            for o in proj.doc.Objects:
-                if getattr(o, "Shape", None) and o.Shape.Solids and o.Name != "Stock":
-                    QtWidgets.QTreeWidgetItem(models, [o.Label, tr("not in a job yet")])
-        self.tree.addTopLevelItem(models)
+            models = [o.Label for o in proj.doc.Objects
+                      if getattr(o, "Shape", None) and o.Shape.Solids and o.Name != "Stock"]
+        self._set_step("model", bool(models), ", ".join(models) if models else tr("import STEP, STL, SVG or DXF"))
         if proj.has_job:
             sb = proj.stock_bounds()
-            stock = QtWidgets.QTreeWidgetItem([tr("Stock & fixture"), "%.1f x %.1f x %.1f mm, %s" % (
-                sb["length"], sb["width"], sb["height"], " ".join(proj.job.Fixtures))])
             from ..project.stock import clamps
 
-            for c in clamps(proj.doc):
-                QtWidgets.QTreeWidgetItem(stock, [c.Label, tr("clamp (visual only)")])
-            self.tree.addTopLevelItem(stock)
-            tools = QtWidgets.QTreeWidgetItem([tr("Tools"), ""])
-            for tc in proj.job.Tools.Group:
+            n_clamps = len(clamps(proj.doc))
+            self._set_step("stock", True, "%.1f x %.1f x %.1f mm, %s%s" % (
+                sb["length"], sb["width"], sb["height"], " ".join(proj.job.Fixtures),
+                (", %d %s" % (n_clamps, tr("clamps"))) if n_clamps else ""))
+        else:
+            self._set_step("stock", False, tr("creates the job"))
+        ops = proj.operations() if proj.has_job else []
+        reg = proj.registry if proj.has_job else {}
+        bad = 0
+        for op in ops:
+            s = toolpath_summary(op)
+            rec = reg.get(op.Name, {})
+            kind = rec.get("kind", "?")
+            tc = getattr(op, "ToolController", None)
+            tool_text = ""
+            if tc is not None:
                 v = bridge.tool_controller_values(tc)
-                QtWidgets.QTreeWidgetItem(tools, [tc.Label, "T%d D%.3g F%.0f S%.0f" % (
-                    v["tool_number"], v["diameter_mm"] or 0, v["feed_mm_min"], v["spindle_rpm"])])
-            self.tree.addTopLevelItem(tools)
-            ops = QtWidgets.QTreeWidgetItem([tr("Operations"), ""])
-            reg = proj.registry
-            for op in proj.operations():
-                s = toolpath_summary(op)
-                rec = reg.get(op.Name, {})
-                detail = "%s - %d cmds, %.0f mm, Z %.2f..%.2f%s" % (
-                    rec.get("kind", "?"), s["commands"], s["length_mm"], s["zmin"] or 0, s["zmax"] or 0,
-                    "" if op.isValid() else " - " + tr("INVALID"))
-                item = QtWidgets.QTreeWidgetItem(ops, [op.Label, detail])
-                item.setData(0, QtCore.Qt.UserRole, op.Name)
-                for w in rec.get("warnings", []):
-                    QtWidgets.QTreeWidgetItem(item, [tr("warning"), w])
-                if rec.get("ignored_params"):
-                    QtWidgets.QTreeWidgetItem(item, [tr("ignored parameters"), ", ".join(rec["ignored_params"])])
-            self.tree.addTopLevelItem(ops)
-            out = QtWidgets.QTreeWidgetItem([tr("Export"), "%s %s -> %s" % (
-                proj.job.PostProcessor, proj.job.PostProcessorArgs, proj.job.PostProcessorOutputFile or tr("(not exported)"))])
-            self.tree.addTopLevelItem(out)
-        self.tree.expandAll()
-        self.tree.resizeColumnToContents(0)
+                tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
+            valid = op.isValid() and (s["commands"] > 0 or not op.Active)
+            if not valid:
+                bad += 1
+            item = QtWidgets.QTreeWidgetItem([
+                op.Label, tr(STRATEGIES.get(kind, {}).get("label", kind)), tool_text,
+                str(s["commands"]) if op.Active else tr("(inactive)"),
+                "%.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0) if s["commands"] else "",
+                str(s["cycle_time"] or ""),
+            ])
+            item.setData(0, QtCore.Qt.UserRole, op.Name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(0, QtCore.Qt.Checked if op.Active else QtCore.Qt.Unchecked)
+            tips = list(rec.get("warnings", []))
+            if rec.get("ignored_params"):
+                tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
+            if not valid:
+                tips.append(tr("INVALID"))
+                for col in range(item.columnCount()):
+                    item.setForeground(col, QtGui.QBrush(QtGui.QColor("#e06060")))
+            if tips:
+                item.setToolTip(0, "\n".join(tips))
+            self.tree.addTopLevelItem(item)
+        for col in range(self.tree.columnCount()):
+            self.tree.resizeColumnToContents(col)
+        if ops:
+            detail = "%d %s" % (len(ops), tr("operations")) + ((", %d %s" % (bad, tr("invalid"))) if bad else "")
+            self._set_step("ops", bad == 0, detail)
+        else:
+            self._set_step("ops", False, tr("select geometry, then add an operation"))
+        if proj.has_job and proj.job.PostProcessorOutputFile:
+            self._set_step("export", True, proj.job.PostProcessorOutputFile)
+        else:
+            self._set_step("export", False, (proj.job.PostProcessor if proj.has_job else "") or "")
         missing = proj.machine.unknown_fields()
         self.steps.setText(tr("Machine data to fill in: {fields}", fields=", ".join(missing)) if missing else "")
 
-    def on_double_click(self, item, _col):
-        name = item.data(0, QtCore.Qt.UserRole)
-        if name and FreeCAD.ActiveDocument:
-            op = FreeCAD.ActiveDocument.getObject(name)
+    # -- actions ---------------------------------------------------------------
+
+    def _selected(self):
+        proj = state.active_project()
+        items = self.tree.selectedItems()
+        if proj is None or not items:
+            return None, None
+        op = proj.doc.getObject(items[0].data(0, QtCore.Qt.UserRole))
+        return proj, op
+
+    def _select_in_3d(self):
+        proj, op = self._selected()
+        if op is not None:
             FreeCADGui.Selection.clearSelection()
             FreeCADGui.Selection.addSelection(op)
-            proj = state.active_project()
-            if proj is not None and name in proj.registry:
-                from . import opeditor
 
-                opeditor.open_editor(proj, op)
+    def _reselect(self, name):
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            if item.data(0, QtCore.Qt.UserRole) == name:
+                self.tree.setCurrentItem(item)
+                return
+
+    def on_double_click(self, item, _col):
+        self.edit_selected()
+
+    def on_item_changed(self, item, col):
+        if self._updating or col != 0:
+            return
+        proj = state.active_project()
+        if proj is None:
+            return
+        op = proj.doc.getObject(item.data(0, QtCore.Qt.UserRole))
+        if op is None:
+            return
+        proj.set_operation_active(op, item.checkState(0) == QtCore.Qt.Checked)
+        proj.compute()
+        self.refresh()
+        self._reselect(op.Name)
+
+    def edit_selected(self):
+        proj, op = self._selected()
+        if op is None:
+            return
+        from . import opeditor
+
+        opeditor.open_editor(proj, op)
+
+    def move_selected(self, delta):
+        proj, op = self._selected()
+        if op is None:
+            return
+        proj.move_operation(op, delta)
+        proj.compute()
+        self.refresh()
+        self._reselect(op.Name)
+
+    def duplicate_selected(self):
+        proj, op = self._selected()
+        if op is None:
+            return
+        try:
+            new, _rec = proj.duplicate_operation(op)
+            proj.compute()
+        except Exception as exc:
+            _warn(str(exc))
+            return
+        self.refresh()
+        self._reselect(new.Name)
+
+    def delete_selected(self):
+        proj, op = self._selected()
+        if op is None:
+            return
+        if QtWidgets.QMessageBox.question(self, "CAM2027", tr("Delete the operation '{name}'?", name=op.Label)) \
+                != QtWidgets.QMessageBox.Yes:
+            return
+        try:
+            proj.remove_operation(op)
+            proj.compute()
+        except Exception as exc:
+            _warn(str(exc))
+        self.refresh()
 
 
 _docks = {}
