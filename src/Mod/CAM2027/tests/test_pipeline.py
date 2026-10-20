@@ -496,6 +496,66 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(proj.compute()[0]["commands"], base_cmds)
         proj.close()
 
+    def test_drilling_all_holes(self):
+        """Perçage sans géométrie sélectionnée : FreeCAD détecte les trous plus grands que le foret."""
+        proj, lib, clone = self._project_with_job("Drill test")
+        drill = lib.search("3 mm drill")[0]
+        asm = lib.assemblies_for_tool(drill.id)[0]
+        op, rec = proj.add_operation("drilling", "Drill all", asm.id, drill.presets[0].id, base=[(clone, [])],
+                                     params={"PeckEnabled": True, "PeckDepth": 2.0})
+        self.assertEqual(rec["ignored_params"], [])
+        self.assertEqual(len(op.Base), 1)
+        self.assertEqual(list(op.Base[0][1]), [hole_face(clone)])
+        r = proj.compute()[0]
+        self.assertTrue(r["valid"], r)
+        self.assertGreaterEqual(r["commands"], 5, r)  # cycle G83 : une ligne par trou
+        self.assertIn("G83", r["gcodes"])
+        self.assertAlmostEqual(r["zmin"], 0.0, places=3)
+        bb = r["bbox"]
+        self.assertAlmostEqual(bb["X"][0], HOLE_CENTER[0], places=3)
+        self.assertAlmostEqual(bb["Y"][0], HOLE_CENTER[1], places=3)
+        # géométrie explicite vide pour une autre stratégie : tout le modèle
+        endmill = lib.search("6 mm flat end mill")[0]
+        easm = lib.assemblies_for_tool(endmill.id)[0]
+        op2, _r2 = proj.add_operation("profile", "Contour", easm.id, endmill.presets[0].id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0})
+        self.assertEqual([subs for _o, subs in op2.Base if subs], [])  # FreeCAD normalise (objet, []) en vide
+        r2 = {r["name"]: r for r in proj.compute()}["Contour"]
+        self.assertGreater(r2["commands"], 10)
+        proj.close()
+
+    def test_helix_and_engrave(self):
+        """Alésage hélicoïdal de l'avant-trou avec la fraise 3 mm ; gravure des arêtes supérieures au V-bit 60°."""
+        proj, lib, clone = self._project_with_job("Helix test")
+        small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        sasm = lib.assemblies_for_tool(small.id)[0]
+        op, rec = proj.add_operation("helix", "Helix bore", sasm.id, small.presets[0].id, base=[(clone, [hole_face(clone)])],
+                                     params={"StartDepth": 10.0, "FinalDepth": 0.0, "StepDown": 1.0, "StepOver": 50})
+        self.assertEqual(rec["ignored_params"], [])
+        results = {r["name"]: r for r in proj.compute()}
+        r = results["Helix bore"]
+        self.assertTrue(r["valid"] and r["commands"] > 10, r)
+        self.assertTrue({"G2", "G3"} & set(r["gcodes"]), r["gcodes"])
+        self.assertAlmostEqual(r["zmin"], 0.0, places=3)
+        reach = (HOLE_DIAMETER - small.geometry.diameter) / 2.0
+        self.assertLessEqual(r["bbox"]["X"][1] - HOLE_CENTER[0], reach + 1e-3)
+        self.assertGreaterEqual(r["bbox"]["X"][0] - HOLE_CENTER[0], -reach - 1e-3)
+
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+        vasm = lib.assemblies_for_tool(vbit.id)[0]
+        op2, rec2 = proj.add_operation("engrave", "Engrave edges", vasm.id, vbit.presets[0].id,
+                                       base=[(clone, plate_top_outer_edges(clone))],
+                                       params={"StartDepth": 10.0, "FinalDepth": 9.5, "StepDown": 0.5})
+        self.assertEqual(rec2["ignored_params"], [])
+        results = {r["name"]: r for r in proj.compute()}
+        r2 = results["Engrave edges"]
+        self.assertTrue(r2["valid"] and r2["commands"] > 5, r2)
+        self.assertAlmostEqual(r2["zmin"], 9.5, places=3)
+        self.assertAlmostEqual(r2["bbox"]["X"][0], 0.0, places=3)
+        self.assertAlmostEqual(r2["bbox"]["X"][1], 80.0, places=3)
+        self.assertAlmostEqual(r2["bbox"]["Y"][1], 60.0, places=3)
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

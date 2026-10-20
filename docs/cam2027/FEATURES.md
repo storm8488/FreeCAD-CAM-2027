@@ -33,10 +33,10 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Poche | disponible | `Path.Op.Pocket` | auto | — |
 | Ébauche adaptative / trochoïdale | partiel | `Path.Op.Adaptive` (2D, monothread) | impl. | tests, perf, reprise 3D |
 | Rainure | disponible | `Path.Op.Slot` | impl. | test auto |
-| Gravure | disponible | `Path.Op.Engrave` | impl. | test auto |
+| Gravure | disponible | `Path.Op.Engrave` | auto (`test_helix_and_engrave`) | — |
 | Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
-| Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` | impl. | reconnaissance automatique des trous |
-| Alésage hélicoïdal | disponible | `Path.Op.Helix` | impl. | test auto |
+| Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |
+| Alésage hélicoïdal | disponible | `Path.Op.Helix` | auto (`test_helix_and_engrave`) | — |
 | Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
 | Attaches, rampes | partiel | habillages FreeCAD `Path.Dressup.Tags` et `RampEntry` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`) + visuel | dogbones, entrées/sorties (LeadInOut), positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
 

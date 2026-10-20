@@ -106,6 +106,10 @@ STRATEGIES = {
 #: valeurs par défaut de FreeCAD pour un filet sans type explicite
 DEFAULT_THREAD_TYPE = "MetricInternal6H"
 
+#: stratégies qui travaillent sur des trous : sans sélection, FreeCAD détecte tous les trous
+#: cylindriques plus grands que l'outil (``findAllHoles``)
+HOLE_STRATEGIES = ("drilling", "helix", "threadmill")
+
 
 def thread_table(thread_type):
     """Lignes (dict) de la table FreeCAD des filets standard ``Mod/CAM/Data/Threads``."""
@@ -229,8 +233,12 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         gui_mod = importlib.import_module(STRATEGIES[kind]["module"].replace("Path.Op.", "Path.Op.Gui."))
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, gui_mod.Command.res)
         op.ViewObject.Visibility = True
-    if base:
-        op.Base = [(model_clone(job, obj), list(subs)) for obj, subs in base]
+    explicit = [(model_clone(job, obj), list(subs)) for obj, subs in (base or []) if subs]
+    if explicit:
+        op.Base = explicit
+    elif base and kind not in HOLE_STRATEGIES:
+        op.Base = [(model_clone(job, obj), []) for obj, _subs in base]
+    # stratégies sur trous sans sous-élément : garder les trous détectés par FreeCAD (findAllHoles)
     ignored = set_params(op, params)
     if getattr(op, "Active", None) is False:
         op.Active = True

@@ -23,6 +23,8 @@
 - Attaches (Holding Tags) et rampe d'entrée comme options d'une opération
   (`project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur) ; l'habillage
   remplace l'opération dans le job. Test `test_dressups` (33 tests sur 1.1.4 et 1.0.2).
+- Perçage, hélice, filetage sans géométrie sélectionnée : tous les trous détectés par FreeCAD
+  (plus grands que l'outil). Tests `test_drilling_all_holes`, `test_helix_and_engrave` (35 tests).
 
 ## 0.1.3 — 2026-10-20
 
