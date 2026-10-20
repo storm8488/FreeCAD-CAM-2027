@@ -218,6 +218,35 @@ def run():
     QtWidgets.QApplication.processEvents()
     view2.saveImage(os.path.join(OUT, "view3d_sheet.png"), 1000, 700, "White")
     log("screenshot view3d_sheet.png")
+    # projet 3D : dôme sur plaque, finition 3D de surface, capture de la vue et de l'éditeur
+    import Part
+    dome_step = os.path.join(tmp, "dome.step")
+    plate = Part.makeBox(60, 40, 5)
+    dome = Part.makeSphere(25, FreeCAD.Vector(30, 20, -15)).common(Part.makeBox(60, 40, 30, FreeCAD.Vector(0, 0, 5)))
+    plate.fuse(dome).removeSplitter().exportStep(dome_step)
+    proj3 = Project.create("GUI 3D", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj3.doc.Name)
+    dome_part = proj3.import_model(dome_step, label="Dome").objects[0]
+    proj3.create_job([dome_part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0})
+    ball = lib.search("6 mm ball end mill")[0]
+    bop, _brec = proj3.add_operation("surface3d", "Dome finishing", lib.assemblies_for_tool(ball.id)[0].id,
+                                     ball.presets[0].id, base=[(proj3.job.Model.Group[0], [])],
+                                     params={"CutPattern": "ZigZag", "StepOver": 40, "SampleInterval": 0.5,
+                                             "BoundBox": "BaseBoundBox", "FinalDepth": 5.0})
+    r3 = proj3.compute()
+    log("3D project: %s" % [(r["name"], r["commands"], round(r["zmin"] or 0, 2), round(r["zmax"] or 0, 2)) for r in r3])
+    view3 = FreeCADGui.getDocument(proj3.doc.Name).activeView()
+    view3.viewIsometric()
+    view3.fitAll()
+    QtWidgets.QApplication.processEvents()
+    view3.saveImage(os.path.join(OUT, "view3d_dome.png"), 1000, 700, "White")
+    log("screenshot view3d_dome.png")
+    ed3 = opeditor.open_editor(proj3, bop)
+    log("3D editor tabs: %s" % [ed3.tabs.tabText(i) for i in range(ed3.tabs.count())])
+    ed3.tabs.setCurrentIndex(4 if ed3.tabs.count() > 4 else ed3.tabs.count() - 1)
+    QtWidgets.QApplication.processEvents()
+    grab(ed3, "op_editor_surface3d.png")
+    ed3.reject()
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)

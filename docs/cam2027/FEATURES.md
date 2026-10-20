@@ -46,7 +46,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 |---|---|---|---|
 | Ébauche volumique | absent | `Path.Op.Surface` (OCL, présent dans 1.0.2) | exposer, tester sur relief |
 | Reprise depuis le brut restant | absent | — | nécessite simulation matière (jalon F) |
-| Finition parallèle / Z constant | absent | `Surface`, `Waterline` | exposer |
+| Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
 | Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
 
 ## Dessin et fonctions Aspire

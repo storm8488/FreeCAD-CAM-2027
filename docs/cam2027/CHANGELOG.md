@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Finition 3D** : stratégies `surface3d` (`Path.Op.Surface`, zigzag / parallèle / décalage…) et
+  `waterline` (`Path.Op.Waterline`, Z constant multi-passes), OpenCamLib, sur 1.1.4 et 1.0.2.
+  Test `test_3d_finishing` (dôme : la pointe ne pénètre jamais la surface, sommet suivi, au moins
+  4 niveaux en Z constant ; 49 tests). Capture `view3d_dome.png`.
 - **Direction artistique « Atelier »** (dossier fourni, copié dans `docs/design/`) : jetons
   sombre/clair dans `Resources/theme/tokens.json`, couche de thème `gui/theme.py` (QSS limitée aux
   widgets CAM2027, rôles sémantiques), 32 icônes sombres/claires pour les commandes, étapes,

@@ -49,7 +49,7 @@ def _after_change():
 STRATEGY_ICONS = {
     "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "adaptive": "pocket", "drilling": "drill",
     "millface": "surface", "engrave": "engrave", "vcarve": "engrave", "chamfer": "engrave", "helix": "drill",
-    "slot": "contour", "threadmill": "drill",
+    "slot": "contour", "threadmill": "drill", "surface3d": "surface", "waterline": "surface",
 }
 
 
@@ -334,6 +334,11 @@ def default_params(kind, tool, values):
         params["StepOver"] = stepover
     if kind == "millface":
         params["ClearEdges"] = True
+    if kind == "surface3d":
+        params.update({"StepOver": stepover, "CutPattern": "ZigZag", "SampleInterval": 0.5})
+        params.pop("StepDown", None)  # passe unique de finition par défaut
+    if kind == "waterline":
+        params.update({"LayerMode": "Multi-pass", "SampleInterval": 0.5})
     if kind == "chamfer":
         params["Width"] = 1.0
     if kind == "threadmill":

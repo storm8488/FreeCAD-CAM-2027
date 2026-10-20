@@ -813,6 +813,56 @@ class TestPipeline(unittest.TestCase):
         m = MachineProfile("x")
         self.assertTrue(all(f in FIELD_LABELS for f in m.unknown_fields()))
 
+    def test_3d_finishing(self):
+        """Dôme sur plaque : surfaçage 3D sans pénétration de la surface, Z constant en plusieurs niveaux."""
+        import math
+
+        step = os.path.join(self.tmp, "dome.step")
+        cx, cy, cz, radius = 30.0, 20.0, -15.0, 25.0  # sphère tronquée : sommet à Z 10, raccord à Z 5
+        plate = Part.makeBox(60, 40, 5)
+        dome = Part.makeSphere(radius, FreeCAD.Vector(cx, cy, cz)).common(Part.makeBox(60, 40, 30, FreeCAD.Vector(0, 0, 5)))
+        plate.fuse(dome).removeSplitter().exportStep(step)
+
+        def surface_z(x, y):
+            d2 = (x - cx) ** 2 + (y - cy) ** 2
+            top = cz + math.sqrt(radius ** 2 - d2) if d2 < radius ** 2 else -1e9
+            return max(5.0, top) if 0 <= x <= 60 and 0 <= y <= 40 else -1e9
+
+        lib = starter_library()
+        proj = Project.create("3D test", lib, self._machine())
+        part = proj.import_model(step, label="Dome").objects[0]
+        job = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = job.Model.Group[0]
+        ball = lib.search("6 mm ball end mill")[0]
+        basm = lib.assemblies_for_tool(ball.id)[0]
+        op, rec = proj.add_operation("surface3d", "Dome finishing", basm.id, ball.presets[0].id, base=[(clone, [])],
+                                     params={"CutPattern": "ZigZag", "StepOver": 40, "SampleInterval": 0.5,
+                                             "BoundBox": "BaseBoundBox", "FinalDepth": 5.0})
+        self.assertEqual(rec["ignored_params"], [])
+        op2, rec2 = proj.add_operation("waterline", "Dome waterline", basm.id, ball.presets[0].id, base=[(clone, [])],
+                                       params={"LayerMode": "Multi-pass", "StepDown": 1.0, "StartDepth": 10.0,
+                                               "FinalDepth": 5.0, "SampleInterval": 0.5, "BoundBox": "BaseBoundBox"})
+        self.assertEqual(rec2["ignored_params"], [])
+        results = {r["name"]: r for r in proj.compute()}
+        r = results["Dome finishing"]
+        self.assertTrue(r["valid"] and r["commands"] > 100, r)
+        cuts = [c.Parameters for c in op.Path.Commands if c.Name in ("G1", "G2", "G3")
+                and all(k in c.Parameters for k in "XYZ")]
+        self.assertGreater(len(cuts), 100)
+        # la pointe de la fraise boule ne descend jamais sous la surface (pas de pénétration)
+        for p in cuts:
+            self.assertGreaterEqual(p["Z"], surface_z(p["X"], p["Y"]) - 0.05, p)
+        self.assertAlmostEqual(min(p["Z"] for p in cuts), 5.0, places=2)
+        self.assertGreater(max(p["Z"] for p in cuts), 9.5)  # le sommet du dôme est suivi
+        r2 = results["Dome waterline"]
+        self.assertTrue(r2["valid"] and r2["commands"] > 20, r2)
+        levels = sorted(set(round(c.Parameters["Z"], 2) for c in op2.Path.Commands
+                            if c.Name in ("G1", "G2", "G3") and "Z" in c.Parameters))
+        self.assertGreaterEqual(len(levels), 4, levels)
+        self.assertAlmostEqual(levels[0], 5.0, places=2)
+        self.assertEqual(proj.operation_state(op), "computed")
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

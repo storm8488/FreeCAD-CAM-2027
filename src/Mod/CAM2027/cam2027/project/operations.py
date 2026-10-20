@@ -95,6 +95,24 @@ STRATEGIES = {
                    "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Without selected geometry the slot runs between the two custom points (XY at the start depth).",
     },
+    "surface3d": {
+        "module": "Path.Op.Surface",
+        "label": "3D surface finishing (parallel / zigzag / offset, OpenCamLib)",
+        "params": ("CutPattern", "CutPatternAngle", "CutMode", "StepOver", "SampleInterval", "BoundBox",
+                   "BoundaryAdjustment", "DepthOffset", "LayerMode", "StepDown", "OptimizeLinearPaths",
+                   "LinearDeflection", "AngularDeflection", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "3-axis drop-cutter (OpenCamLib) following the surface; best with a ball or bull nose mill; "
+                  "no rest machining from a previous roughing; rotational scan (4th axis) not exposed.",
+    },
+    "waterline": {
+        "module": "Path.Op.Waterline",
+        "label": "3D constant-Z finishing (waterline, OpenCamLib)",
+        "params": ("Algorithm", "CutMode", "LayerMode", "StepDown", "SampleInterval", "BoundBox", "BoundaryAdjustment",
+                   "DepthOffset", "ClearLastLayer", "OptimizeLinearPaths", "LinearDeflection", "AngularDeflection",
+                   "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Contours at constant Z, suited to steep walls (pair it with 3D surface finishing for flat areas); "
+                  "multi-pass layers spaced by the step down.",
+    },
     "threadmill": {
         "module": "Path.Op.ThreadMilling",
         "label": "Thread milling (helical, internal / external)",
