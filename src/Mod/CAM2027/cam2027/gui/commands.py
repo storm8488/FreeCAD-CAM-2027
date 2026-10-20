@@ -228,22 +228,10 @@ class AddOperation(_Base):
                                      or tr("(nothing selected: the whole model is used)"))
         sel_label.setWordWrap(True)
         form.addRow(tr("Geometry (selection)"), sel_label)
-        final = QtWidgets.QDoubleSpinBox(); final.setRange(-10000, 10000); final.setDecimals(3)
-        final.setSpecialValueText(tr("(automatic)")); final.setValue(final.minimum())
-        form.addRow(tr("Final depth Z (mm)"), final)
-        stepdown = QtWidgets.QDoubleSpinBox(); stepdown.setRange(0, 1000); stepdown.setDecimals(3)
-        stepdown.setSpecialValueText(tr("(from preset)"))
-        form.addRow(tr("Step down (mm)"), stepdown)
-        side = QtWidgets.QComboBox(); side.addItems(["Outside", "Inside"])
-        form.addRow(tr("Side (profile / adaptive)"), side)
-        width = QtWidgets.QDoubleSpinBox(); width.setRange(0.01, 100); width.setDecimals(2); width.setValue(1.0)
-        form.addRow(tr("Chamfer width (mm)"), width)
-        thread = QtWidgets.QComboBox()
-        try:
-            thread.addItems(thread_names(DEFAULT_THREAD_TYPE))
-        except Exception as exc:
-            thread.addItem(tr("(thread table unavailable: {error})", error=str(exc)))
-        form.addRow(tr("Thread (metric internal 6H)"), thread)
+        hint = QtWidgets.QLabel(tr("Depths, passes and strategy settings are edited in the next window (tabs), with values prefilled from the cutting preset."))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #9aa7b8;")
+        form.addRow(hint)
         bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
@@ -255,24 +243,8 @@ class AddOperation(_Base):
             return
         a, tool, _h = lib.resolve_assembly(asm.currentData())
         values = tool.preset(preset.currentData()).resolve(tool)
-        params = {}
-        if final.value() > final.minimum():
-            params["FinalDepth"] = final.value()
-        params["StepDown"] = stepdown.value() if stepdown.value() > 0 else values["axial_engagement_mm"]
         k = kind.currentData()
-        if k in ("profile", "adaptive"):
-            params["Side"] = side.currentText()
-        if k in ("pocket", "millface") and values["radial_engagement_mm"]:
-            params["StepOver"] = max(1, min(100, int(round(100.0 * values["radial_engagement_mm"] / tool.geometry.diameter))))
-        if k == "adaptive":
-            params["StepOver"] = max(1, min(100, int(round(100.0 * values["radial_engagement_mm"] / tool.geometry.diameter))))
-        if k == "millface":
-            params["ClearEdges"] = True
-        if k == "chamfer":
-            params["Width"] = width.value()
-        if k == "threadmill":
-            params["ThreadType"] = DEFAULT_THREAD_TYPE
-            params["ThreadName"] = thread.currentText()
+        params = default_params(k, tool, values)
         try:
             op, rec = proj.add_operation(k, name.text().strip() or "Operation", a.id, preset.currentData(),
                                          base=base or [(proj.job.Model.Group[0], [])], params=params)
@@ -281,10 +253,38 @@ class AddOperation(_Base):
             _warn(tr("Operation failed: {error}", error=str(exc)))
             _after_change()
             return
-        if rec["warnings"] or rec["ignored_params"]:
-            _info("\n".join(rec["warnings"] + [tr("Ignored parameters: {p}", p=", ".join(rec["ignored_params"]))]
-                            if rec["ignored_params"] else rec["warnings"]))
+        if rec["warnings"]:
+            _info("\n".join(rec["warnings"]))
         _after_change()
+        from . import opeditor
+
+        def on_close(accepted):
+            if not accepted:
+                try:
+                    proj.remove_operation(op)
+                except Exception as exc:
+                    _warn(tr("Operation failed: {error}", error=str(exc)))
+                _after_change()
+
+        opeditor.open_editor(proj, op, on_close=on_close, title=tr("New operation: {name}", name=op.Label))
+
+
+def default_params(kind, tool, values):
+    """Paramètres initiaux d'une opération dérivés du préréglage (passe axiale, recouvrement, etc.)."""
+    params = {"StepDown": values["axial_engagement_mm"]}
+    stepover = max(1, min(100, int(round(100.0 * (values["radial_engagement_mm"] or tool.geometry.diameter * 0.4)
+                                         / tool.geometry.diameter))))
+    if kind in ("pocket", "millface", "adaptive", "helix"):
+        params["StepOver"] = stepover
+    if kind == "millface":
+        params["ClearEdges"] = True
+    if kind == "chamfer":
+        params["Width"] = 1.0
+    if kind == "threadmill":
+        names = thread_names(DEFAULT_THREAD_TYPE)
+        params["ThreadType"] = DEFAULT_THREAD_TYPE
+        params["ThreadName"] = "M6 x 1" if "M6 x 1" in names else names[0]
+    return params
 
 
 class Compute(_Base):

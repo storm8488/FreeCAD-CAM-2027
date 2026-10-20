@@ -199,6 +199,88 @@ class Project(object):
     def operations(self):
         return list(self.job.Operations.Group)
 
+    def update_operation(self, op, params):
+        """Modifie des propriétés d'une opération existante (registre mis à jour) ; retourne les noms ignorés.
+
+        Filetage : un nouveau ``ThreadName`` est résolu en diamètres/pas comme à la création.
+        """
+        reg = self.registry
+        rec = reg.get(op.Name)
+        params = dict(params or {})
+        if rec and rec.get("kind") == "threadmill":
+            tool = self.library.tool(rec["tool_id"])
+            if params.get("ThreadName") and params["ThreadName"] != rec.get("params", {}).get("ThreadName"):
+                for key in ("MajorDiameter", "MinorDiameter", "Pitch", "TPI"):
+                    params.pop(key, None)
+            params = opsmod.resolve_params("threadmill", tool, params)
+        ignored = opsmod.set_params(op, params)
+        if rec is not None:
+            merged = dict(rec.get("params", {}))
+            merged.update({k: v for k, v in params.items() if k not in ignored})
+            rec["params"] = _jsonable(merged)
+            rec["ignored_params"] = ignored
+            rec["label"] = op.Label
+            self._save_registry(reg)
+        return ignored
+
+    def set_operation_base(self, op, base):
+        """Géométrie de l'opération : liste de ``(objet, [sous-éléments])`` ; vide = tout le modèle."""
+        op.Base = [(opsmod.model_clone(self.job, obj), list(subs)) for obj, subs in (base or [])]
+
+    def set_operation_active(self, op, active):
+        op.Active = bool(active)
+
+    def move_operation(self, op, delta):
+        """Déplace l'opération de ``delta`` rangs dans l'ordre d'usinage ; retourne son nouvel indice."""
+        group = list(self.job.Operations.Group)
+        i = group.index(op)
+        j = max(0, min(len(group) - 1, i + delta))
+        if j != i:
+            group.insert(j, group.pop(i))
+            self.job.Operations.Group = group
+            self._renumber()
+        return j
+
+    def duplicate_operation(self, op):
+        """Copie l'opération (mêmes outil, préréglage, géométrie et valeurs courantes) juste après l'original."""
+        rec = self.registry.get(op.Name)
+        if rec is None:
+            raise ValueError("opération %s absente du registre" % op.Label)
+        params = opsmod.read_params(op, opsmod.STRATEGIES[rec["kind"]]["params"])
+        new, record = self.add_operation(rec["kind"], op.Label + " (copy)", rec["assembly_id"], rec["preset_id"],
+                                         base=[(obj, list(subs)) for obj, subs in (op.Base or [])], params=params)
+        new.Active = op.Active
+        group = list(self.job.Operations.Group)
+        group.remove(new)
+        group.insert(group.index(op) + 1, new)
+        self.job.Operations.Group = group
+        self._renumber()
+        return new, record
+
+    def remove_operation(self, op):
+        """Supprime l'opération, son ToolController et son ToolBit, et l'entrée de registre."""
+        reg = self.registry
+        rec = reg.pop(op.Name, None)
+        self.job.Operations.Group = [o for o in self.job.Operations.Group if o.Name != op.Name]
+        self.doc.removeObject(op.Name)
+        if rec:
+            tc = self.doc.getObject(rec.get("tool_controller") or "")
+            if tc is not None:
+                self.job.Tools.Group = [t for t in self.job.Tools.Group if t.Name != tc.Name]
+                self.doc.removeObject(tc.Name)
+            bit_name = rec.get("toolbit") or ""
+            if bit_name and self.doc.getObject(bit_name) is not None:
+                self.doc.removeObject(bit_name)
+        self._save_registry(reg)
+        self._renumber()
+
+    def _renumber(self):
+        reg = self.registry
+        for i, o in enumerate(self.job.Operations.Group):
+            if o.Name in reg:
+                reg[o.Name]["order"] = i
+        self._save_registry(reg)
+
     def compute(self):
         """Recalcule le document et retourne un résumé par opération."""
         self.doc.recompute()

@@ -5,6 +5,15 @@
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).
+- Spécification déclarative des paramètres d'opération (`project/paramspec.py` : libellé,
+  onglet, aide, traduits) ; lecture/écriture typée sur l'objet FreeCAD (`param_kind`,
+  `read_params`, `set_params`).
+- Éditeur d'opération à onglets, non modal (`gui/opeditor.py`) : création (après le
+  dialogue « Ajouter une opération ») et modification (double-clic dans le panneau projet),
+  valeurs du préréglage affichées, géométrie reprise de la sélection 3D.
+- Projet : `update_operation`, `set_operation_base`, `set_operation_active`,
+  `move_operation`, `duplicate_operation`, `remove_operation` (tests `test_operation_edits`,
+  `test_param_specs` ; 32 tests).
 
 ## 0.1.3 — 2026-10-20
 

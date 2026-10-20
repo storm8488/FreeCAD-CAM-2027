@@ -885,8 +885,14 @@ class ProjectPanel(QtWidgets.QWidget):
     def on_double_click(self, item, _col):
         name = item.data(0, QtCore.Qt.UserRole)
         if name and FreeCAD.ActiveDocument:
+            op = FreeCAD.ActiveDocument.getObject(name)
             FreeCADGui.Selection.clearSelection()
-            FreeCADGui.Selection.addSelection(FreeCAD.ActiveDocument.getObject(name))
+            FreeCADGui.Selection.addSelection(op)
+            proj = state.active_project()
+            if proj is not None and name in proj.registry:
+                from . import opeditor
+
+                opeditor.open_editor(proj, op)
 
 
 _docks = {}

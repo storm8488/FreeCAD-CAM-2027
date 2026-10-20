@@ -85,6 +85,25 @@ def run():
     panels.refresh_project_panel()
     QtWidgets.QApplication.processEvents()
     grab(panels._docks["Project"].widget(), "project_panel.png")
+    # éditeur d'opération (non modal) : onglets générés, lecture des valeurs, application
+    from cam2027.gui import opeditor
+    op = proj.operations()[0]
+    editor = opeditor.open_editor(proj, op)
+    QtWidgets.QApplication.processEvents()
+    tabs = [editor.tabs.tabText(i) for i in range(editor.tabs.count())]
+    log("editor tabs: %s" % tabs)
+    for i in range(editor.tabs.count()):
+        editor.tabs.setCurrentIndex(i)
+        QtWidgets.QApplication.processEvents()
+        grab(editor, "op_editor_%d.png" % i)
+    editor.tabs.setCurrentIndex(2)
+    kind, widget = editor.widgets["StepDown"]
+    widget.setValue(2.5)
+    log("editor apply: %s" % editor.apply())
+    log("editor status: %s" % editor.status.text())
+    log("StepDown after apply: %s" % op.StepDown)
+    editor.accept()
+    QtWidgets.QApplication.processEvents()
     view_path = os.path.join(OUT, "view3d.png")
     FreeCADGui.activeDocument().activeView().saveImage(view_path, 1000, 700, "White")
     log("screenshot view3d.png")

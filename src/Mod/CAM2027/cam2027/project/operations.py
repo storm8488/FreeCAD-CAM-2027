@@ -230,7 +230,7 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, gui_mod.Command.res)
         op.ViewObject.Visibility = True
     if base:
-        op.Base = [(_model_clone(job, obj), list(subs)) for obj, subs in base]
+        op.Base = [(model_clone(job, obj), list(subs)) for obj, subs in base]
     ignored = set_params(op, params)
     if getattr(op, "Active", None) is False:
         op.Active = True
@@ -309,7 +309,8 @@ class _ForcedToolController(object):
         return self.tc
 
 
-def _model_clone(job, obj):
+def model_clone(job, obj):
+    """Clone du job correspondant a un objet source (ou l'objet lui-meme s'il est deja un clone)."""
     if obj in job.Model.Group:
         return obj
     for clone in job.Model.Group:

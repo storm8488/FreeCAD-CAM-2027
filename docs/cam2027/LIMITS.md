@@ -67,10 +67,16 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   une fraise à chanfreiner ou un V-bit ; la profondeur découle de l'angle de l'outil
   (largeur / tan(angle/2) + surprofondeur). Pas de contrôle de collision avec les parois
   voisines, pas de chanfrein « 2D » à largeur constante avec une fraise cylindrique.
-- Le dialogue « Ajouter une opération » expose profondeur finale, passe axiale, côté,
-  largeur de chanfrein et nom de filet (métrique intérieur 6H seulement) et dérive le
-  recouvrement du préréglage ; les autres propriétés se règlent dans l'éditeur de
-  propriétés FreeCAD de l'opération.
+- « Ajouter une opération » = nom, stratégie, assemblage, préréglage, géométrie
+  sélectionnée, puis l'**éditeur d'opération** à onglets (Outil / Géométrie / Hauteurs et
+  profondeurs / Passes / Stratégie / Filetage), non modal, généré depuis
+  `project/paramspec.py` et les propriétés de l'objet FreeCAD ; il sert aussi à modifier une
+  opération existante (double-clic dans le panneau projet). Annuler à la création supprime
+  l'opération. L'outil et le préréglage d'une opération existante ne se changent pas (valeurs
+  figées à la création) : créer une nouvelle opération. Les propriétés non listées dans
+  `STRATEGIES[...]["params"]` restent accessibles dans l'éditeur de propriétés FreeCAD.
+  L'éditeur est exercé par `gui_smoke` (onglets, application d'une passe axiale) ; la
+  sélection 3D dans l'onglet Géométrie n'est vérifiée que visuellement.
 - Les paramètres non pris en charge par une stratégie sont listés (`ignored_params`) et
   affichés dans le panneau projet.
 

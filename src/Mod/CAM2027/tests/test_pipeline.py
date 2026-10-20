@@ -371,6 +371,68 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(op.Side, "Inside")
         proj.close()
 
+    def test_operation_edits(self):
+        """Modification, ordre, activation, duplication, suppression et géométrie d'opérations existantes."""
+        proj, lib, clone = self._project_with_job("Edit test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        preset = endmill.presets[0]
+        op1, _r1 = proj.add_operation("profile", "Contour", asm.id, preset.id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        op2, _r2 = proj.add_operation("millface", "Facing", asm.id, preset.id, base=[(clone, [plate_top_face(clone)])],
+                                      params={"StepDown": 1.0, "FinalDepth": 9.0, "ClearEdges": True})
+        # modification + registre
+        self.assertEqual(proj.update_operation(op1, {"StepDown": 2.5, "Nope": 1}), ["Nope"])
+        self.assertAlmostEqual(float(op1.StepDown.getValueAs("mm")), 2.5)
+        self.assertAlmostEqual(proj.registry[op1.Name]["params"]["StepDown"], 2.5)
+        # ordre
+        self.assertEqual(proj.move_operation(op2, -1), 0)
+        self.assertEqual(proj.operations()[0].Name, op2.Name)
+        self.assertEqual(proj.registry[op2.Name]["order"], 0)
+        self.assertEqual(proj.move_operation(op2, -1), 0)
+        # activation
+        proj.set_operation_active(op2, False)
+        r2 = [r for r in proj.compute() if r["name"] == op2.Label][0]
+        self.assertLessEqual(r2["commands"], 1)
+        proj.set_operation_active(op2, True)
+        r2 = [r for r in proj.compute() if r["name"] == op2.Label][0]
+        self.assertGreater(r2["commands"], 10)
+        # duplication : juste après l'original, mêmes valeurs, même parcours
+        dup, drec = proj.duplicate_operation(op1)
+        ops = proj.operations()
+        self.assertEqual(len(ops), 3)
+        self.assertEqual(ops[ops.index(op1) + 1].Name, dup.Name)
+        self.assertAlmostEqual(float(dup.StepDown.getValueAs("mm")), 2.5)
+        results = {r["name"]: r for r in proj.compute()}
+        self.assertEqual(results[dup.Label]["commands"], results[op1.Label]["commands"])
+        # filet : changer la désignation recalcule diamètres et pas
+        tm = lib.search("thread mill")[0]
+        tasm = lib.assemblies_for_tool(tm.id)[0]
+        top, _t = proj.add_operation("threadmill", "Thread", tasm.id, tm.presets[0].id, base=[(clone, [hole_face(clone)])],
+                                     params={"ThreadName": "M8 x 1.25", "StartDepth": 10.0, "FinalDepth": 0.0})
+        proj.update_operation(top, {"ThreadName": "M8 x 1", "Passes": 3})
+        self.assertAlmostEqual(float(top.Pitch.getValueAs("mm")), 1.0)
+        self.assertAlmostEqual(float(top.MajorDiameter.getValueAs("mm")), 8.147, places=3)
+        self.assertEqual(proj.registry[top.Name]["params"]["ThreadName"], "M8 x 1")
+        with self.assertRaises(ValueError):
+            proj.update_operation(top, {"ThreadName": "M12 x 1.75"})
+        # suppression : opération, ToolController, ToolBit et registre
+        tc_name, bit_name, dup_name = drec["tool_controller"], drec["toolbit"], dup.Name
+        proj.remove_operation(dup)
+        self.assertEqual([o.Name for o in proj.operations()], [op2.Name, op1.Name, top.Name])
+        self.assertIsNone(proj.doc.getObject(tc_name))
+        self.assertIsNone(proj.doc.getObject(bit_name))
+        self.assertIsNone(proj.doc.getObject(dup_name))
+        self.assertNotIn(dup_name, proj.registry)
+        self.assertEqual([proj.registry[o.Name]["order"] for o in proj.operations()], [0, 1, 2])
+        # géométrie
+        face = plate_top_face(clone)
+        proj.set_operation_base(op1, [(clone, [face])])
+        self.assertEqual(list(op1.Base[0][1]), [face])
+        proj.set_operation_base(op1, [])
+        self.assertEqual(list(op1.Base), [])
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json
