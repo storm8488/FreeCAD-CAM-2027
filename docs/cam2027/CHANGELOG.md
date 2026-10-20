@@ -12,6 +12,8 @@
   Inactive) lus sur l'état réel des objets FreeCAD (`operations.compute_state`), colonne « État »
   avec icône + texte + couleur ; « Recalculer les parcours (n en attente) » devient l'action
   principale dès qu'un calcul est périmé. Test `test_compute_states` (45 tests).
+- Bibliothèque d'outils : colonnes T et Lc (mm), unités dans les en-têtes, icône par type
+  d'outil, tri numérique par colonne (défaut : numéro T).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

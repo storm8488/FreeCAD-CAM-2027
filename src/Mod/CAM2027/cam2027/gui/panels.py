@@ -77,6 +77,17 @@ def _info(text):
 # ---------------------------------------------------------------------------
 
 
+#: type d'outil -> icône « Atelier » (silhouette la plus proche)
+TOOL_TYPE_ICONS = {
+    "endmill": "endmill-flat", "bullnose": "endmill-flat", "facemill": "endmill-flat", "slot": "endmill-flat",
+    "taper": "endmill-flat", "form": "endmill-flat", "dovetail": "endmill-flat",
+    "ballend": "endmill-ball", "taperedball": "endmill-ball", "lollipop": "endmill-ball", "radius": "endmill-ball",
+    "barrel": "endmill-ball", "lens": "endmill-ball", "ogive": "endmill-ball", "taperbarrel": "endmill-ball",
+    "drill": "drill", "threadmill": "drill",
+    "vbit": "engrave", "chamfer": "engrave", "engrave": "engrave",
+}
+
+
 class ToolLibraryPanel(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(ToolLibraryPanel, self).__init__(parent)
@@ -113,14 +124,17 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.fav_only.toggled.connect(self.refresh_list)
         filt.addWidget(self.fav_only)
         ll.addLayout(filt)
-        self.table = QtWidgets.QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["★", tr("Name"), tr("Type"), "D", "z", tr("Material")])
+        self.table = QtWidgets.QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(["★", "T", tr("Name"), tr("Type"), "D (mm)", "Lc (mm)", "z", tr("Material")])
+        self.table.horizontalHeaderItem(5).setToolTip(tr("Flute length (mm)"))
+        self.table.horizontalHeaderItem(1).setToolTip(tr("Tool number of the first assembly (output data)"))
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.itemSelectionChanged.connect(self.on_select)
+        self.table.horizontalHeader().setSortIndicator(1, QtCore.Qt.AscendingOrder)  # tri par numéro T
         ll.addWidget(self.table)
         btns = QtWidgets.QHBoxLayout()
         for label, slot in (
@@ -335,14 +349,24 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         tools = self.lib.search(self.search.text(), tool_type=self.type_filter.currentData(),
                                 favorites_only=self.fav_only.isChecked())
         self._building = True
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(len(tools))
         for row, t in enumerate(tools):
-            items = ["★" if t.favorite else "", t.name, tr(t.type_label()), "%.3g" % t.geometry.diameter,
-                     str(t.flute_count), t.material]
-            for col, text in enumerate(items):
-                item = QtWidgets.QTableWidgetItem(text)
+            numbers = sorted(a.output.tool_number for a in self.lib.assemblies_for_tool(t.id))
+            items = ["★" if t.favorite else "", numbers[0] if numbers else None, t.name, tr(t.type_label()),
+                     t.geometry.diameter, t.geometry.flute_length, t.flute_count, t.material]
+            for col, value in enumerate(items):
+                item = QtWidgets.QTableWidgetItem()
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    item.setData(QtCore.Qt.DisplayRole, value)  # tri numérique
+                    item.setTextAlignment(int(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter))
+                else:
+                    item.setText(value or "")
                 item.setData(QtCore.Qt.UserRole, t.id)
+                if col == 2:
+                    item.setIcon(theme.icon(TOOL_TYPE_ICONS.get(t.tool_type, "endmill-flat")))
                 self.table.setItem(row, col, item)
+        self.table.setSortingEnabled(True)
         self.table.resizeColumnsToContents()
         self._building = False
         s = self.lib.summary()
@@ -350,7 +374,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
                                tools=s["tools"], holders=s["holders"], assemblies=s["assemblies"], rev=self.lib.revision))
         if self.current and self.current.id in self.lib.tools:
             for row in range(self.table.rowCount()):
-                if self.table.item(row, 1).data(QtCore.Qt.UserRole) == self.current.id:
+                if self.table.item(row, 2).data(QtCore.Qt.UserRole) == self.current.id:
                     self.table.selectRow(row)
                     break
 

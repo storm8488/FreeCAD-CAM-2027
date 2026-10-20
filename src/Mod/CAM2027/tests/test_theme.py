@@ -42,6 +42,11 @@ class TestTheme(unittest.TestCase):
         with open(os.path.join(GUI, "panels.py"), "r", encoding="utf-8") as fp:
             src = fp.read()
         names |= set(re.findall(r'"[a-z]+": "([a-z0-9-]+)"', src[src.index("_STEP_ICONS"):src.index("class ProjectPanel")]))
+        names |= set(re.findall(r'"[a-z]+": "([a-z0-9-]+)"', src[src.index("TOOL_TYPE_ICONS = {"):src.index("class ToolLibraryPanel")]))
+        # chaque type d'outil du modèle a une icône
+        from cam2027.tools.model import TOOL_TYPES
+        mapped = set(re.findall(r'"([a-z]+)": "[a-z0-9-]+"', src[src.index("TOOL_TYPE_ICONS = {"):src.index("class ToolLibraryPanel")]))
+        self.assertEqual(set(TOOL_TYPES) - mapped, set())
         self.assertGreater(len(names), 10)
         for name in names:
             for th in ("dark", "light"):

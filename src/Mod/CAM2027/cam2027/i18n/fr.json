@@ -639,5 +639,8 @@
   "Time (estimate)": "Temps (estimation)",
   "To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine.": "À calculer / Calculé / À recalculer / Avertissement / Échec. « Calculé » ne veut pas dire vérifié ni sûr pour la machine.",
   "No cutting move: check the geometry, the depths and the tool.": "Aucun mouvement de coupe : vérifiez la géométrie, les profondeurs et l'outil.",
-  "Recompute toolpaths ({n} pending)": "Recalculer les parcours ({n} en attente)"
+  "Recompute toolpaths ({n} pending)": "Recalculer les parcours ({n} en attente)",
+
+  "_section_lib2": "ajouts",
+  "Tool number of the first assembly (output data)": "Numéro d'outil du premier assemblage (données de sortie)"
 }
