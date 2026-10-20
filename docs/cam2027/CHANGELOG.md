@@ -6,6 +6,9 @@
   `waterline` (`Path.Op.Waterline`, Z constant multi-passes), OpenCamLib, sur 1.1.4 et 1.0.2.
   Test `test_3d_finishing` (dôme : la pointe ne pénètre jamais la surface, sommet suivi, au moins
   4 niveaux en Z constant ; 49 tests). Capture `view3d_dome.png`.
+- **Ébauche 3D** `rough3d` : adaptative du brut vers la pièce autour des faces en relief
+  (`operations.raised_faces` si toute la pièce est sélectionnée), surépaisseur 0,5 mm par défaut ;
+  testée sur le dôme (au moins 5 niveaux, jamais plus près que rayon + surépaisseur).
 - **Direction artistique « Atelier »** (dossier fourni, copié dans `docs/design/`) : jetons
   sombre/clair dans `Resources/theme/tokens.json`, couche de thème `gui/theme.py` (QSS limitée aux
   widgets CAM2027, rôles sémantiques), 32 icônes sombres/claires pour les commandes, étapes,

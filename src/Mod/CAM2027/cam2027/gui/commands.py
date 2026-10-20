@@ -49,7 +49,7 @@ def _after_change():
 STRATEGY_ICONS = {
     "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "adaptive": "pocket", "drilling": "drill",
     "millface": "surface", "engrave": "engrave", "vcarve": "engrave", "chamfer": "engrave", "helix": "drill",
-    "slot": "contour", "threadmill": "drill", "surface3d": "surface", "waterline": "surface",
+    "slot": "contour", "threadmill": "drill", "surface3d": "surface", "waterline": "surface", "rough3d": "pocket",
 }
 
 
@@ -330,7 +330,7 @@ def default_params(kind, tool, values):
     params = {"StepDown": values["axial_engagement_mm"]}
     stepover = max(1, min(100, int(round(100.0 * (values["radial_engagement_mm"] or tool.geometry.diameter * 0.4)
                                          / tool.geometry.diameter))))
-    if kind in ("pocket", "millface", "adaptive", "helix"):
+    if kind in ("pocket", "millface", "adaptive", "helix", "rough3d"):
         params["StepOver"] = stepover
     if kind == "millface":
         params["ClearEdges"] = True

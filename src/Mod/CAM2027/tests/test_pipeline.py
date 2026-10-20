@@ -55,6 +55,19 @@ def plate_top_outer_edges(clone):
     return names
 
 
+def cutting_points(path):
+    """Positions complètes (X, Y, Z modaux) atteintes par les mouvements de coupe G1/G2/G3."""
+    pos = {}
+    points = []
+    for c in path.Commands:
+        for k in "XYZ":
+            if k in c.Parameters:
+                pos[k] = c.Parameters[k]
+        if c.Name in ("G1", "G2", "G3") and len(pos) == 3:
+            points.append(dict(pos))
+    return points
+
+
 def vertical_plunges(path):
     """Nombre de descentes en avance de travail (G1) sans déplacement XY."""
     x = y = z = None
@@ -861,6 +874,29 @@ class TestPipeline(unittest.TestCase):
         self.assertGreaterEqual(len(levels), 4, levels)
         self.assertAlmostEqual(levels[0], 5.0, places=2)
         self.assertEqual(proj.operation_state(op), "computed")
+
+        # ébauche 3D : modèle entier sélectionné -> faces en relief (le dôme) ; surépaisseur respectée
+        from cam2027.project import operations as opsmod
+        self.assertEqual([clone.Shape.getElement(n).Surface.__class__.__name__ for n in opsmod.raised_faces(clone)],
+                         ["Sphere"])
+        endmill = lib.search("6 mm flat end mill")[0]
+        rop, rrec = proj.add_operation("rough3d", "Dome roughing", lib.assemblies_for_tool(endmill.id)[0].id,
+                                       endmill.presets[0].id, base=[(clone, [])],
+                                       params={"StepDown": 1.0, "StepOver": 20, "StockToLeave": 0.5, "FinalDepth": 5.0})
+        self.assertEqual(rrec["ignored_params"], [])
+        self.assertEqual(rop.Side, "Outside")
+        proj.compute()
+        rcuts = cutting_points(rop.Path)  # l'adaptatif n'écrit Z qu'une fois par niveau (modal)
+        self.assertGreater(len(rcuts), 100)
+        rlevels = sorted(set(round(p["Z"], 2) for p in rcuts))
+        self.assertEqual(rlevels[0], 5.0)
+        self.assertGreaterEqual(len(rlevels), 5, rlevels)
+        tool_r = endmill.geometry.diameter / 2.0
+        for p in rcuts:
+            if p["Z"] > 5.01:  # au-dessus de la plaque : jamais plus près du dôme que rayon outil + surépaisseur
+                dome_r = math.sqrt(max(0.0, radius ** 2 - (p["Z"] - cz) ** 2))
+                dist = math.sqrt((p["X"] - cx) ** 2 + (p["Y"] - cy) ** 2)
+                self.assertGreaterEqual(dist, dome_r + tool_r + 0.5 - 0.05, p)
         proj.close()
 
     def test_strategy_translations(self):

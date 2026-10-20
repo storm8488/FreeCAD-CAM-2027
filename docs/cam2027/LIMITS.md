@@ -46,7 +46,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Stratégies exposées : contour, poche, adaptative 2D, perçage, surfaçage, gravure,
   V-carving, alésage hélicoïdal, rainure, fraisage de filets, chanfreinage, poche 2D,
   **finition 3D de surface et en Z constant** (OpenCamLib, 3 axes : balayage rotatif non exposé ;
-  pas d'ébauche 3D volumique), pas de reprise, pas de 4e axe, pas d'attaches/dogbones/rampes
+  **ébauche 3D** = adaptative niveau par niveau autour des faces en relief, avec des marches
+  entre niveaux), pas de reprise, pas de 4e axe, pas d'attaches/dogbones/rampes
   inline (les habillages FreeCAD restent utilisables dans l'atelier CAM standard sur le
   même document).
 - La poche FreeCAD (décalage/zigzag) **n'est pas** adaptative ; « adaptative » est

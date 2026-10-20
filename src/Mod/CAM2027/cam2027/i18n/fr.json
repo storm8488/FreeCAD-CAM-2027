@@ -717,5 +717,9 @@
   "OCL Dropcutter": "OCL Dropcutter",
   "Experimental": "Expérimental",
   "Planar": "Plan",
-  "Rotational": "Rotatif"
+  "Rotational": "Rotatif",
+
+  "_section_rough": "ajouts",
+  "3D roughing (adaptive, stock to model)": "Ébauche 3D (adaptative, du brut vers la pièce)",
+  "Clears the stock around the selected raised faces level by level (adaptive, flat end mill), leaving 'stock to leave' for a 3D finishing pass; steps remain between levels.": "Dégage le brut autour des faces en relief sélectionnées, niveau par niveau (adaptatif, fraise deux tailles), en laissant la surépaisseur pour une finition 3D ; des marches restent entre les niveaux."
 }

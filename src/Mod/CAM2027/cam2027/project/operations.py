@@ -95,6 +95,15 @@ STRATEGIES = {
                    "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Without selected geometry the slot runs between the two custom points (XY at the start depth).",
     },
+    "rough3d": {
+        "module": "Path.Op.Adaptive",
+        "label": "3D roughing (adaptive, stock to model)",
+        "params": ("StepOver", "StepDown", "StockToLeave", "Tolerance", "LiftDistance", "KeepToolDownRatio",
+                   "HelixAngle", "HelixConeAngle", "HelixDiameterLimit", "UseHelixArcs", "ForceInsideOut",
+                   "FinishingProfile", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Clears the stock around the selected raised faces level by level (adaptive, flat end mill), leaving "
+                  "'stock to leave' for a 3D finishing pass; steps remain between levels.",
+    },
     "surface3d": {
         "module": "Path.Op.Surface",
         "label": "3D surface finishing (parallel / zigzag / offset, OpenCamLib)",
@@ -185,6 +194,11 @@ def resolve_params(kind, tool, params):
     le pas demandé doit rester dans la plage ``pitch_min``..``pitch`` de l'outil.
     """
     params = dict(params or {})
+    if kind == "rough3d":
+        defaults = {"Side": "Outside", "OperationType": "Clearing", "StockToLeave": 0.5}
+        for key, value in defaults.items():
+            params.setdefault(key, value)
+        return params
     if kind != "threadmill":
         return params
     if tool.tool_type != "threadmill":
@@ -261,6 +275,8 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         gui_mod = importlib.import_module(STRATEGIES[kind]["module"].replace("Path.Op.", "Path.Op.Gui."))
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, gui_mod.Command.res)
         op.ViewObject.Visibility = True
+    if kind == "rough3d":
+        base = [(obj, list(subs) or raised_faces(model_clone(job, obj))) for obj, subs in (base or [])]
     explicit = [(model_clone(job, obj), list(subs)) for obj, subs in (base or []) if subs]
     if explicit:
         op.Base = explicit
@@ -353,6 +369,25 @@ class _ForcedToolController(object):
 
     def chooseToolController(self, controllers):
         return self.tc
+
+
+def raised_faces(obj, tol=1e-6):
+    """Faces « en relief » d'un solide pour l'ébauche 3D : faces non planes et faces planes non horizontales
+    situées au-dessus du plus bas plancher horizontal supérieur (le dessus de la plaque d'appui)."""
+    shape = obj.Shape
+    floors = []
+    for f in shape.Faces:
+        if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - f.BoundBox.ZMin) < tol \
+                and f.BoundBox.ZMax > shape.BoundBox.ZMin + tol:
+            floors.append(f.BoundBox.ZMax)
+    floor = min(floors) if floors else shape.BoundBox.ZMin
+    names = []
+    for i, f in enumerate(shape.Faces, 1):
+        bb = f.BoundBox
+        horizontal = f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMax - bb.ZMin) < tol
+        if not horizontal and bb.ZMax > floor + tol:
+            names.append("Face%d" % i)
+    return names
 
 
 def model_clone(job, obj):

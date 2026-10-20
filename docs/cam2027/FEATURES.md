@@ -44,7 +44,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 
 | Fonction cible | Statut | Composant | Travail restant |
 |---|---|---|---|
-| Ébauche volumique | absent | `Path.Op.Surface` (OCL, présent dans 1.0.2) | exposer, tester sur relief |
+| Ébauche volumique | partiel | `Path.Op.Adaptive` autour des faces en relief (clé `rough3d`, faces choisies automatiquement si toute la pièce est sélectionnée) | auto (`test_3d_finishing` : niveaux, surépaisseur respectée) | marches entre niveaux (pas de reprise des marches), ébauche depuis le brut restant |
 | Reprise depuis le brut restant | absent | — | nécessite simulation matière (jalon F) |
 | Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
 | Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
