@@ -60,6 +60,48 @@ def make_faces(doc, vectors):
     return faces
 
 
+#: stratégies qui attendent une face (les autres prennent les arêtes du vecteur)
+FACE_STRATEGIES = ("pocket2d", "vcarve", "pocket", "adaptive", "millface")
+
+
+def expand_drawing_base(doc, kind, base):
+    """Remplace un vecteur sélectionné « entier » par ce que la stratégie attend.
+
+    ``base`` : liste ``(objet, sous-éléments)``. Un vecteur sans sous-élément devient sa face
+    générée (``Face1``) pour une stratégie à faces, ou toutes ses arêtes sinon. Une face générée
+    sélectionnée entière devient ``Face1``. Le reste est inchangé.
+    """
+    out = []
+    for obj, subs in base or []:
+        subs = list(subs)
+        source = obj
+        # clone du job -> objet source
+        for attr in ("Objects", "Base"):
+            inner = getattr(obj, attr, None)
+            if isinstance(inner, list) and len(inner) == 1:
+                inner = inner[0]
+            if inner is not None and hasattr(inner, "Shape") and hasattr(inner, "Name"):
+                source = inner
+                break
+        is_face_obj = source.Name.endswith(FACE_SUFFIX)
+        is_vector = (not is_face_obj and source.TypeId == "Part::Feature" and source.Shape.Edges
+                     and not source.Shape.Solids and not source.Shape.Faces)
+        if subs or not (is_vector or is_face_obj):
+            out.append((obj, subs))
+            continue
+        if kind in FACE_STRATEGIES:
+            face = source if is_face_obj else doc.getObject(source.Name + FACE_SUFFIX)
+            if face is None:
+                raise ValueError("%s n'est pas un contour fermé : pas de face pour cette stratégie" % source.Label)
+            out.append((face, ["Face1"]))
+        elif is_face_obj:
+            vector = doc.getObject(source.Name[: -len(FACE_SUFFIX)])
+            out.append((vector or source, ["Edge%d" % (i + 1) for i in range(len((vector or source).Shape.Edges))]))
+        else:
+            out.append((source, ["Edge%d" % (i + 1) for i in range(len(source.Shape.Edges))]))
+    return out
+
+
 def make_sheet(doc, vectors, thickness, margin=10.0):
     """Panneau rectangulaire sous le dessin : englobe les vecteurs + ``margin``, dessus à Z = 0."""
     if thickness <= 0:

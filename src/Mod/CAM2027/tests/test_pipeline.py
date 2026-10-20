@@ -718,6 +718,29 @@ class TestPipeline(unittest.TestCase):
         self.assertAlmostEqual(carve["zmin"], -4.0, places=3)
         self.assertGreaterEqual(carve["bbox"]["X"][0], bbr.XMin - 1e-3)
         self.assertAlmostEqual(results["Engrave circle"]["zmin"], -1.0, places=3)
+        # sélection « entière » d'un vecteur (clic dans la vue) : arêtes ou face selon la stratégie
+        op_e, _r = proj.add_operation("profile", "Cut circle", asm.id, endmill.presets[0].id, base=[(circle, [])],
+                                      params={"Side": "Inside", "StartDepth": 0.0, "FinalDepth": -12.0, "StepDown": 6.0})
+        self.assertEqual(list(op_e.Base[0][1]), ["Edge1"])
+        op_f, _r = proj.add_operation("pocket2d", "Pocket rect", sasm.id, small.presets[0].id, base=[(rect, [])],
+                                      params={"StartDepth": 0.0, "FinalDepth": -2.0, "StepDown": 1.0})
+        self.assertEqual(list(op_f.Base[0][1]), ["Face1"])
+        self.assertTrue(op_f.Base[0][0].Name.startswith("Clone"))
+        triangle = [v for v in vectors if v not in (rect, circle)][0]
+        results = {r["name"]: r for r in proj.compute()}
+        # contour intérieur : chaque point de coupe à la profondeur est sur le rayon r - 3 (centre outil)
+        # sur 1.0.2 le cercle SVG est une B-spline et sa BoundBox est approchée : centre et rayon
+        # déduits du centre de gravité et de la longueur de l'arête
+        import math
+        edge = circle.Shape.Edges[0]
+        cx, cy, rad = edge.CenterOfMass.x, edge.CenterOfMass.y, edge.Length / (2.0 * math.pi)
+        cut_pts = [c.Parameters for c in op_e.Path.Commands if c.Name in ("G1", "G2", "G3")
+                   and "X" in c.Parameters and "Y" in c.Parameters and c.Parameters.get("Z", -1.0) < 0.0]
+        self.assertGreater(len(cut_pts), 0)
+        for p in cut_pts:
+            self.assertAlmostEqual(((p["X"] - cx) ** 2 + (p["Y"] - cy) ** 2) ** 0.5, rad - 3.0, delta=0.05)
+        self.assertAlmostEqual(results["Pocket rect"]["zmin"], -2.0, places=3)
+        self.assertTrue(triangle.Shape.isClosed())
         out = os.path.join(self.tmp, "sheet.nc")
         result = proj.export_gcode(out)
         self.assertNotIn("error", [lvl for lvl, _m in result["issues"]])

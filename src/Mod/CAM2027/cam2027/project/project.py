@@ -194,6 +194,7 @@ class Project(object):
         preset = tool.preset(preset_id)
         values = preset.resolve(tool)
         params = opsmod.resolve_params(kind, tool, params)
+        base = sheetmod.expand_drawing_base(self.doc, kind, base)
         toolbit, bit_warnings = bridge.create_toolbit(self.doc, tool, label="%s (T%d)" % (tool.name, asm.output.tool_number))
         tc, _ = bridge.create_tool_controller(self.doc, asm, tool, values, toolbit=toolbit, label="TC: %s" % name)
         job.Proxy.addToolController(tc)
