@@ -22,6 +22,9 @@
   Test `test_machine_field_labels` (47 tests).
 - Couleurs de parcours de la charte (coupe cobalt, rapide ambre, plongée, sélection) dans le
   profil du lanceur, appliquées après le pack sombre ; test `test_scene_colors` (48 tests).
+- Disposition vérifiée à 1280 × 800 (capture `main_window_1280x800.png`) : actions de la
+  bibliothèque regroupées (Nouveau / Dupliquer / Supprimer + menus « Plus... » et
+  « Bibliothèque... »), étapes du flux sur deux lignes, proportions du séparateur conservées.
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

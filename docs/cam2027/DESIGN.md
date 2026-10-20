@@ -33,4 +33,5 @@ FreeCAD et son atelier CAM.
   partiellement couverts par le panneau de flux de travail (4 étapes) ; pas de refonte de la
   fenêtre FreeCAD.
 - Vérifié visuellement : thème sombre et clair sur 1.1.4 (captures `tests/screenshots`).
-  Non vérifié : 150 % / 200 % DPI, 1280 × 800, navigation au clavier complète.
+  Vérifié aussi : fenêtre 1280 × 800 (capture `main_window_1280x800.png`, bibliothèque et flux
+  lisibles). Non vérifié : 150 % / 200 % DPI, navigation au clavier complète.

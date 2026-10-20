@@ -136,25 +136,40 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.table.itemSelectionChanged.connect(self.on_select)
         self.table.horizontalHeader().setSortIndicator(1, QtCore.Qt.AscendingOrder)  # tri par numéro T
         ll.addWidget(self.table)
-        btns = QtWidgets.QHBoxLayout()
-        for label, slot in (
-            (tr("New"), self.new_tool), (tr("Duplicate"), self.duplicate_tool), (tr("Delete"), self.delete_tool),
-            (tr("Favorite"), self.toggle_favorite), (tr("Bulk edit"), self.bulk_edit),
-        ):
-            b = QtWidgets.QPushButton(label)
+        # actions principales visibles (texte + icône), le reste dans deux menus : lisible à 1280 px
+        row1 = QtWidgets.QHBoxLayout()
+        for label, slot, icon_name in ((tr("New"), self.new_tool, "new-project"),
+                                       (tr("Duplicate"), self.duplicate_tool, "redo"),
+                                       (tr("Delete"), self.delete_tool, "delete")):
+            b = QtWidgets.QPushButton(theme.icon(icon_name), label)
+            if slot == self.delete_tool:
+                theme.set_role(b, "danger")
             b.clicked.connect(slot)
-            btns.addWidget(b)
-        ll.addLayout(btns)
-        btns2 = QtWidgets.QHBoxLayout()
-        for label, slot in (
-            (tr("Save library"), self.save_library), (tr("Import Fusion..."), self.import_fusion),
-            (tr("Export library..."), self.export_library), (tr("Import library..."), self.import_library),
-            (tr("Add missing starter tools"), self.add_starter_tools),
+            row1.addWidget(b)
+        ll.addLayout(row1)
+        row2 = QtWidgets.QHBoxLayout()
+        self.menus = {}
+        for key, label, icon_name, actions in (
+            ("tool", tr("More..."), "settings", ((tr("Favorite"), self.toggle_favorite),
+                                                 (tr("Bulk edit"), self.bulk_edit))),
+            ("library", tr("Library..."), "tool-library", (
+                (tr("Save library"), self.save_library), (tr("Import Fusion..."), self.import_fusion),
+                (tr("Export library..."), self.export_library), (tr("Import library..."), self.import_library),
+                (tr("Add missing starter tools"), self.add_starter_tools))),
         ):
-            b = QtWidgets.QPushButton(label)
-            b.clicked.connect(slot)
-            btns2.addWidget(b)
-        ll.addLayout(btns2)
+            btn = QtWidgets.QToolButton()
+            btn.setText(label)
+            btn.setIcon(theme.icon(icon_name))
+            btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+            btn.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+            menu = QtWidgets.QMenu(btn)
+            for text, slot in actions:
+                menu.addAction(text).triggered.connect(lambda _c=False, f=slot: f())
+            btn.setMenu(menu)
+            row2.addWidget(btn)
+            self.menus[key] = menu
+        ll.addLayout(row2)
         self.status = QtWidgets.QLabel()
         ll.addWidget(self.status)
         splitter.addWidget(left)
@@ -177,6 +192,8 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         rl.addWidget(show3d)
         splitter.addWidget(right)
         splitter.setSizes([420, 420, 280])
+        for index, factor in enumerate((3, 3, 2)):  # la table garde sa part quand la fenêtre rétrécit
+            splitter.setStretchFactor(index, factor)
 
     def _build_cutter_tab(self):
         w = QtWidgets.QWidget()
@@ -885,6 +902,7 @@ class ProjectPanel(QtWidgets.QWidget):
             status.setAlignment(QtCore.Qt.AlignCenter)
             text = QtWidgets.QLabel()
             text.setWordWrap(True)
+            text.setMinimumHeight(2 * text.fontMetrics().lineSpacing() + 4)  # libellé + détail sur deux lignes
             btn = QtWidgets.QPushButton(tr(button))
             btn.setIcon(theme.icon(_STEP_ICONS[key]))
             btn.clicked.connect(lambda _c=False, cmd=command: FreeCADGui.runCommand(cmd))

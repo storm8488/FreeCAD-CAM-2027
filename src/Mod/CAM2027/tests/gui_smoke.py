@@ -154,6 +154,18 @@ def run():
     log("screenshot view3d.png")
     QtWidgets.QApplication.processEvents()
     grab(mw, "main_window.png")
+    # taille minimale visée par la charte : 1280 x 800
+    geometry = mw.saveGeometry()
+    was_max = mw.isMaximized()
+    mw.showNormal()
+    mw.resize(1280, 800)
+    QtWidgets.QApplication.processEvents()
+    log("window at %dx%d" % (mw.width(), mw.height()))
+    grab(mw, "main_window_1280x800.png")
+    mw.restoreGeometry(geometry)
+    if was_max:
+        mw.showMaximized()
+    QtWidgets.QApplication.processEvents()
     # export dialog rendering (non modal grab)
     text, analysis, issues = proj.preview_gcode()
     log("gcode lines=%d issues=%s" % (analysis["lines"], [l for l, _m in issues]))

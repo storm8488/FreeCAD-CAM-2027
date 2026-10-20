@@ -677,5 +677,9 @@
   "Chuck length (mm)": "Longueur du mandrin (mm)",
   "Jaw count": "Nombre de mors",
   "Tailstock": "Contre-pointe",
-  "Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'.": "À renseigner avec la commande Profil machine : d'ici là, les contrôles d'export correspondants restent « non vérifiables »."
+  "Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'.": "À renseigner avec la commande Profil machine : d'ici là, les contrôles d'export correspondants restent « non vérifiables ».",
+
+  "_section_menus": "ajouts",
+  "More...": "Plus...",
+  "Library...": "Bibliothèque..."
 }
