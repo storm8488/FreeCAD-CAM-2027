@@ -49,6 +49,16 @@ Le lanceur :
    sur ce profil. Votre installation et vos préférences FreeCAD habituelles ne sont pas
    touchées.
 
+À la première activation de l'atelier dans ce profil (et seulement quand FreeCAD a été lancé
+par `cam2027.cmd`, variable `CAM2027_HOME`), le **profil « FAO seule »** est appliqué
+(`cam2027/gui/prefs.py`) : thème sombre « FreeCAD Dark » (pack de préférences livré avec
+FreeCAD), icônes de barre d'outils en 32 px, atelier CAM2027 au démarrage, page de démarrage
+fermée, et tous les autres ateliers FreeCAD masqués dans le sélecteur (préférence
+`Workbenches/Disabled`). Pour retrouver les autres ateliers : Édition > Préférences >
+Ateliers (ils restent installés), ou mettre le paramètre `BaseApp/Preferences/CAM2027/CamOnly`
+à faux. Le profil n'est réappliqué que si sa version change (`ProfileVersion`), vos réglages
+ultérieurs sont conservés.
+
 Raccourci Bureau + menu Démarrer (par utilisateur) :
 
 ```powershell

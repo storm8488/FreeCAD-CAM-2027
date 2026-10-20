@@ -58,6 +58,7 @@ class _Base(object):
 
 
 class NewProject(_Base):
+    icon = "cam2027-new-project.svg"
     text = "New project"
     tooltip = "Create a CAM2027 project document with a frozen copy of the tool library"
 
@@ -74,6 +75,7 @@ class NewProject(_Base):
 
 
 class ImportModel(_Base):
+    icon = "cam2027-import.svg"
     text = "Import model / drawing"
     tooltip = "Import STEP, STL, OBJ, SVG or DXF into the project"
 
@@ -97,6 +99,7 @@ class ImportModel(_Base):
 
 
 class ToolLibrary(_Base):
+    icon = "cam2027-tool-library.svg"
     text = "Tool library"
     tooltip = "Tools, holders, assemblies and cutting presets"
 
@@ -105,6 +108,7 @@ class ToolLibrary(_Base):
 
 
 class StockFixture(_Base):
+    icon = "cam2027-stock.svg"
     text = "Stock & fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
 
@@ -172,6 +176,7 @@ class StockFixture(_Base):
 
 
 class AddOperation(_Base):
+    icon = "cam2027-add-operation.svg"
     text = "Add operation"
     tooltip = "Add a machining operation using a tool assembly and a cutting preset"
 
@@ -283,6 +288,7 @@ class AddOperation(_Base):
 
 
 class Compute(_Base):
+    icon = "cam2027-compute.svg"
     text = "Recompute toolpaths"
     tooltip = "Recompute every operation and refresh the summary"
 
@@ -298,6 +304,7 @@ class Compute(_Base):
 
 
 class Export(_Base):
+    icon = "cam2027-export.svg"
     text = "Export G-code"
     tooltip = "Post-process, check and write the G-code and the setup sheet"
 
@@ -400,6 +407,7 @@ def _format_checks(analysis, issues):
 
 
 class Machine(_Base):
+    icon = "cam2027-machine.svg"
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
 
@@ -457,6 +465,7 @@ class Machine(_Base):
 
 
 class About(_Base):
+    icon = "cam2027-about.svg"
     text = "About CAM2027"
     tooltip = "Version, environment and limits"
 

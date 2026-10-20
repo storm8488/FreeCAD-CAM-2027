@@ -34,8 +34,17 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         FreeCAD.Console.PrintLog("CAM2027 workbench initialised\n")
 
     def Activated(self):
-        from cam2027.gui import panels
+        import FreeCAD
+        from cam2027.gui import panels, prefs
 
+        try:
+            done = prefs.apply_cam_only_profile()
+        except Exception as exc:  # jamais bloquer l'atelier pour une préférence
+            FreeCAD.Console.PrintWarning("CAM2027: CAM-only profile not applied: %s\n" % exc)
+        else:
+            if done:
+                FreeCAD.Console.PrintLog("CAM2027: CAM-only profile applied (%d theme keys, %d workbenches hidden)\n"
+                                         % (done["dark_pack"], len(done["hidden"])))
         panels.ensure_project_panel()
 
     def Deactivated(self):

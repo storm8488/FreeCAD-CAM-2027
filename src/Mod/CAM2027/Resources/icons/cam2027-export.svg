@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#1f3a5f"/>
+  <path d="M16 10h22l10 10v24H16z" fill="#c9d3e0"/>
+  <path d="M38 10v10h10" fill="#9fb0c6"/>
+  <text x="20" y="38" font-family="Arial" font-size="13" font-weight="bold" fill="#1f3a5f">NC</text>
+  <path d="M26 52h26" stroke="#5ec8a0" stroke-width="4" stroke-linecap="round"/>
+  <path d="M44 44l8 8-8 8" fill="none" stroke="#5ec8a0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

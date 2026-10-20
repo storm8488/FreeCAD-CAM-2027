@@ -1,5 +1,11 @@
 # CAM2027 — Historique
 
+## Non publié
+
+- Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
+  icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
+- Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).
+
 ## 0.1.3 — 2026-10-20
 
 - Stratégies `threadmill` (`Path.Op.ThreadMilling`, nom de filet résolu depuis les tables

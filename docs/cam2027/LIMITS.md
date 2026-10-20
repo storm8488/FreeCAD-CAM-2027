@@ -86,7 +86,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Interface
 
-- Thèmes clair/sombre et HiDPI : hérités de FreeCAD/Qt (non testés spécifiquement).
+- Thème sombre = pack « FreeCAD Dark » de FreeCAD, appliqué au profil du lanceur seulement
+  (vérifié visuellement sur 1.1.4 ; 1.0.2 non vérifié). HiDPI : hérité de FreeCAD/Qt (non
+  testé). Les barres d'outils FreeCAD standard (fichier, macro, structure) restent visibles.
+- « FAO seule » = ateliers masqués dans le sélecteur, pas supprimés : les menus FreeCAD
+  génériques (Édition, Affichage, Outils, Macro) restent ceux de FreeCAD.
 - Pas de recherche de commandes propre (celle de FreeCAD, « What's This / Ctrl+F » selon
   version, reste disponible), pas de sauvegarde de récupération propre (autosave FreeCAD).
 - Annulation/rétablissement : ceux du document FreeCAD ; les actions de la bibliothèque
