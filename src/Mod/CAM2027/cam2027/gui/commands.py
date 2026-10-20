@@ -704,9 +704,19 @@ COMMANDS = [
     ("CAM2027_Theme", Theme),
     ("CAM2027_About", About),
 ]
-#: barre d'outils = commandes de travail ; À propos et thème restent dans le menu
-TOOLBAR = [name for name, _cls in COMMANDS if name not in ("CAM2027_About", "CAM2027_Theme")]
+#: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
+TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
+           "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "Separator", "CAM2027_Export",
+           "Separator", "CAM2027_Machine"]
 MENU = [name for name, _cls in COMMANDS]
+#: menus par étape du métier (titres anglais traduits par tr())
+STAGE_MENUS = (
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
+                 "CAM2027_Machine"]),
+    ("Machining", ["CAM2027_AddOperation", "CAM2027_Compute"]),
+    ("Simulate", ["CAM2027_Simulate"]),
+    ("Export", ["CAM2027_Export"]),
+)
 
 _registered = False
 

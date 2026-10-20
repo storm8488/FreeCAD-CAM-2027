@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **Interface propre au logiciel (étape 2)** : dans `CAM2027.exe`, menus réduits au métier
+  (Fichier, Édition, Affichage, Préparer, Usiner, Simuler, Exporter, Aide) ; menus Outils, Macro,
+  Fenêtres, commandes de modélisation et liens FreeCAD retirés ; barres Presse-papiers, Macro,
+  Structure, Aide, Vues individuelles retirées ; barre CAM2027 groupée par étape. Manipulateur
+  d'ateliers FreeCAD, aucun fichier FreeCAD modifié. Menus d'étape aussi en atelier.
 - **Logiciel autonome CAM2027 (étape 1)** : `scripts/build-distribution.ps1` fabrique
   `%USERPROFILE%\CAM2027` depuis FreeCAD 1.1.4 portable sans les modules inutiles (20 modules et
   leurs binaires supprimés), `branding.xml` (nom, titre, version, icône, écran de démarrage, dossier

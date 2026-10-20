@@ -738,5 +738,7 @@
   "A axis positioning (automatic)": "Positionnement de l'axe A (automatique)",
   "Rebuilt automatically in front of each change of A angle.": "Recréé automatiquement avant chaque changement d'angle A.",
   "A axis positionings are managed automatically: edit, move or delete the operations instead.": "Les positionnements de l'axe A sont gérés automatiquement : modifiez, déplacez ou supprimez plutôt les opérations.",
-  "Index A (deg)": "Index A (deg)"
+  "Index A (deg)": "Index A (deg)",
+  "Prepare": "Préparer",
+  "Machining": "Usiner"
 }

@@ -118,3 +118,83 @@ def hide_workbench_selector():
                 menu.removeAction(action)  # Affichage > Sélecteur d'atelier
                 hidden += 1
     return hidden
+
+
+# -- menus et barres d'outils du logiciel (WorkbenchManipulator de FreeCAD) -------------------------
+
+#: commandes FreeCAD retirées des menus (modélisation, macros, outils de développement, liens FreeCAD)
+REMOVED_MENU_ITEMS = (
+    # Fichier : « Nouveau document » remplacé par « Nouveau projet », import / export génériques remplacés
+    "Std_New", "Std_Revert", "Std_Import", "Std_Export", "Std_MergeProjects", "Std_ProjectInfo", "Std_Print",
+    "Std_PrintPreview", "Std_PrintPdf",
+    # Édition : outils de modélisation et de sélection avancée
+    "Std_Cut", "Std_Copy", "Std_Paste", "Std_DuplicateSelection", "Std_BoxSelection", "Std_BoxElementSelection",
+    "Std_SelectAll", "Std_Delete", "Std_SendToPythonConsole", "Std_Placement", "Std_TransformManip",
+    "Std_Alignment", "Std_Edit", "Std_Properties", "Std_UserEditMode",
+    # Affichage : outils de modélisation / démonstration
+    "Std_ViewCreate", "Std_FreezeViews", "Std_SelBoundingBox", "Std_ViewDockUndockFullscreen",
+    "Std_ToggleClipPlane", "Std_TextureMapping", "Std_ViewVR", "Std_ToggleNavigation", "Std_RandomColor",
+    "Std_Workbench", "Std_LinkSelectActions", "Std_TreeViewActions", "&Stereo",
+    # Aide : liens vers FreeCAD (le logiciel n'est pas une version officielle de FreeCAD)
+    "Std_FreeCADUserHub", "Std_FreeCADForum", "Std_ReportBug", "Std_DevHandbook", "Std_PythonHelp",
+    "Std_FreeCADWebsite", "Std_FreeCADDonation", "Std_OnlineHelp", "Std_About", "Std_WhatsThis",
+    "Std_RestartInSafeMode",
+    # menus entiers
+    "&Tools", "&Macro", "&Windows",
+)
+
+#: barres d'outils FreeCAD retirées
+REMOVED_TOOLBARS = ("Clipboard", "Macro", "Structure", "Help", "Workbench", "Individual Views")
+
+
+class CamOnlyManipulator(object):
+    """Menus / barres d'outils réduits au métier FAO (réappliqué par FreeCAD à chaque reconstruction)."""
+
+    def modifyMenuBar(self):
+        # ajouts d'abord : leurs repères (Std_WhatsThis…) sont retirés ensuite
+        changes = [
+            {"insert": "CAM2027_NewProject", "menuItem": "Std_Open"},
+            {"insert": "CAM2027_ImportModel", "menuItem": "Std_RecentFiles", "after": ""},
+            {"append": "CAM2027_Theme", "menuItem": "Std_DrawStyle"},
+            {"append": "CAM2027_About", "menuItem": "Std_WhatsThis"},
+        ]
+        changes += [{"remove": name} for name in REMOVED_MENU_ITEMS]
+        return changes
+
+    def modifyToolBars(self):
+        changes = [{"remove": name} for name in REMOVED_TOOLBARS]
+        changes += [
+            {"remove": "Std_New"},  # « Nouveau projet » est déjà en tête de la barre CAM2027
+            {"remove": "Std_TreeViewActions"},
+            {"remove": "Std_Measure"},
+        ]
+        return changes
+
+
+_manipulator = None
+
+
+def install_manipulator():
+    """Enregistre le manipulateur (une fois) ; FreeCAD l'applique à la construction des menus."""
+    import FreeCADGui
+
+    global _manipulator
+    if _manipulator is None:
+        _manipulator = CamOnlyManipulator()
+        FreeCADGui.addWorkbenchManipulator(_manipulator)
+    return _manipulator
+
+
+def fix_menu_titles(titles):
+    """Rétablit les accents des titres de menu (FreeCAD relit le titre UTF-8 en Latin-1 : « PrÃ©parer »)."""
+    import FreeCADGui
+
+    wanted = {t.encode("utf-8").decode("latin-1"): t for t in titles if t != t.encode("utf-8").decode("latin-1")}
+    if not wanted:
+        return 0
+    fixed = 0
+    for action in FreeCADGui.getMainWindow().menuBar().actions():
+        if action.text() in wanted:
+            action.setText(wanted[action.text()])
+            fixed += 1
+    return fixed

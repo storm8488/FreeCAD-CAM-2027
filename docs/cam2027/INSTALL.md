@@ -89,9 +89,10 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 
 ## Parcours dans l'interface
 
-Barre d'outils **CAM2027** : Nouveau projet → Importer une pièce → Bibliothèque d'outils →
-Brut et montage → Ajouter une opération → Recalculer → Exporter le G-code → Profil machine →
-À propos.
+Barre d'outils **CAM2027**, groupée par étape : Nouveau projet, Importer une pièce, Bibliothèque
+d'outils, Brut et montage | Ajouter une opération, Recalculer | Simuler | Exporter le G-code |
+Profil machine. Les mêmes commandes sont rangées dans les menus **Préparer**, **Usiner**,
+**Simuler** et **Exporter** ; À propos est dans Aide, le thème dans Affichage.
 
 1. **Nouveau projet** : crée un document avec une copie figée de la bibliothèque.
 2. **Importer** : STEP/STL/OBJ/SVG/DXF.

@@ -28,9 +28,13 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         import FreeCAD
         from cam2027.gui import commands
 
+        from cam2027.i18n import tr
+
         commands.register()
         self.appendToolbar("CAM2027", commands.TOOLBAR)
-        self.appendMenu("CAM2027", commands.MENU)
+        # menus par étape du métier : Préparer / Usiner / Simuler / Exporter
+        for title, names in commands.STAGE_MENUS:
+            self.appendMenu(tr(title), names)
         FreeCAD.Console.PrintLog("CAM2027 workbench initialised\n")
 
     def Activated(self):
@@ -60,6 +64,17 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         except Exception as exc:
             FreeCAD.Console.PrintWarning("CAM2027: scene colours not applied: %s\n" % exc)
         panels.ensure_project_panel()
+        self._fix_menu_titles()
+
+    @staticmethod
+    def _fix_menu_titles():
+        from cam2027.gui import commands, standalone
+        from cam2027.i18n import tr
+        from PySide import QtCore
+
+        titles = [tr(title) for title, _names in commands.STAGE_MENUS]
+        # les menus de l'atelier sont construits juste après Activated
+        QtCore.QTimer.singleShot(0, lambda: standalone.fix_menu_titles(titles))
 
     def Deactivated(self):
         pass
@@ -69,3 +84,14 @@ class CAM2027Workbench(FreeCADGui.Workbench):
 
 
 FreeCADGui.addWorkbench(CAM2027Workbench())
+
+
+def _cam2027_standalone_menus():
+    # logiciel autonome : menus / barres FreeCAD réduits au métier, avant la première construction
+    from cam2027.gui import standalone
+
+    if standalone.is_standalone():
+        standalone.install_manipulator()
+
+
+_cam2027_standalone_menus()
