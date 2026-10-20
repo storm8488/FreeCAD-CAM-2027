@@ -34,7 +34,18 @@ tar -xf %LOCALAPPDATA%\CAM2027\downloads\FreeCAD_1.1.4-Windows-x86_64-py311.7z -
   Si FreeCAD n'est pas dans `C:\Program Files\FreeCAD 1.0\bin`, définir la variable
   d'environnement `FREECAD_BIN` vers le dossier `bin`.
 
-## Lancer
+## Logiciel autonome CAM2027 (recommandé)
+
+```bat
+powershell -ExecutionPolicy Bypass -File scriptsuild-distribution.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
+```
+
+Fabrique le logiciel CAM2027 séparé dans `%USERPROFILE%\CAM2027` (sans les ateliers de modélisation,
+nom et icône CAM2027, réglages dans `%APPDATA%\CAM2027`) et crée les raccourcis vers `CAM2027.exe`.
+Détails : [DISTRIBUTION.md](DISTRIBUTION.md).
+
+## Lanceur de développement (atelier dans FreeCAD complet)
 
 ```bat
 scripts\cam2027.cmd

@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Logiciel autonome CAM2027 (étape 1)** : `scripts/build-distribution.ps1` fabrique
+  `%USERPROFILE%\CAM2027` depuis FreeCAD 1.1.4 portable sans les modules inutiles (20 modules et
+  leurs binaires supprimés), `branding.xml` (nom, titre, version, icône, écran de démarrage, dossier
+  de réglages `%APPDATA%\CAM2027`, réglages par défaut), `CAM2027.exe` / `CAM2027Cmd.exe`, icône
+  `.ico` générée, raccourcis vers le logiciel ; seul l'atelier CAM2027 reste visible. 50 tests et
+  test graphique verts dans la distribution. Voir `docs/cam2027/DISTRIBUTION.md`.
 - **4e axe indexé (3+1)** : profil machine A (sens positif, centre Y/Z, plage), brut rond d'axe X,
   champ « Index A » à l'ajout d'une opération et dans l'éditeur, copie exacte de la pièce tournée
   par angle, positionnements `G0 A` recréés automatiquement, contrôles d'export (A pendant une

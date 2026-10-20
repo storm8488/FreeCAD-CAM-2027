@@ -544,6 +544,11 @@ class Simulate(_Base):
         if not proj.has_job or not proj.operations():
             _warn(tr("No operation to simulate."))
             return
+        for module in ("Path.Main.Gui.SimulatorGL", "Path.Main.Gui.Simulator"):  # l'atelier CAM peut être absent
+            try:
+                __import__(module)
+            except Exception:
+                pass
         commands = FreeCADGui.listCommands()
         name = next((c for c in ("CAM_SimulatorGL", "CAM_Simulator") if c in commands), None)
         if name is None:

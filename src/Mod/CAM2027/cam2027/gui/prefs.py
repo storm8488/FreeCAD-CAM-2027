@@ -31,7 +31,12 @@ _SETTERS = {
 
 
 def launched_by_cam2027():
-    return bool(os.environ.get("CAM2027_HOME"))
+    """Vrai sous le lanceur (``CAM2027_HOME``) ou dans le logiciel autonome CAM2027 (branding)."""
+    if os.environ.get("CAM2027_HOME"):
+        return True
+    from .standalone import is_standalone
+
+    return is_standalone()
 
 
 def apply_preference_pack(path, root="User parameter:"):

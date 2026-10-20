@@ -35,7 +35,14 @@ class CAM2027Workbench(FreeCADGui.Workbench):
 
     def Activated(self):
         import FreeCAD
-        from cam2027.gui import panels, prefs
+        from cam2027.gui import panels, prefs, standalone
+
+        if standalone.is_standalone() and not getattr(self.__class__, "_stripped", False):
+            standalone.load_gui_modules()
+            removed = standalone.strip_workbenches()
+            self.__class__._stripped = True
+            standalone.apply_title()
+            FreeCAD.Console.PrintLog("CAM2027: standalone, %d workbenches removed\n" % len(removed))
 
         done = None
         try:

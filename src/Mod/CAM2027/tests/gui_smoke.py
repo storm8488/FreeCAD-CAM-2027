@@ -46,6 +46,9 @@ def grab(widget, name):
 def run():
     FreeCADGui.activateWorkbench("CAM2027Workbench")
     log("workbench activated")
+    log("application: %s, window title: %s" % (FreeCAD.ConfigGet("ExeName"), FreeCADGui.getMainWindow().windowTitle()))
+    log("workbenches available: %s" % sorted(FreeCADGui.listWorkbenches()))
+    log("user data dir: %s" % FreeCAD.getUserAppDataDir())
     from cam2027.gui import state, panels, commands
     from cam2027.project.project import Project
     from tests.test_pipeline import make_part
@@ -66,6 +69,7 @@ def run():
                        params={"FinalDepth": 0.0, "StepDown": 5.0})
     results = proj.compute()
     log("operations: %s" % [(r["name"], r["commands"]) for r in results])
+    log("window title with a project open: %s" % mw.windowTitle())
     FreeCADGui.SendMsgToActiveView("ViewFit")
     FreeCADGui.activeDocument().activeView().viewIsometric()
     QtWidgets.QApplication.processEvents()
