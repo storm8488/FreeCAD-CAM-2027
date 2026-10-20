@@ -37,6 +37,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         import FreeCAD
         from cam2027.gui import panels, prefs
 
+        done = None
         try:
             done = prefs.apply_cam_only_profile()
         except Exception as exc:  # jamais bloquer l'atelier pour une préférence
@@ -45,6 +46,11 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             if done:
                 FreeCAD.Console.PrintLog("CAM2027: CAM-only profile applied (%d theme keys, %d workbenches hidden)\n"
                                          % (done["dark_pack"], len(done["hidden"])))
+        try:
+            # après le pack « FreeCAD Dark », qui contient ses propres couleurs de parcours
+            prefs.apply_scene_colors(force=bool(done))
+        except Exception as exc:
+            FreeCAD.Console.PrintWarning("CAM2027: scene colours not applied: %s\n" % exc)
         panels.ensure_project_panel()
 
     def Deactivated(self):

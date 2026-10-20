@@ -59,6 +59,26 @@ class TestTheme(unittest.TestCase):
             self.assertIn('QPushButton[role="primary"]', qss)
             self.assertEqual(qss.count("{"), qss.count("}"))
 
+    def test_scene_colors(self):
+        """Couleurs de parcours de la charte converties au format RGBA des préférences FreeCAD."""
+        from cam2027.gui import prefs
+
+        self.assertEqual(prefs._rgba("#215ED6"), ((0x21 * 256 + 0x5E) * 256 + 0xD6) * 256 + 255)
+        for th in ("dark", "light"):
+            colors = prefs.scene_colors(th)
+            self.assertEqual(set(colors), {"DefaultNormalPathColor", "DefaultRapidPathColor", "DefaultPathMarkerColor",
+                                           "DefaultHighlightPathColor", "DefaultBBoxSelectionColor",
+                                           "DefaultBBoxNormalColor"})
+            self.assertNotEqual(colors["DefaultNormalPathColor"], colors["DefaultRapidPathColor"])
+        # hors lanceur CAM2027 : rien n'est écrit dans les préférences FreeCAD
+        import os
+        saved = os.environ.pop("CAM2027_HOME", None)
+        try:
+            self.assertIsNone(prefs.apply_scene_colors("dark"))
+        finally:
+            if saved is not None:
+                os.environ["CAM2027_HOME"] = saved
+
     def test_resolve_preference(self):
         self.assertEqual(theme.resolve("dark"), "dark")
         self.assertEqual(theme.resolve("light"), "light")

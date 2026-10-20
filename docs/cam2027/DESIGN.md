@@ -23,8 +23,12 @@ FreeCAD et son atelier CAM.
   non copiés. L'icône d'atelier reste `Resources/icons/CAM2027.svg`. Pas de `.ico`.
 - Les barres d'outils et menus de FreeCAD gardent le thème FreeCAD (profil « FAO seule » =
   « FreeCAD Dark ») ; seule la partie CAM2027 suit les jetons.
-- Couleurs de scène 3D (coupe bleue continue, rapide ambre en tirets, plongée violette en
-  pointillés) : non appliquées, le rendu des parcours reste celui de FreeCAD.
+- Couleurs de scène 3D : **appliquées** au profil du lanceur (préférences FreeCAD CAM
+  `DefaultNormalPathColor` = coupe, `DefaultRapidPathColor` = rapide, marqueur = plongée,
+  sélection, boîte du brut ; épaisseur 2), après le pack « FreeCAD Dark » qui contient ses
+  propres couleurs ; versionnées à part (`SceneVersion`). Valent pour les nouveaux parcours.
+  **Motifs** (rapide en tirets, plongée en pointillés) : non disponibles, FreeCAD trace
+  chaque famille d'une seule couleur en trait continu.
 - Navigation Préparer / Usiner / Simuler / Exporter, barre d'état dédiée, panneaux mémorisés :
   partiellement couverts par le panneau de flux de travail (4 étapes) ; pas de refonte de la
   fenêtre FreeCAD.

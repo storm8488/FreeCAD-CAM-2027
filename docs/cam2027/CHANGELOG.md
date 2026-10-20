@@ -20,6 +20,8 @@
 - Données machine à renseigner affichées avec des libellés traduits (`machine.FIELD_LABELS`, partagés
   avec le dialogue Profil machine) ; À propos : mention « fork indépendant basé sur FreeCAD ».
   Test `test_machine_field_labels` (47 tests).
+- Couleurs de parcours de la charte (coupe cobalt, rapide ambre, plongée, sélection) dans le
+  profil du lanceur, appliquées après le pack sombre ; test `test_scene_colors` (48 tests).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

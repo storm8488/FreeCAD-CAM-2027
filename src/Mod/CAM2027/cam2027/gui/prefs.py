@@ -71,6 +71,49 @@ def hide_other_workbenches(keep=(WORKBENCH,)):
     return names
 
 
+SCENE_VERSION = 1
+
+
+def _rgba(hex_color, alpha=255):
+    """« #RRGGBB » -> entier RGBA non signé des préférences FreeCAD."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return (((r * 256 + g) * 256 + b) * 256) + alpha
+
+
+def scene_colors(theme_name):
+    """Préférences FreeCAD CAM -> couleur de la charte « Atelier » (coupe, rapide, repères, sélection)."""
+    from . import theme
+
+    scene = theme.tokens()["scene"][theme_name]
+    return {
+        "DefaultNormalPathColor": _rgba(scene["cut"]),
+        "DefaultRapidPathColor": _rgba(scene["rapid"]),
+        "DefaultPathMarkerColor": _rgba(scene["plunge"]),
+        "DefaultHighlightPathColor": _rgba(scene["selection"]),
+        "DefaultBBoxSelectionColor": _rgba(scene["selection"]),
+        "DefaultBBoxNormalColor": _rgba(scene["stockEdge"]),
+    }
+
+
+def apply_scene_colors(theme_name=None, force=False):
+    """Couleurs de parcours de la charte pour les nouveaux parcours (profil du lanceur seulement)."""
+    if not force and not launched_by_cam2027():
+        return None
+    grp = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/CAM2027")
+    if not force and grp.GetInt("SceneVersion", 0) >= SCENE_VERSION:
+        return None
+    from . import theme
+
+    colors = scene_colors(theme.resolve(theme_name))
+    cam = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/CAM")
+    for key, value in colors.items():
+        cam.SetUnsigned(key, value)
+    cam.SetInt("DefaultPathLineWidth", int(theme.tokens()["scene"]["referenceLineWidth"]))
+    grp.SetInt("SceneVersion", SCENE_VERSION)
+    return colors
+
+
 def apply_cam_only_profile(force=False):
     """Applique le profil FAO seule ; retourne un dict décrivant ce qui a été fait (ou ``None``)."""
     if not force and not launched_by_cam2027():

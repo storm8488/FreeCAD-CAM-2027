@@ -532,6 +532,9 @@ class Theme(_Base):
         nxt = order[(order.index(theme.preference()) + 1) % len(order)]
         theme.set_preference(nxt)
         panels.restyle_all()
+        from . import prefs
+
+        prefs.apply_scene_colors(nxt, force=prefs.launched_by_cam2027())  # nouveaux parcours
         FreeCAD.Console.PrintMessage(tr("CAM2027 theme: {name}", name=tr(nxt)) + "\n")
 
 
