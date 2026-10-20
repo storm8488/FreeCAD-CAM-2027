@@ -56,6 +56,23 @@ class RotaryAxis(object):
         return cls(**d)
 
 
+#: libellés anglais (traduits par l'interface) des champs machine, y compris ceux de l'axe A
+FIELD_LABELS = {
+    "name": "Name", "vendor": "Vendor", "model": "Model", "controller": "Controller",
+    "post_processor": "Post processor", "post_processor_args": "Post arguments",
+    "travel_x_mm": "Travel X (mm)", "travel_y_mm": "Travel Y (mm)", "travel_z_mm": "Travel Z (mm)",
+    "max_feed_xy_mm_min": "Max feed XY (mm/min)", "max_feed_z_mm_min": "Max feed Z (mm/min)",
+    "spindle_min_rpm": "Spindle min (rpm)", "spindle_max_rpm": "Spindle max (rpm)",
+    "spindle_power_w": "Spindle power (W)", "collet": "Collet", "notes": "Notes",
+    "tool_change": "Tool change", "coolant_options": "Coolant options", "feed_mode_rotary": "Rotary feed mode (G93/G94)",
+    "rotary.positive_direction": "A axis positive direction", "rotary.center_offset_mm": "A axis centre offset (mm)",
+    "rotary.min_deg": "A axis min (deg)", "rotary.max_deg": "A axis max (deg)",
+    "rotary.max_feed_deg_min": "A axis max feed (deg/min)", "rotary.angle_mode": "A axis angle mode",
+    "rotary.chuck_diameter_mm": "Chuck diameter (mm)", "rotary.chuck_length_mm": "Chuck length (mm)",
+    "rotary.jaw_count": "Jaw count", "rotary.tailstock": "Tailstock",
+}
+
+
 class MachineProfile(object):
     FIELDS = (
         "name",

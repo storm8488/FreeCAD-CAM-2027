@@ -798,6 +798,21 @@ class TestPipeline(unittest.TestCase):
         self.assertIn(("Operation: Contour", "To recompute", "warning", {}), rows)
         proj.close()
 
+    def test_machine_field_labels(self):
+        """Chaque champ machine (et de l'axe A) qui peut manquer a un libellé traduit."""
+        import json
+        from cam2027 import i18n
+        from cam2027.project.machine import FIELD_LABELS, RotaryAxis
+
+        with open(os.path.join(os.path.dirname(i18n.__file__), "i18n", "fr.json"), "r", encoding="utf-8") as fp:
+            catalog = json.load(fp)
+        fields = list(MachineProfile.FIELDS) + ["rotary.%s" % f for f in RotaryAxis.FIELDS if f not in ("name", "about", "present")]
+        for f in fields:
+            self.assertIn(f, FIELD_LABELS, f)
+            self.assertIn(FIELD_LABELS[f], catalog, f)
+        m = MachineProfile("x")
+        self.assertTrue(all(f in FIELD_LABELS for f in m.unknown_fields()))
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

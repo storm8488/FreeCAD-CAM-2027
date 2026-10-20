@@ -552,12 +552,12 @@ class Machine(_Base):
         dlg.setWindowTitle(tr("Machine profile"))
         form = QtWidgets.QFormLayout(dlg)
         widgets = {}
-        for key, label in (("name", "Name"), ("vendor", "Vendor"), ("model", "Model"), ("controller", "Controller"),
-                           ("post_processor", "Post processor"), ("post_processor_args", "Post arguments"),
-                           ("travel_x_mm", "Travel X (mm)"), ("travel_y_mm", "Travel Y (mm)"), ("travel_z_mm", "Travel Z (mm)"),
-                           ("max_feed_xy_mm_min", "Max feed XY (mm/min)"), ("max_feed_z_mm_min", "Max feed Z (mm/min)"),
-                           ("spindle_min_rpm", "Spindle min (rpm)"), ("spindle_max_rpm", "Spindle max (rpm)"),
-                           ("spindle_power_w", "Spindle power (W)"), ("collet", "Collet"), ("notes", "Notes")):
+        from ..project.machine import FIELD_LABELS
+
+        for key in ("name", "vendor", "model", "controller", "post_processor", "post_processor_args", "travel_x_mm",
+                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "spindle_min_rpm",
+                    "spindle_max_rpm", "spindle_power_w", "collet", "notes"):
+            label = FIELD_LABELS[key]
             w = QtWidgets.QLineEdit("" if getattr(m, key) is None else str(getattr(m, key)))
             w.setPlaceholderText(tr("to fill in"))
             form.addRow(tr(label), w)

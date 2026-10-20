@@ -1049,7 +1049,11 @@ class ProjectPanel(QtWidgets.QWidget):
         else:
             self._set_step("export", False, (proj.job.PostProcessor if proj.has_job else "") or "")
         missing = proj.machine.unknown_fields()
-        self.steps.setText(tr("Machine data to fill in: {fields}", fields=", ".join(missing)) if missing else "")
+        from ..project.machine import FIELD_LABELS
+
+        self.steps.setText(tr("Machine data to fill in: {fields}",
+                              fields=", ".join(tr(FIELD_LABELS.get(f, f)) for f in missing)) if missing else "")
+        self.steps.setToolTip(tr("Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'."))
         self._mark_next_step()
         if pending:
             # calcul périmé : l'action principale devient « Recalculer »

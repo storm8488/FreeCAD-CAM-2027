@@ -17,6 +17,9 @@
 - Export : onglet « Récapitulatif avant export » (machine, postprocesseur, unités, repères, axes,
   état de chaque opération, bilan des contrôles, validation machine « non faite »), bouton
   principal « Exporter le G-code ». Test `test_export_summary` (46 tests).
+- Données machine à renseigner affichées avec des libellés traduits (`machine.FIELD_LABELS`, partagés
+  avec le dialogue Profil machine) ; À propos : mention « fork indépendant basé sur FreeCAD ».
+  Test `test_machine_field_labels` (47 tests).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

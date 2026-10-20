@@ -661,5 +661,21 @@
 
   "_section_about": "ajouts",
   "Independent fork based on FreeCAD and its CAM workbench (LGPL-2.1-or-later). Not an official FreeCAD release.": "Fork indépendant basé sur FreeCAD et son atelier CAM (LGPL-2.1 ou ultérieure). Ce n'est pas une version officielle de FreeCAD.",
-  "Not available yet: 3D surfacing in this workbench, 4th axis toolpaths, collision checks. Simulation uses the FreeCAD CAM simulator.": "Pas encore disponible : surfaçage 3D dans cet atelier, parcours 4e axe, contrôle de collision. La simulation utilise le simulateur CAM de FreeCAD."
+  "Not available yet: 3D surfacing in this workbench, 4th axis toolpaths, collision checks. Simulation uses the FreeCAD CAM simulator.": "Pas encore disponible : surfaçage 3D dans cet atelier, parcours 4e axe, contrôle de collision. La simulation utilise le simulateur CAM de FreeCAD.",
+
+  "_section_machine": "ajouts",
+  "Tool change": "Changement d'outil",
+  "Coolant options": "Arrosages disponibles",
+  "Rotary feed mode (G93/G94)": "Mode d'avance rotatif (G93/G94)",
+  "A axis positive direction": "Sens positif de l'axe A",
+  "A axis centre offset (mm)": "Décalage du centre de l'axe A (mm)",
+  "A axis min (deg)": "Axe A min (deg)",
+  "A axis max (deg)": "Axe A max (deg)",
+  "A axis max feed (deg/min)": "Avance max axe A (deg/min)",
+  "A axis angle mode": "Mode d'angle de l'axe A",
+  "Chuck diameter (mm)": "Diamètre du mandrin (mm)",
+  "Chuck length (mm)": "Longueur du mandrin (mm)",
+  "Jaw count": "Nombre de mors",
+  "Tailstock": "Contre-pointe",
+  "Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'.": "À renseigner avec la commande Profil machine : d'ici là, les contrôles d'export correspondants restent « non vérifiables »."
 }
