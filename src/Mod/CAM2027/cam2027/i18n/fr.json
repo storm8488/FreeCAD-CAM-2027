@@ -802,5 +802,6 @@
   "clamp": "bride",
   "rapid into the material": "rapide dans la matière",
   "COLLISION: {what} - {op}, command {n}, tip at X {x} Y {y} Z {z}": "COLLISION : {what} - {op}, commande {n}, pointe en X {x} Y {y} Z {z}",
-  "Not checked: vertical walls and undercuts (height map), A axis operations.": "Non contrôlé : parois verticales et contre-dépouilles (carte de hauteur), opérations sur l'axe A."
+  "Not checked: vertical walls and undercuts (height map), A axis operations.": "Non contrôlé : parois verticales et contre-dépouilles (carte de hauteur), opérations sur l'axe A.",
+  "V-carve sharp corners (limited depth)": "Angles vifs du V-carving (profondeur limitée)"
 }

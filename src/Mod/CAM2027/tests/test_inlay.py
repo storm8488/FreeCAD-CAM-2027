@@ -35,7 +35,7 @@ def at(zmap, x, y):
     return float(zmap.top[i, j]), float(zmap.xs[i]), float(zmap.ys[j])
 
 
-class TestFlatDepth(unittest.TestCase):
+class _SheetCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="cam2027-inlay-")
@@ -56,6 +56,8 @@ class TestFlatDepth(unittest.TestCase):
         rect = [v for v in vectors if len(v.Shape.Edges) == 4][0]
         return proj, lib, rect
 
+
+class TestFlatDepth(_SheetCase):
     def test_flat_depth_clearing(self):
         """Rectangle 40×20, V-bit 60° limité à 2 mm : fond plat à -2 au milieu, flancs en V jusqu'au bord."""
         proj, lib, rect = self._sheet_project("Flat depth")
@@ -66,9 +68,11 @@ class TestFlatDepth(unittest.TestCase):
         face = proj.drawing_clone(rect, face=True)
         vop, _r = proj.add_operation("vcarve", "Vcarve rect", vasm.id, vbit.presets[0].id, base=[(face, ["Face1"])],
                                      params={"FinalDepth": -2.0})
-        pocket, outline = proj.add_flat_clearing(vop, fasm.id, flat.presets[0].id, params={"StepDown": 1.0})
-        self.assertEqual([o.Label for o in proj.operations()][-3:],
-                         ["Vcarve rect - flat", "Vcarve rect - flat outline", "Vcarve rect"])
+        pocket, outline, corners = proj.add_flat_clearing(vop, fasm.id, flat.presets[0].id, params={"StepDown": 1.0})
+        self.assertEqual([o.Label for o in proj.operations()][-4:],
+                         ["Vcarve rect - flat", "Vcarve rect - flat outline", "Vcarve rect - sharp corners",
+                          "Vcarve rect"])
+        self.assertEqual(proj.registry[corners.Name]["params"], {"corners": 4})
         reach = 0.05 + 2.0 * math.tan(math.radians(30))
         self.assertAlmostEqual(proj.registry[pocket.Name]["flat_reach"], reach, places=6)
         results = {r["name"]: r for r in proj.compute()}
@@ -85,7 +89,7 @@ class TestFlatDepth(unittest.TestCase):
             self.assertLessEqual(p["X"], bb.XMax - reach - rf + 0.02, p)
             self.assertGreaterEqual(p["Y"], bb.YMin + reach + rf - 0.02, p)
             self.assertLessEqual(p["Y"], bb.YMax - reach - rf + 0.02, p)
-        zmap = simulate(proj, [pocket, outline, vop])
+        zmap = simulate(proj, [pocket, outline, corners, vop])
         # fond plat au milieu
         x0, y0 = bb.XMin, bb.YMin  # le SVG est importé Y retourné : points relatifs au rectangle
         for dx, dy in ((10, 10), (20, 5), (30, 15), (20, 10), (6, 4), (34, 16)):
@@ -100,6 +104,10 @@ class TestFlatDepth(unittest.TestCase):
             self.assertAlmostEqual(z, -(yc - bb.YMin) / tan30, delta=0.06, msg=("long side", d))
             z, xc, _y = at(zmap, bb.XMin + d, y0 + 10)
             self.assertAlmostEqual(z, -(xc - bb.XMin) / tan30, delta=0.06, msg=("short side", d))
+        # angles vifs : sur la diagonale, z = -d·k (d = distance aux deux bords), comme un V-carving non limité
+        for d in (0.4, 0.8, 1.0):
+            z, xc, yc = at(zmap, bb.XMin + d, bb.YMin + d)
+            self.assertAlmostEqual(z, -min(xc - bb.XMin, yc - bb.YMin) / tan30, delta=0.1, msg=("corner", d))
         # rien n'est taillé hors du dessin
         for x, y in ((x0 + 20, bb.YMin - 0.3), (bb.XMax + 0.3, y0 + 10)):
             self.assertGreaterEqual(at(zmap, x, y)[0], -0.02, (x, y))
@@ -108,6 +116,50 @@ class TestFlatDepth(unittest.TestCase):
                                        params={"FinalDepth": -20.0})
         with self.assertRaises(ValueError):
             proj.add_flat_clearing(vdeep, fasm.id, flat.presets[0].id)
+        proj.close()
+
+
+class TestInlay(_SheetCase):
+    def test_male_female_fit(self):
+        """Rectangle 40×20, V 60°, femelle 4 mm, mâle départ 2 / fond 4 : le bouchon retourné entre sans
+        interférence, flancs en contact, 2 mm de colle au fond et 2 mm entre les planches."""
+        proj, lib, rect = self._sheet_project("Inlay")
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+        vasm = lib.assemblies_for_tool(vbit.id)[0]
+        flat = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        fasm = lib.assemblies_for_tool(flat.id)[0]
+        with self.assertRaises(ValueError):  # départ du mâle plus profond que la femelle
+            proj.create_inlay(rect, vasm.id, vbit.presets[0].id, fasm.id, flat.presets[0].id, 2.0, 3.0, 4.0)
+        res = proj.create_inlay(rect, vasm.id, vbit.presets[0].id, fasm.id, flat.presets[0].id, 4.0, 2.0, 4.0)
+        self.assertEqual((res["bottom_gap"], res["surface_gap"], res["notes"]), (2.0, 2.0, []))
+        male = res["male_project"]
+        self.assertEqual(len(res["female_ops"]), 4)  # fond plat, contour, angles vifs, V-carving
+        self.assertEqual(len(res["male_ops"]), 4)  # angles vifs du rectangle extérieur seulement
+        for p in (proj, male):
+            for r in p.compute():
+                self.assertTrue(r["valid"] and r["commands"] > 5, r)
+        bb = rect.Shape.BoundBox
+        bounds = {"xmin": bb.XMin - 4, "xmax": bb.XMax + 4, "ymin": bb.YMin - 4, "ymax": bb.YMax + 4, "zmax": 0.0}
+        F = simulate(proj, res["female_ops"], 0.1, bounds)
+        M = simulate(male, res["male_ops"], 0.1, bounds)  # miroir autour du centre : même étendue en X
+        cx = res["mirror_x"]
+        worst_interference, min_gap, inside = -1e9, 1e9, 0
+        for i, x in enumerate(F.xs):
+            for j, y in enumerate(F.ys):
+                plug = -2.0 - at(M, 2 * cx - x, y)[0]  # dessous du bouchon retourné, enfoncé de Ps = 2
+                gap = plug - float(F.top[i, j])
+                worst_interference = max(worst_interference, -gap)
+                if bb.XMin < x < bb.XMax and bb.YMin < y < bb.YMax:
+                    min_gap = min(min_gap, gap)
+                    inside += 1
+        self.assertGreater(inside, 50000)
+        self.assertLess(worst_interference, 0.12)  # au pas de la grille près (pente k = 1,73)
+        self.assertLess(min_gap, 0.15)  # les flancs se touchent
+        cxr, cyr = (bb.XMin + bb.XMax) / 2.0, (bb.YMin + bb.YMax) / 2.0
+        self.assertAlmostEqual(-2.0 - at(M, 2 * cx - cxr, cyr)[0] - at(F, cxr, cyr)[0], 2.0, delta=0.05)  # colle
+        out_x, out_y = bb.XMax + 3.0, cyr  # hors de la forme : écart entre les planches
+        self.assertAlmostEqual(-2.0 - at(M, 2 * cx - out_x, out_y)[0] - at(F, out_x, out_y)[0], 2.0, delta=0.05)
+        male.close()
         proj.close()
 
 

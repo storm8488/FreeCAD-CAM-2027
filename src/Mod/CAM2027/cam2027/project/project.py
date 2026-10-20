@@ -390,15 +390,97 @@ class Project(object):
                                           vrec["preset_id"],
                                           base=[(area, ["Edge%d" % (i + 1) for i in range(len(area.Shape.Edges))])],
                                           params={"StartDepth": start, "FinalDepth": final, "StepDown": depth})
+        corners = self._vcarve_corners(vcarve_op, vrec, "%s - sharp corners" % label, start, depth)
         reg = self.registry
-        for op in (pocket, outline):
-            reg[op.Name]["flat_for"] = vcarve_op.Name
-            reg[op.Name]["flat_reach"] = reach
+        for op in (pocket, outline, corners):
+            if op is not None:
+                reg[op.Name]["flat_for"] = vcarve_op.Name
+                reg[op.Name]["flat_reach"] = reach
         self._save_registry(reg)
-        for op in (pocket, outline):  # avant le V-carving, dans cet ordre
+        for op in (pocket, outline, corners):  # avant le V-carving, dans cet ordre
+            if op is None:
+                continue
             group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
             self.move_operation(op, group.index(dressupmod.top_of(self.job, vcarve_op)) - group.index(op))
-        return pocket, outline
+        return pocket, outline, corners
+
+    def _vcarve_corners(self, vcarve_op, vrec, label, z_top, depth):
+        """Angles vifs d'un V-carving limité (le V-carving de FreeCAD les laisse trop peu profonds) :
+        opération « Custom » avec le V-bit du V-carving ; None s'il n'y a aucun angle saillant."""
+        import Path.Op.Custom as Custom
+        from . import inlay
+
+        tool = self.library.tool(vrec["tool_id"])
+        spurs = [s for f in inlay.operation_faces(vcarve_op) for s in inlay.corner_spurs(f, tool, depth)]
+        if not spurs:
+            return None
+        safe = float(vcarve_op.SafeHeight.getValueAs("mm"))
+        values = vrec["values"]
+        previous = FreeCAD.ActiveDocument
+        FreeCAD.setActiveDocument(self.doc.Name)
+        try:
+            op = Custom.Create(inlay.CORNERS_PREFIX, parentJob=self.job)
+        finally:
+            if previous is not None and previous.Name != self.doc.Name:
+                FreeCAD.setActiveDocument(previous.Name)
+        op.Label = label
+        op.ToolController = vcarve_op.ToolController  # même outil : pas de changement d'outil
+        op.Source = "Text"
+        op.Gcode = inlay.spur_gcode(spurs, z_top, depth, safe, values["feed_mm_min"], values["plunge_feed_mm_min"])
+        reg = self.registry
+        rec = dict(vrec)
+        rec.update(kind=inlay.CORNERS_KIND, label=label, order=len(reg), params={"corners": len(spurs)},
+                   ignored_params=[], warnings=[], tool_controller=None, toolbit=None, index_deg=None)
+        reg[op.Name] = rec
+        self._save_registry(reg)
+        self.doc.recompute()
+        return op
+
+    def create_inlay(self, drawing, vbit_assembly_id, vbit_preset_id, flat_assembly_id, flat_preset_id,
+                     female_depth, male_start_depth, male_flat_depth, margin=None, male_thickness=12.0,
+                     name=None):
+        """Incrustation en V (mâle / femelle) d'un dessin fermé du projet (flux 2D, panneau).
+
+        Femelle (ce projet) : V-carving de la forme à ``female_depth`` + fond plat. Mâle : **nouveau
+        projet** (autre planche) avec le dessin miroir réduit de la profondeur de départ, zone autour
+        taillée en V à ``male_flat_depth`` + fond plat. Retourne un dict : opérations femelles, projet
+        mâle et ses opérations, jeux attendus (colle au fond, écart entre planches), notes.
+        """
+        from . import inlay
+
+        gaps = inlay.check_inlay_depths(female_depth, male_start_depth, male_flat_depth)
+        _asm, vbit, _h = self.library.resolve_assembly(vbit_assembly_id)
+        label = name or drawing.Label
+        notes = []
+        face_clone = self.drawing_clone(drawing, face=True)
+        fv, _r = self.add_operation("vcarve", "%s - female V-carve" % label, vbit_assembly_id, vbit_preset_id,
+                                    base=[(face_clone, ["Face1"])],
+                                    params={"StartDepth": 0.0, "FinalDepth": -float(female_depth)})
+        female = [fv]
+        try:
+            female[:0] = [o for o in self.add_flat_clearing(fv, flat_assembly_id, flat_preset_id) if o is not None]
+        except ValueError as exc:
+            notes.append("female: %s" % exc)
+        source_face = face_clone.Shape.Faces[0]
+        if margin is None:
+            margin = inlay.vbit_reach(vbit, male_flat_depth) + 5.0
+        outline, mirror_x = inlay.male_outline(source_face, vbit, male_start_depth, margin)
+        male = Project.create("%s - male" % label, self.library, self.machine)
+        mobj = male.doc.addObject("Part::Feature", "InlayMale")
+        mobj.Label = "%s (male, mirrored)" % label
+        mobj.Shape = outline
+        male.doc.recompute()
+        male.create_sheet_job([mobj], thickness=male_thickness, margin=5.0)
+        mv, _r = male.add_operation("vcarve", "%s - male V-carve" % label, vbit_assembly_id, vbit_preset_id,
+                                    base=[(male.drawing_clone(mobj, face=True), ["Face1"])],
+                                    params={"StartDepth": 0.0, "FinalDepth": -float(male_flat_depth)})
+        male_ops = [mv]
+        try:
+            male_ops[:0] = [o for o in male.add_flat_clearing(mv, flat_assembly_id, flat_preset_id) if o is not None]
+        except ValueError as exc:
+            notes.append("male: %s" % exc)
+        return {"female_ops": female, "male_project": male, "male_ops": male_ops, "mirror_x": mirror_x,
+                "notes": notes, **gaps}
 
     def material_check(self, resolution=None, tolerance=0.02):
         """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.
@@ -669,6 +751,8 @@ class Project(object):
         rec = self.registry.get(op.Name)
         if rec is None:
             raise ValueError("opération %s absente du registre" % op.Label)
+        if rec["kind"] not in opsmod.STRATEGIES and rec["kind"] != wrapmod.KIND:
+            raise ValueError("%s is generated (flat depth clearing): it cannot be duplicated" % op.Label)
         if rec["kind"] == wrapmod.KIND:
             base = [(self.doc.getObject(n), subs) for n, subs in rec["wrap_base"]]
             return self.add_wrapped_engraving(op.Label + " (copy)", rec["assembly_id"], rec["preset_id"], base,
