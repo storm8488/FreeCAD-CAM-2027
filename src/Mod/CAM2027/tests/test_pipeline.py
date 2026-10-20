@@ -899,6 +899,94 @@ class TestPipeline(unittest.TestCase):
                 self.assertGreaterEqual(dist, dome_r + tool_r + 0.5 - 0.05, p)
         proj.close()
 
+    def test_relief_from_image(self):
+        """Relief depuis une image : bosse gaussienne connue -> solide fidèle, ébauche et finition 3D sans pénétration."""
+        import math
+        from cam2027.project import relief
+
+        try:
+            from PySide6 import QtGui
+        except ImportError:
+            from PySide2 import QtGui
+        width, length, height, base = 60.0, 45.0, 6.0, 3.0
+        w_px, h_px = 80, 60
+
+        def bump(x, y):
+            return math.exp(-((x - 30.0) ** 2 + (y - 22.5) ** 2) / (2 * 8.0 ** 2))
+
+        def surface_z(x, y):
+            return base + height * bump(x, y) if 0 <= x <= width and 0 <= y <= length else -1e9
+
+        img = QtGui.QImage(w_px, h_px, QtGui.QImage.Format_RGB32)
+        for row in range(h_px):
+            for col in range(w_px):
+                v = int(round(255 * bump(col * width / (w_px - 1), (h_px - 1 - row) * length / (h_px - 1))))
+                img.setPixel(col, row, QtGui.qRgb(v, v, v))
+        png = os.path.join(self.tmp, "bump.png")
+        self.assertTrue(img.save(png))
+        self.assertTrue(relief.ensure_image_plugins(), relief.supported_formats())  # JPG lisible même en console
+        jpg = os.path.join(self.tmp, "bump.jpg")
+        self.assertTrue(img.save(jpg, "JPG", 95))
+        grid, size = relief.load_heightmap(jpg)
+        self.assertEqual(size, (w_px, h_px))
+        self.assertGreater(grid[40][30], 0.95)
+        self.assertLess(grid[0][0], 0.05)
+
+        lib = starter_library()
+        proj = Project.create("Relief test", lib, self._machine())
+        res = proj.import_relief(png, width, height, base=base, smoothing=0)
+        self.assertEqual(res.warnings, [])
+        obj = res.objects[0]
+        shape = obj.Shape
+        self.assertTrue(shape.isValid() and len(shape.Solids) == 1)
+        bb = shape.optimalBoundingBox()
+        for got, want in ((bb.XLength, width), (bb.YLength, length), (bb.ZMin, 0.0), (bb.ZMax, base + height)):
+            self.assertAlmostEqual(got, want, delta=0.05)
+        # fidélité : 0,15 mm sous la hauteur attendue -> matière, 0,15 mm au-dessus -> vide
+        for x in (1.0, 10.0, 20.0, 26.0, 30.0, 34.0, 45.0, 59.0):
+            for y in (1.0, 12.0, 18.0, 22.5, 27.0, 35.0, 44.0):
+                z = surface_z(x, y)
+                self.assertTrue(shape.isInside(FreeCAD.Vector(x, y, z - 0.15), 1e-4, True), (x, y, z))
+                self.assertFalse(shape.isInside(FreeCAD.Vector(x, y, z + 0.15), 1e-4, True), (x, y, z))
+        inv, inv_warnings = relief.make_relief(proj.doc, png, width, height, base=base, invert=True, smoothing=0)
+        self.assertEqual(inv_warnings, [])
+        self.assertTrue(shape.isInside(FreeCAD.Vector(30, 22.5, 6.0), 1e-4, True))
+        self.assertFalse(inv.Shape.isInside(FreeCAD.Vector(30, 22.5, 6.0), 1e-4, True))  # bosse inversée = creux
+        self.assertAlmostEqual(inv.Shape.optimalBoundingBox().ZMax, base + height, delta=0.05)
+        proj.doc.removeObject(inv.Name)
+
+        job = proj.create_job([obj], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        clone = job.Model.Group[0]
+        ball = lib.search("6 mm ball end mill")[0]
+        op, rec = proj.add_operation("surface3d", "Relief finishing", lib.assemblies_for_tool(ball.id)[0].id,
+                                     ball.presets[0].id, base=[(clone, [])],
+                                     params={"CutPattern": "ZigZag", "StepOver": 40, "SampleInterval": 0.5,
+                                             "BoundBox": "BaseBoundBox", "FinalDepth": base})
+        self.assertEqual(rec["ignored_params"], [])
+        endmill = lib.search("6 mm flat end mill")[0]
+        rop, rrec = proj.add_operation("rough3d", "Relief roughing", lib.assemblies_for_tool(endmill.id)[0].id,
+                                       endmill.presets[0].id, base=[(clone, [])],
+                                       params={"StepDown": 1.0, "StepOver": 20, "StockToLeave": 0.5,
+                                               "FinalDepth": base})
+        self.assertEqual(rrec["ignored_params"], [])
+        results = {r["name"]: r for r in proj.compute()}
+        self.assertTrue(results["Relief finishing"]["valid"], results["Relief finishing"])
+        cuts = cutting_points(op.Path)
+        self.assertGreater(len(cuts), 100)
+        # la pointe de la fraise boule ne descend jamais sous la surface connue
+        for p in cuts:
+            self.assertGreaterEqual(p["Z"], surface_z(p["X"], p["Y"]) - 0.05, p)
+        self.assertGreater(max(p["Z"] for p in cuts), base + height - 0.5)  # le sommet est suivi
+        rcuts = cutting_points(rop.Path)
+        self.assertGreater(len(rcuts), 50)
+        self.assertGreaterEqual(len(set(round(p["Z"], 2) for p in rcuts)), 4)
+        tool_r = endmill.geometry.diameter / 2.0
+        ring = [(tool_r * math.cos(a * math.pi / 8), tool_r * math.sin(a * math.pi / 8)) for a in range(16)] + [(0, 0)]
+        for p in rcuts:  # fond plat de la fraise : jamais de matière au-dessus de Z sous le disque de coupe
+            highest = max(surface_z(p["X"] + dx, p["Y"] + dy) for dx, dy in ring)
+            self.assertLessEqual(highest, p["Z"] + 0.05, p)
+        proj.close()
+
     def test_indexed_4th_axis(self):
         """3+1 : poche du dessus à A0, poche du flanc +Y à A90 sur un barreau centré sur l'axe A."""
         from cam2027.project.machine import RotaryAxis

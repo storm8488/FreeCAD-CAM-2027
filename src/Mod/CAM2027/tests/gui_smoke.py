@@ -309,6 +309,44 @@ def run():
     view4.fitAll()
     QtWidgets.QApplication.processEvents()
     view4.saveImage(os.path.join(OUT, "view3d_4axes.png"), 1000, 700, "White")
+    # relief depuis une image : dialogue, création, finition 3D, vue
+    import math
+    from PySide import QtGui
+    from cam2027.gui.reliefdlg import ReliefDialog
+    img = QtGui.QImage(120, 80, QtGui.QImage.Format_RGB32)
+    for row in range(80):
+        for col in range(120):
+            r = math.hypot(col - 60, row - 40)
+            v = int(255 * (0.5 + 0.5 * math.cos(r / 4.0)) * max(0.0, 1 - r / 45.0))  # ondes concentriques
+            img.setPixel(col, row, QtGui.qRgb(v, v, v))
+    png = os.path.join(tmp, "waves.png")
+    img.save(png)
+    rdlg = ReliefDialog(mw, png)
+    rdlg.width.setValue(90.0)
+    rdlg.height.setValue(4.0)
+    QtWidgets.QApplication.processEvents()
+    log("relief dialog: length %s, options %s" % (rdlg.length.text(), sorted(rdlg.options())))
+    grab(rdlg, "relief_dialog.png")
+    ropts = rdlg.options()
+    rdlg.reject()
+    projr = Project.create("Relief", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(projr.doc.Name)
+    rres = projr.import_relief(ropts.pop("path"), ropts.pop("width"), ropts.pop("relief_height"), **ropts)
+    robj = rres.objects[0]
+    log("relief: %s, valid %s, size %.1f x %.1f, warnings %s" % (
+        robj.Label, robj.Shape.isValid(), robj.Shape.BoundBox.XLength, robj.Shape.BoundBox.YLength, rres.warnings))
+    projr.create_job([robj], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+    ball = lib.search("6 mm ball end mill")[0]
+    projr.add_operation("surface3d", "Relief finishing", lib.assemblies_for_tool(ball.id)[0].id, ball.presets[0].id,
+                        base=[(projr.job.Model.Group[0], [])],
+                        params={"CutPattern": "ZigZag", "StepOver": 30, "SampleInterval": 0.5,
+                                "BoundBox": "BaseBoundBox", "FinalDepth": 3.0})
+    log("relief operations: %s" % [(r["name"], r["commands"], r["valid"]) for r in projr.compute()])
+    viewr = FreeCADGui.getDocument(projr.doc.Name).activeView()
+    viewr.viewIsometric()
+    viewr.fitAll()
+    QtWidgets.QApplication.processEvents()
+    viewr.saveImage(os.path.join(OUT, "view3d_relief.png"), 1000, 700, "White")
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)

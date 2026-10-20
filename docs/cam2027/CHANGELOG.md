@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Relief depuis une image** (étape 4.1) : PNG / JPG / BMP en niveaux de gris → solide relief
+  (largeur, hauteur, épaisseur sous le relief, inversion, lissage, résolution ; longueur selon les
+  proportions de l'image), dialogue Préparer > Relief depuis une image (aussi depuis Importer) ;
+  usinable par l'ébauche et la finition 3D. Test `test_relief_from_image` (51 tests).
 - **Interface propre au logiciel (étape 2)** : dans `CAM2027.exe`, menus réduits au métier
   (Fichier, Édition, Affichage, Préparer, Usiner, Simuler, Exporter, Aide) ; menus Outils, Macro,
   Fenêtres, commandes de modélisation et liens FreeCAD retirés ; barres Presse-papiers, Macro,

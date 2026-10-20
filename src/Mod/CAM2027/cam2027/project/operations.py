@@ -375,6 +375,11 @@ def raised_faces(obj, tol=1e-6):
     """Faces « en relief » d'un solide pour l'ébauche 3D : faces non planes et faces planes non horizontales
     situées au-dessus du plus bas plancher horizontal supérieur (le dessus de la plaque d'appui)."""
     shape = obj.Shape
+    source = (getattr(obj, "Objects", None) or [obj])[0]
+    if hasattr(source, "ReliefBase") or hasattr(obj, "ReliefBase"):
+        # relief depuis une image : la surface du dessus seule (ses parois descendent jusqu'au fond)
+        curved = [(f.Area, i) for i, f in enumerate(shape.Faces, 1) if f.Surface.__class__.__name__ != "Plane"]
+        return ["Face%d" % max(curved)[1]] if curved else []
     floors = []
     for f in shape.Faces:
         if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - f.BoundBox.ZMin) < tol \

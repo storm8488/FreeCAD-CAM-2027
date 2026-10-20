@@ -115,6 +115,13 @@ class Project(object):
     def import_model(self, path, label=None):
         return importers.import_file(self.doc, path, label)
 
+    def import_relief(self, path, width, relief_height, **options):
+        """Relief 3D depuis une image (carte de hauteur), voir ``relief.make_relief``."""
+        from . import relief
+
+        obj, warnings = relief.make_relief(self.doc, path, width, relief_height, **options)
+        return importers.ImportResult("solid", [obj], warnings)
+
     # -- job, brut, montage ---------------------------------------------------
 
     def create_job(self, models, stock=None, fixtures=("G54",), post_processor=None, post_args=None):

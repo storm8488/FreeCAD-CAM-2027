@@ -108,9 +108,15 @@ class ImportModel(_Base):
         proj = _need_project()
         if proj is None:
             return
-        filt = tr("Models and drawings") + " (" + " ".join("*" + e for e in SUPPORTED_EXTENSIONS) + ")"
+        from ..project import relief
+
+        exts = SUPPORTED_EXTENSIONS + relief.IMAGE_EXTENSIONS
+        filt = tr("Models and drawings") + " (" + " ".join("*" + e for e in exts) + ")"
         path, _f = QtWidgets.QFileDialog.getOpenFileName(FreeCADGui.getMainWindow(), tr("Import a file"), "", filt)
         if not path:
+            return
+        if os.path.splitext(path)[1].lower() in relief.IMAGE_EXTENSIONS:
+            import_relief_dialog(proj, path)  # une image devient un relief 3D
             return
         try:
             res = proj.import_model(path)
@@ -121,6 +127,38 @@ class ImportModel(_Base):
             _info("\n".join(res.warnings))
         FreeCADGui.SendMsgToActiveView("ViewFit")
         _after_change()
+
+
+def import_relief_dialog(proj, path=""):
+    """Dialogue relief puis création ; retourne l'objet créé ou None."""
+    from .reliefdlg import ReliefDialog
+
+    dlg = ReliefDialog(FreeCADGui.getMainWindow(), path)
+    if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+        return None
+    opts = dlg.options()
+    try:
+        res = proj.import_relief(opts.pop("path"), opts.pop("width"), opts.pop("relief_height"), **opts)
+    except Exception as exc:
+        _warn(tr("Import failed: {error}", error=str(exc)))
+        return None
+    if res.warnings:
+        _info("\n".join(res.warnings))
+    FreeCADGui.SendMsgToActiveView("ViewFit")
+    _after_change()
+    return res.objects[0]
+
+
+class ImportRelief(_Base):
+    atelier = "surface"
+    text = "Relief from image"
+    tooltip = "Build a 3D relief from a grey-level image (PNG, JPG, BMP): light = high"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        import_relief_dialog(proj)
 
 
 class ToolLibrary(_Base):
@@ -719,6 +757,7 @@ class ResetLayout(_Base):
 COMMANDS = [
     ("CAM2027_NewProject", NewProject),
     ("CAM2027_ImportModel", ImportModel),
+    ("CAM2027_ImportRelief", ImportRelief),
     ("CAM2027_ToolLibrary", ToolLibrary),
     ("CAM2027_StockFixture", StockFixture),
     ("CAM2027_AddOperation", AddOperation),
@@ -732,7 +771,7 @@ COMMANDS = [
     ("CAM2027_About", About),
 ]
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
-TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
+TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
            "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "Separator", "CAM2027_Export",
            "Separator", "CAM2027_Machine"]
 MENU = [name for name, _cls in COMMANDS]
@@ -740,7 +779,7 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate"]),

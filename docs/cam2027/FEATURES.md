@@ -61,7 +61,8 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Dégagement multi-outils | absent | — | jalon C |
 | Recto-verso, repères de retournement | absent | — | jalon D |
 | Placement / imbrication | absent | — | feuille de route |
-| Reliefs (import carte de hauteur, composants, combinaison, sculpture) | absent | — | jalon F |
+| Relief depuis une image (carte de hauteur) | disponible | `cam2027/project/relief.py` : PNG / JPG / BMP en niveaux de gris, largeur, hauteur, épaisseur, inversion, lissage, résolution → solide (surface B-spline exacte aux points de la grille) ; Préparer > Relief depuis une image | auto (`test_relief_from_image` : fidélité ± 0,15 mm, inversion, JPG en console, ébauche et finition 3D sans pénétration) + visuel | composants, combinaison, sculpture ; l'interpolation peut dépasser l'image près des bords francs (avertissement : augmenter le lissage) |
+| Reliefs (composants, combinaison, sculpture) | absent | — | jalon F |
 
 ## 4e axe (XYZ+A)
 
