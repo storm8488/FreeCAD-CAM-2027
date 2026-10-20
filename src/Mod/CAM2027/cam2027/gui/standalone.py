@@ -90,3 +90,31 @@ def apply_title():
     else:
         mw.setWindowTitle(fix_title(mw.windowTitle()))
     return mw.windowTitle()
+
+
+def hide_workbench_selector():
+    """Retire le sélecteur d'atelier (barre « Workbench » et Affichage > Sélecteur d'atelier) :
+    dans le logiciel il n'y a qu'un atelier, la liste ne montrerait que CAM2027 et « <none> »."""
+    import FreeCADGui
+    from .qt import QtWidgets
+
+    mw = FreeCADGui.getMainWindow()
+    FreeCAD.ParamGet("User parameter:BaseApp/MainWindow/Toolbars").SetBool("Workbench", False)
+    hidden = 0
+    for tb in mw.findChildren(QtWidgets.QToolBar):
+        if tb.objectName() == "Workbench":
+            for action in list(tb.actions()):
+                tb.removeAction(action)
+            tb.toggleViewAction().setVisible(False)
+            tb.hide()
+            hidden += 1
+    for top in mw.menuBar().actions():
+        menu = top.menu()
+        if menu is None:
+            continue
+        for action in list(menu.actions()):
+            sub = action.menu()
+            if sub is not None and any(a.text() == APP_NAME for a in sub.actions()):
+                menu.removeAction(action)  # Affichage > Sélecteur d'atelier
+                hidden += 1
+    return hidden

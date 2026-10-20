@@ -42,6 +42,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             removed = standalone.strip_workbenches()
             self.__class__._stripped = True
             standalone.apply_title()
+            standalone.hide_workbench_selector()
             FreeCAD.Console.PrintLog("CAM2027: standalone, %d workbenches removed\n" % len(removed))
 
         done = None

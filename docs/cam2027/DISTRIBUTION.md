@@ -35,7 +35,8 @@ Source : `src/Mod/CAM2027/Resources/branding/`.
 | `UserParameterTemplate` | `branding/user.cfg` : français, écran de démarrage, postprocesseur GRBL |
 
 Au démarrage du logiciel, `cam2027/gui/standalone.py` retire du sélecteur tous les ateliers sauf
-CAM2027 (les modules gardés comme bibliothèques en déclarent un) et maintient le titre
+CAM2027 (les modules gardés comme bibliothèques en déclarent un), supprime le sélecteur d'atelier
+(barre « Workbench » et Affichage > Sélecteur d'atelier, mémorisé masqué) et maintient le titre
 « … - CAM2027 <version> » (FreeCAD y remet sa propre version à chaque document). `branding/cam2027.ico`
 (16 à 256 px) est généré depuis le SVG par `scripts/make-icon.py` avec le Qt de la distribution.
 
