@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Direction artistique « Atelier »** (dossier fourni, copié dans `docs/design/`) : jetons
+  sombre/clair dans `Resources/theme/tokens.json`, couche de thème `gui/theme.py` (QSS limitée aux
+  widgets CAM2027, rôles sémantiques), 32 icônes sombres/claires pour les commandes, étapes,
+  stratégies et actions, action principale contextuelle en bleu cobalt, commande « Thème :
+  système / sombre / clair », plus aucune couleur codée en dur dans l'interface. Test
+  `test_theme` (44 tests). Voir `docs/cam2027/DESIGN.md`.
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

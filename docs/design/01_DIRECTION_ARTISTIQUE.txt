@@ -1,0 +1,306 @@
+FREECAD CAM — DIRECTION ARTISTIQUE « ATELIER »
+Version 1.1 • Cible 2027 • Application native de FAO, bureau Windows en priorité.
+
+1. INTENTION ET PERSONNALITÉ
+
+Construire un atelier numérique de précision : lisible pendant de longues sessions, calme, dense, prévisible. L'utilisateur doit comprendre la pièce, l'opération active, l'état du calcul et l'action suivante sans parcourir plusieurs menus.
+
+Trois principes :
+• La géométrie reste au centre. Les panneaux servent le travail sur la pièce.
+• Chaque paramètre conserve un nom clair, une unité et une explication accessible.
+• Le logiciel montre son état réel. Une fonction absente, un calcul périmé ou un contrôle incomplet sont explicites.
+
+Les métiers visés comprennent le fraisage de bois, plastiques et aluminium, la gravure et le travail sur X/Y/Z/A. L'identité doit évoquer l'usinage et le contrôle de fabrication. Éviter les codes visuels d'un outil de dessin grand public, d'un tableau de bord commercial ou d'une interface de jeu.
+
+L'inspiration fonctionnelle Aspire et Fusion peut guider la profondeur des réglages. Les compositions, icônes, libellés et interactions doivent former un système original et cohérent avec FreeCAD.
+
+2. IDENTITÉ ISSUE DU LOGO
+
+La référence combine un F rouge, une roue dentée bleue, une fraise et une poche usinée. Conserver ce vocabulaire : héritage technique, mouvement de la fraise, enlèvement de matière.
+
+Nom de travail : FreeCAD CAM.
+Descripteur français : FAO • USINAGE CNC.
+Mention de filiation pour À propos, documentation et installation : « Fork indépendant basé sur FreeCAD et son atelier CAM ».
+Ne pas ajouter « officiel » ni promettre des fonctions non livrées. Le numéro 2027 appartient aux informations de version, pas au symbole permanent.
+
+Couleurs identitaires :
+• Rouge #E74B42 : signature du F, accents éditoriaux ponctuels.
+• Bleu cobalt #215ED6 : CAM, actions principales, sélection dans l'interface.
+• Graphite #131B24 : environnement de travail sombre.
+• Aluminium #B8C6D7 : matériau visuel des pièces dans les illustrations.
+
+Le rouge du logo ne doit pas transformer les commandes normales en commandes d'alerte. La couleur d'un axe ne constitue pas un signal d'état.
+
+Logo dans le produit :
+• À propos et accueil : signature complète sur une surface où son texte est lisible.
+• Barre principale : nom typographique compact ; symbole simplifié uniquement lorsqu'un asset adapté existe.
+• Icône de bureau : prévoir un symbole sans slogan, lisible en 16, 24, 32, 48, 64 et 256 px.
+• Protection : espace libre équivalent à un quart de la hauteur du symbole autour de la signature.
+• Aucun étirement, rotation décorative, contour ajouté ou recoloration automatique.
+• Le PNG source est présenté sur une surface claire dans l'aperçu pour préserver le mot-symbole sombre.
+• Les lueurs du rendu source peuvent servir aux visuels de présentation. Elles ne s'appliquent pas aux champs, cadres, textes et boutons de travail.
+
+Assets à réaliser ultérieurement : master vectoriel propre, symbole seul, variante adaptée aux fonds sombres, version monochrome et fichier .ico multi-résolutions. Ne pas présenter le PNG comme un SVG natif. Les variantes doivent être contrôlées visuellement avant leur intégration.
+
+3. COULEUR ET THÈMES
+
+02_DESIGN_TOKENS.json est la source de référence pour les valeurs. Les noms sont sémantiques ; aucune couleur métier ne doit être choisie isolément dans un widget.
+
+Thème sombre :
+fond #131B24 ; surface #1B2633 ; surface surélevée #253345 ;
+texte #F1F5FA ; texte secondaire #AFBDCE ;
+bordure de contrôle #708398 ; séparateur décoratif #34465B.
+
+Thème clair :
+fond #EDF2F7 ; surface #FFFFFF ; surface surélevée #F5F7FB ;
+texte #182433 ; texte secondaire #526176 ;
+bordure de contrôle #77879B ; séparateur décoratif #D4DDE7.
+
+Action principale : #215ED6 avec texte blanc. Survol #1B50B8.
+Sélection : fond et texte selected/selectedText ; repère latéral ou bordure, jamais uniquement une faible variation de fond.
+Focus clavier : anneau ou contour de 2 px, couleur focus, distinct de la sélection.
+Statuts : success, warning, danger, info définis par thème.
+
+Le thème suit le système au premier lancement, puis respecte le choix enregistré de l'utilisateur. Les maquettes démarrent en sombre pour présenter la direction ; cela ne change pas la règle du produit.
+
+Objectifs : contraste texte courant au moins 4,5:1 ; grands textes au moins 3:1 ; limites utiles des contrôles et focus au moins 3:1 avec le fond adjacent. Les séparateurs purement décoratifs peuvent être plus discrets. Une validation mathématique des tokens ne remplace pas la vérification des écrans réels, des états de survol et de la scène 3D.
+
+Ne jamais transmettre une information uniquement par une couleur. Associer texte, icône ou motif. Pas d'effets de verre, de grandes zones translucides ou d'ombres marquées dans les panneaux d'usinage.
+
+4. TYPOGRAPHIE, ESPACEMENT ET DENSITÉ
+
+Police UI : Segoe UI sur Windows ; Noto Sans si disponible ; police système de secours.
+Police technique : Consolas ; DejaVu Sans Mono ; monospace.
+Ne pas télécharger des polices au lancement. Employer une police déjà disponible ou documenter explicitement le choix et sa licence avant de l'embarquer.
+
+Échelle de référence en pixels logiques :
+12 légendes secondaires, 14 corps et champs, 16 titres de section, 22 titres de dialogue, 40 titres éditoriaux hors espace de travail.
+Graisses 400, 600 et 700. Réserver la graisse 600 aux titres, libellés actifs et actions.
+Le texte de travail ne doit pas dépendre de longues capitales. Nombres alignés à droite dans les colonnes ; chiffres à largeur stable si la police le permet.
+
+Base d'espacement : 4 / 8 / 12 / 16 / 24 / 32 / 48.
+Rayons : 4 pour champs/boutons, 6 pour panneaux, 8 pour dialogues.
+Pas de forme pilule sur tous les éléments. Les badges seuls peuvent être compacts et arrondis.
+Hauteur de commande : 32 en mode confortable, 28 en mode compact.
+Une option d'agrandissement doit pouvoir proposer des cibles proches de 44 pour une utilisation tactile ; le tactile n'est pas le mode principal.
+Icônes : 16, 20 et 24 ; tracé d'environ 1,75 à la taille 20 ; style géométrique cohérent.
+
+Pour Qt, convertir les tokens par un adaptateur unique selon la version et la stratégie DPI du dépôt. Ne pas multiplier manuellement les dimensions par le ratio de pixels si Qt assure déjà la mise à l'échelle. Éviter les hauteurs fixes qui coupent une police agrandie. Vérifier à 100 %, 150 % et 200 %.
+
+5. STRUCTURE DE L'ESPACE DE TRAVAIL
+
+Référence : 1600 × 1000 pixels logiques.
+Minimum visé : 1280 × 800, sous réserve des panneaux visibles.
+À 1280, réduire les panneaux ou permettre leur repli ; ne pas compresser les champs jusqu'à masquer les unités.
+
+Organisation :
+• Barre supérieure : identité compacte, document, état d'enregistrement, accès préférences.
+• Navigation métier stable : Préparer / Usiner / Simuler / Exporter.
+• Barre de commandes contextuelle : actions utiles à la tâche active, une action principale.
+• Panneau gauche, 240 par défaut : document, montages, outils et arbre d'opérations.
+• Zone centrale, minimum 520 : vue 3D, repère d'axes, orientation, sélection, légende.
+• Panneau droit, 320 par défaut : propriétés de l'objet ou de l'opération sélectionnée.
+• Barre inférieure, 24 : unités, machine/montage actif, état des tâches, messages consultables.
+• Simulation : commandes de lecture près de la vue, contrôles de vérification dans un panneau.
+• Bibliothèque d'outils : page ou dialogue large avec recherche, filtres, table centrale, fiche latérale.
+
+Les panneaux sont redimensionnables, repliables et mémorisés par espace de travail. Une commande rétablit la disposition par défaut. Le document et l'opération actifs restent identifiables lorsque les panneaux sont repliés.
+
+Ne pas imposer une nouvelle interface à tous les ateliers FreeCAD. Les composants personnalisés doivent être limités au périmètre du fork/atelier concerné.
+
+6. COMPOSANTS À CONSTRUIRE
+
+Boutons :
+principal plein bleu ; secondaire sur surface ; discret pour commandes locales ; destructif rouge avec libellé explicite.
+États requis : repos, survol, pressé, focus clavier, désactivé, en cours.
+Un bouton en cours garde sa largeur et affiche le verbe approprié : « Calcul en cours… ». Proposer Annuler seulement si le moteur sait réellement interrompre la tâche.
+Un contrôle désactivé doit expliquer la condition nécessaire via une aide accessible, sans dépendre uniquement d'un survol impossible.
+
+Champs numériques :
+libellé persistant, valeur, unité fixe visible, aide contextuelle, validation locale.
+Accepter la virgule et le point si le parseur et la locale sont traités explicitement. Afficher selon la locale ; conserver une représentation interne cohérente. Le postprocesseur gère le format de sortie requis ; ne pas lui envoyer aveuglément le texte affiché.
+Distinguer valeur saisie, héritée d'un outil, calculée et modifiée. Afficher la source de la valeur.
+Ne jamais substituer silencieusement zéro à une valeur invalide.
+Les limites réelles viennent du modèle, de la machine ou du moteur ; ne pas les inventer dans la couche UI.
+
+Arbre :
+hiérarchie Montage > Opérations, noms modifiables, visibilité, état, ordre explicite.
+Glisser-déposer uniquement si les dépendances sont validées. Sinon signaler pourquoi le déplacement est refusé.
+L'objet sélectionné est visible dans l'arbre et dans la vue.
+
+Table :
+en-tête fixe, tri, recherche, unités dans les en-têtes ou cellules, sélection claire.
+Pas de carte volumineuse par outil dans une bibliothèque de centaines de fraises.
+Utiliser un modèle adapté et éviter de reconstruire toutes les lignes à chaque modification.
+
+Panneaux et formulaires :
+sections repliables ; Essentiel ouvert au départ ; Avancé accessible sans masquer des paramètres décisifs.
+Afficher les erreurs près du champ et dans un résumé navigable.
+Les info-bulles expliquent le paramètre, son unité et ses dépendances. Elles ne remplacent pas le libellé.
+
+Dialogues :
+titre lié à la tâche, contenu structuré, action principale explicite.
+Échap ferme uniquement si cela ne perd pas silencieusement des modifications.
+Confirmer les actions destructives qui effacent du travail ; ne pas confirmer chaque opération réversible.
+
+Notifications :
+succès discret, problème persistant tant qu'il exige une décision, journal consultable.
+Une tâche longue affiche progression si elle est mesurable ; sinon activité indéterminée et étape réelle, sans pourcentage inventé.
+
+7. ÉCRAN USINAGE
+
+L'utilisateur doit voir : montage actif, origine, brut, outil affecté, opération sélectionnée, état du parcours.
+
+Sections de l'opération :
+1. Géométrie et sélection.
+2. Outil et porte-outil.
+3. Hauteurs et dégagements.
+4. Passes et tolérances.
+5. Avances et vitesses.
+6. Liaisons et entrées/sorties.
+7. Options propres à la stratégie.
+
+Organiser les paramètres disponibles sans prétendre que toutes les stratégies sont déjà prises en charge. Une fonction planifiée peut être documentée hors du flux de production ; ne pas présenter un faux contrôle fonctionnel.
+
+Action principale contextuelle :
+« Calculer le parcours » avant calcul ; « Recalculer » si les dépendances changent.
+Après calcul, proposer « Ouvrir la simulation ». Le passage à Exporter ne vaut pas validation de la machine.
+
+États normalisés :
+À calculer / Calcul en cours / Calculé / À recalculer / Avertissement / Échec.
+Un parcours calculé peut encore nécessiter une vérification. Une coche verte ne signifie pas automatiquement « usinage sûr ».
+
+Les modifications de géométrie, d'outil, de montage ou de paramètre doivent rendre visibles les résultats périmés si le moteur les invalide. L'interface reflète les dépendances du modèle, elle ne maintient pas un statut artificiel séparé.
+
+8. BIBLIOTHÈQUE DE FRAISES ET RÉGLAGES
+
+Navigation proposée : Tous les outils / Bibliothèque locale / Outils du document / Favoris.
+Recherche par nom, numéro, diamètre, type et matière lorsqu'ils sont réellement indexés.
+
+Colonnes prioritaires : T, nom, type, diamètre, nombre de dents, longueur utile, provenance.
+Fiche :
+• Identité : nom, référence, fabricant facultatif, notes.
+• Géométrie : diamètre, rayon de bout, angle selon type, longueur taillée, longueur totale, queue.
+• Assemblage : sortie outil, porte-outil et collisions lorsque le moteur dispose des données.
+• Conditions : matière, broche, avance de coupe, plongée, avance par dent, profondeur/largeur de passe.
+• Utilisation : documents ou opérations concernés et source des préréglages.
+
+Afficher un schéma coté simple de l'outil, lié à la sélection du champ. N'afficher que les dimensions pertinentes pour le type d'outil.
+Les valeurs dérivées indiquent la relation et leur source. Ne pas proposer une formule incohérente avec les unités.
+Distinguer outil maître, copie dans le document et valeurs surchargées dans une opération. Toute propagation doit être explicite.
+Les exemples numériques du dossier sont des données fictives de présentation. Aucun catalogue de conditions de coupe validées n'est fourni.
+
+9. SCÈNE 3D, PARCOURS ET QUATRIÈME AXE
+
+Fond uni ou très léger dégradé technique si nécessaire ; aucun halo de marque derrière la pièce.
+Brut aluminium mat, arêtes lisibles, bridages plus sobres, pièce sélectionnée avec contour renforcé.
+La grille peut être masquée ; elle ne doit pas dominer la géométrie.
+
+Convention de parcours, à adapter au moteur :
+coupe = bleu, trait continu ;
+rapide = ambre, tirets ;
+plongée = violet, pointillés ;
+sélection = cyan, contour plus épais ;
+collision = rouge, marqueur croisé et zone hachurée.
+Une légende permet de masquer chaque famille. Les styles doivent rester discernables en niveaux de gris. Tester leur contraste devant le brut et les fonds ; ajouter un halo fin si nécessaire.
+
+Repère : X rouge, Y vert, Z bleu, A violet, chaque axe toujours nommé. La convention cible est A autour de X ; l'affectation effective et le sens positif doivent venir de la configuration machine. Ne pas présenter un quatrième axe abstrait sans direction ni origine.
+
+Pour X/Y/Z/A :
+• Afficher angle A avec symbole degré et référence explicite.
+• Distinguer « Indexé » et « Simultané » dans la stratégie et le résultat.
+• Montrer les limites et la gestion du déroulement uniquement si ces données sont disponibles.
+• En cas d'incompatibilité machine/postprocesseur, afficher l'information au bon endroit.
+• La rotation illustrée dans une maquette ne prouve pas le support d'un calcul 4 axes.
+
+10. SIMULATION ET EXPORT
+
+La simulation montre pièce/brut, outil, porte-outil et bridages disponibles.
+Commandes : début, précédent, lecture/pause, suivant, fin, vitesse, progression.
+La lecture est volontaire ; aucun mouvement automatique dès l'ouverture de la page.
+L'action Pause reste stable et accessible.
+
+Panneau de vérification :
+contrôle effectué, résultat, portée, éléments absents et moment du calcul.
+Exemples de libellés : « Aucun conflit détecté sur les éléments contrôlés », « Porte-outil non renseigné », « Vérification incomplète ».
+Un contrôle non exécuté n'est jamais présenté comme réussi.
+
+Si une collision est détectée : position dans le parcours, objets concernés, accès direct au point, marqueur visuel. Arrêter ou mettre en pause selon la capacité réelle et les choix de l'utilisateur.
+Durée affichée : « Estimation » avec méthode disponible ; ne pas présenter une durée calculée comme une garantie machine.
+
+Avant export : machine, postprocesseur, unités, origine, axes utilisés, opération(s), statut de calcul et avertissements.
+L'interface doit permettre de revoir ces données. Les blocages dépendent de règles documentées du produit et du moteur, pas de couleurs inventées par la charte.
+
+11. ACCESSIBILITÉ ET MICRO-TEXTES
+
+Français par défaut si sélectionné ; architecture prête à la traduction.
+Verbes précis : « Calculer », « Simuler », « Exporter le G-code », « Affecter l'outil ».
+Éviter « OK » lorsqu'une action spécifique peut être nommée.
+Erreurs : ce qui pose problème + conséquence + action possible.
+Exemple : « Aucun outil n'est affecté. Choisissez une fraise pour calculer cette opération. »
+
+Navigation au clavier complète, ordre de tabulation prévisible, focus visible, libellés accessibles. Vérifier les raccourcis existants avant d'en affecter. Ne pas détourner une touche de manipulation de la vue 3D.
+Les icônes seules reçoivent un nom accessible et une info-bulle. Les commandes clés gardent un libellé texte.
+Les changements de statut doivent être accessibles autrement que par la couleur.
+Réduire les animations selon la préférence utilisateur. Pas d'animation décorative continue.
+
+12. MOUVEMENT ET PERFORMANCE
+
+Survol autour de 100 ms ; changement de panneau au plus 160 ms si cela n'alourdit pas le bureau. Le déplacement des panneaux peut être immédiat.
+Le zoom, l'orbite et la sélection doivent rester fluides ; aucune animation UI ne doit retarder un calcul ou bloquer le thread principal.
+Calcul, import et simulation suivent les mécanismes asynchrones du dépôt. Ne pas déplacer des appels non thread-safe du noyau dans un thread improvisé.
+Conserver les données métier hors des widgets. Les rafraîchissements ne recréent pas inutilement toute la scène ou la table.
+
+13. TRADUCTION TECHNIQUE DANS FREECAD / QT
+
+Commencer par identifier la branche, la version de FreeCAD, Qt, PySide et les API disponibles. Le poste local peut contenir une version différente du dépôt cible.
+Adopter la pile du dépôt ; ne pas imposer une migration Qt/PySide au seul motif du design.
+
+Séparer :
+• tokens sémantiques ;
+• adaptateur de thème Qt/QPalette/QSS ;
+• composants réutilisables ;
+• vues métier et modèles ;
+• styles du viewport, gérés par son propre moteur.
+
+QSS ne couvre pas automatiquement la scène 3D. Établir une correspondance explicite avec les paramètres du moteur de rendu.
+Limiter les sélecteurs QSS aux widgets du périmètre CAM via noms/propriétés. Éviter un sélecteur global qui transforme les fenêtres des autres ateliers.
+Ne pas exiger que des objets Qt internes non maîtrisés possèdent une nouvelle structure.
+Pas d'intégration d'un navigateur pour reproduire les maquettes HTML. Le fichier HTML constitue une référence visuelle, pas l'architecture de l'application.
+Pas de dépendance réseau nécessaire à l'affichage.
+
+Arborescence indicative, à adapter après audit :
+design/tokens.json
+ui/theme/...
+ui/components/...
+ui/views/...
+resources/icons/...
+docs/design/...
+Les chemins et noms finaux doivent suivre les conventions existantes.
+
+14. ORDRE DE LIVRAISON ET CRITÈRES D'ACCEPTATION
+
+Lot 1 : thème, typographie, boutons, champs, focus et espace de travail.
+Lot 2 : arbre et panneau d'opération fonctionnels.
+Lot 3 : bibliothèque d'outils avec états hérités/surchargés.
+Lot 4 : simulation et export branchés aux capacités réelles.
+Lot 5 : polissage, localisation, DPI et cohérence des icônes.
+
+Chaque lot doit être visible dans l'application réelle et conservable indépendamment. Éviter une réécriture massive motivée uniquement par l'apparence.
+
+Valider :
+• sombre/clair, lisibilité du logo, aucun texte tronqué ;
+• 1280 × 800 et 1600 × 1000, DPI 100/150/200 %, police agrandie ;
+• navigation clavier, focus, libellés accessibles ;
+• états vides, chargement, calcul périmé, erreur, sélection et désactivation ;
+• unités et virgules décimales françaises ;
+• forme de fraise, champs et capacités cohérents ;
+• repère X/Y/Z/A et convention machine explicites ;
+• sauvegarde, réouverture et changement de thème sans perte des paramètres ;
+• absence de régression sur un parcours et un export de référence déjà supportés ;
+• aucune donnée fictive ni commande sans effet dans le flux utilisateur final.
+
+Les tests logiciels doivent couvrir les transformations et états réellement risqués ; ne pas produire des tests qui vérifient uniquement la présence d'une couleur. Utiliser des captures comparables pour la révision visuelle.
+
+L'aperçu fourni illustre les intentions de composition. En cas d'écart, les tokens gouvernent les couleurs et la charte gouverne les interactions ; l'implémentation suit les capacités vérifiées du dépôt.
+

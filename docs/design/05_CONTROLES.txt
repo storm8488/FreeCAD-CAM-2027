@@ -1,0 +1,76 @@
+VÉRIFICATIONS DU DOSSIER — 20 octobre 2026
+
+JSON : lu et analysé sans erreur.
+Tokens JSON et valeurs embarquées dans l’aperçu : synchronisés.
+Contraste : 48 couples de couleurs contrôlés mathématiquement ; tous atteignent les objectifs définis (texte 4,5:1, bordures utiles/focus 3:1).
+Les couleurs décoratives, le logo et les scènes 3D demandent un contrôle visuel contextuel supplémentaire. Cette vérification ne certifie pas l’accessibilité du futur logiciel.
+
+Détail des contrastes (avant arrondi) :
+dark  | text         / background | 15.85:1 | cible 4.5:1
+dark  | text         / surface    | 13.98:1 | cible 4.5:1
+dark  | text         / raised     | 11.71:1 | cible 4.5:1
+dark  | muted        / background | 9.09:1 | cible 4.5:1
+dark  | muted        / surface    | 8.01:1 | cible 4.5:1
+dark  | muted        / raised     | 6.71:1 | cible 4.5:1
+dark  | success      / background | 9.62:1 | cible 4.5:1
+dark  | success      / surface    | 8.49:1 | cible 4.5:1
+dark  | success      / raised     | 7.11:1 | cible 4.5:1
+dark  | warning      / background | 10.49:1 | cible 4.5:1
+dark  | warning      / surface    | 9.25:1 | cible 4.5:1
+dark  | warning      / raised     | 7.74:1 | cible 4.5:1
+dark  | danger       / background | 8.08:1 | cible 4.5:1
+dark  | danger       / surface    | 7.13:1 | cible 4.5:1
+dark  | danger       / raised     | 5.97:1 | cible 4.5:1
+dark  | info         / background | 10.57:1 | cible 4.5:1
+dark  | info         / surface    | 9.32:1 | cible 4.5:1
+dark  | info         / raised     | 7.80:1 | cible 4.5:1
+dark  | onPrimary    / primary    | 5.77:1 | cible 4.5:1
+dark  | selectedText / selected   | 9.16:1 | cible 4.5:1
+dark  | border       / surface    | 3.93:1 | cible 3:1
+dark  | border       / raised     | 3.29:1 | cible 3:1
+dark  | focus        / surface    | 7.53:1 | cible 3:1
+dark  | focus        / raised     | 6.31:1 | cible 3:1
+light | text         / background | 13.92:1 | cible 4.5:1
+light | text         / surface    | 15.68:1 | cible 4.5:1
+light | text         / raised     | 14.62:1 | cible 4.5:1
+light | muted        / background | 5.60:1 | cible 4.5:1
+light | muted        / surface    | 6.31:1 | cible 4.5:1
+light | muted        / raised     | 5.88:1 | cible 4.5:1
+light | success      / background | 5.22:1 | cible 4.5:1
+light | success      / surface    | 5.88:1 | cible 4.5:1
+light | success      / raised     | 5.48:1 | cible 4.5:1
+light | warning      / background | 5.67:1 | cible 4.5:1
+light | warning      / surface    | 6.39:1 | cible 4.5:1
+light | warning      / raised     | 5.96:1 | cible 4.5:1
+light | danger       / background | 5.65:1 | cible 4.5:1
+light | danger       / surface    | 6.36:1 | cible 4.5:1
+light | danger       / raised     | 5.93:1 | cible 4.5:1
+light | info         / background | 4.85:1 | cible 4.5:1
+light | info         / surface    | 5.46:1 | cible 4.5:1
+light | info         / raised     | 5.09:1 | cible 4.5:1
+light | onPrimary    / primary    | 5.77:1 | cible 4.5:1
+light | selectedText / selected   | 6.74:1 | cible 4.5:1
+light | border       / surface    | 3.67:1 | cible 3:1
+light | border       / raised     | 3.42:1 | cible 3:1
+light | focus        / surface    | 5.77:1 | cible 3:1
+light | focus        / raised     | 5.38:1 | cible 3:1
+
+PÉRIMÈTRE
+Aperçu HTML hors ligne, sans bibliothèque externe. Les onglets et le changement de thème sont interactifs ; les commandes métier représentées sont des éléments de maquette, sans calcul FAO.
+
+Limites : aucun lancement ni test du fork natif ; aucune validation de parcours machine ; pas de test DPI dans Qt. Le logo PNG original n’a pas pu être téléchargé et doit être joint séparément. Les variantes vectorielles et l’icône .ico restent à réaliser.
+
+CONTRÔLES DE L’APERÇU EFFECTUÉS
+- Syntaxe JavaScript vérifiée par node --check.
+- Affichage inspecté dans un navigateur : usinage sombre, bibliothèque de fraises claire, simulation sombre.
+- Changement de thème et changement des trois onglets vérifiés.
+- Pas de débordement gênant observé dans ces captures à la largeur de navigateur utilisée (environ 1280 px). Les tailles et DPI de l’application Qt restent à vérifier lors de l’intégration.
+
+ASSETS v1.1 — CONTRÔLES EFFECTUÉS
+- 116 SVG validés et rendus par QtSvg.
+- 119 PNG ouverts et vérifiés par Pillow.
+- Tous les chemins du manifest existent.
+- Contrôle visuel des planches de composants sombres et d’icônes claires. Un problème de police du rendu initial a été corrigé avant livraison.
+- Logos : PNG avec alpha, propositions générées, non vectoriels.
+- Les 32 icônes possèdent des libellés français dans le manifest.
+- Aucune mise en service du logiciel natif ni validation en machine.

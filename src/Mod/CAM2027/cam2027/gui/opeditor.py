@@ -16,7 +16,7 @@ from ..i18n import tr
 from ..tools import bridge
 from ..project.operations import STRATEGIES, param_kind, read_params, thread_names
 from ..project import paramspec
-from . import state, panels
+from . import state, panels, theme
 
 
 _DRESSUP_KINDS = ("profile", "pocket", "adaptive", "slot", "millface")
@@ -76,8 +76,9 @@ class OperationEditor(QtWidgets.QDialog):
         self.on_close = on_close
         self.widgets = {}
         self.setWindowTitle(title or tr("Operation: {name}", name=op.Label))
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(720)
         self._build()
+        theme.apply(self)
 
     # -- construction ----------------------------------------------------------
 
@@ -92,7 +93,7 @@ class OperationEditor(QtWidgets.QDialog):
         if meta.get("limits"):
             limits = QtWidgets.QLabel(tr(meta["limits"]))
             limits.setWordWrap(True)
-            limits.setStyleSheet("color: #9aa7b8;")
+            limits.setProperty("role", "muted")
             head.addRow(tr("Known limits"), limits)
         lay.addLayout(head)
 
@@ -151,7 +152,7 @@ class OperationEditor(QtWidgets.QDialog):
                 tc.Label, v["tool_number"], v["feed_mm_min"], v["spindle_rpm"])))
         note = QtWidgets.QLabel(tr("Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept)."))
         note.setWordWrap(True)
-        note.setStyleSheet("color: #9aa7b8;")
+        note.setProperty("role", "muted")
         form.addRow(note)
         self.asm_combo.currentIndexChanged.connect(lambda _i: self._fill_presets())
         self.preset_combo.currentIndexChanged.connect(lambda _i: self._show_values())
@@ -335,7 +336,7 @@ class OperationEditor(QtWidgets.QDialog):
             form = QtWidgets.QFormLayout(box)
             limits = QtWidgets.QLabel(tr(meta["limits"]))
             limits.setWordWrap(True)
-            limits.setStyleSheet("color: #9aa7b8;")
+            limits.setProperty("role", "muted")
             form.addRow(limits)
             widgets = {}
             values = dressupmod.dressup_params(existing[key]) if key in existing else {}
@@ -420,7 +421,7 @@ class OperationEditor(QtWidgets.QDialog):
             summary = toolpath_summary(top)
             summary["valid"] = top.isValid()
         except Exception as exc:
-            self.status.setText("<span style='color:#e06060'>%s</span>" % tr("Operation failed: {error}", error=str(exc)))
+            self.status.setText("<span style='color:%s'>%s</span>" % (theme.status_color("error"), tr("Operation failed: {error}", error=str(exc))))
             return False
         text = []
         if summary:

@@ -15,7 +15,7 @@ from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
 from ..project import export as exportmod
 from ..project.machine import MachineProfile
-from . import state, panels
+from . import state, panels, theme
 
 _ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Resources", "icons")
 
@@ -45,6 +45,14 @@ def _after_change():
     panels.refresh_project_panel()
 
 
+#: stratégie -> icône « Atelier »
+STRATEGY_ICONS = {
+    "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "adaptive": "pocket", "drilling": "drill",
+    "millface": "surface", "engrave": "engrave", "vcarve": "engrave", "chamfer": "engrave", "helix": "drill",
+    "slot": "contour", "threadmill": "drill",
+}
+
+
 class _Base(object):
     icon = "CAM2027.svg"
     text = ""
@@ -52,8 +60,16 @@ class _Base(object):
 
     accel = ""
 
+    atelier = ""  # icône de la direction artistique « Atelier » (Resources/icons/atelier)
+
     def GetResources(self):
-        res = {"Pixmap": _icon(self.icon), "MenuText": tr(self.text), "ToolTip": tr(self.tooltip)}
+        pixmap = _icon(self.icon)
+        if self.atelier:
+            try:
+                pixmap = theme.icon_path(self.atelier)
+            except FileNotFoundError:
+                pass
+        res = {"Pixmap": pixmap, "MenuText": tr(self.text), "ToolTip": tr(self.tooltip)}
         if self.accel:
             res["Accel"] = self.accel
         return res
@@ -64,6 +80,7 @@ class _Base(object):
 
 class NewProject(_Base):
     icon = "cam2027-new-project.svg"
+    atelier = "new-project"
     accel = "Ctrl+Shift+N"
     text = "New project"
     tooltip = "Create a CAM2027 project document with a frozen copy of the tool library"
@@ -82,6 +99,7 @@ class NewProject(_Base):
 
 class ImportModel(_Base):
     icon = "cam2027-import.svg"
+    atelier = "open-project"
     accel = "Ctrl+Shift+I"
     text = "Import model / drawing"
     tooltip = "Import STEP, STL, OBJ, SVG or DXF into the project"
@@ -107,6 +125,7 @@ class ImportModel(_Base):
 
 class ToolLibrary(_Base):
     icon = "cam2027-tool-library.svg"
+    atelier = "tool-library"
     accel = "Ctrl+Shift+T"
     text = "Tool library"
     tooltip = "Tools, holders, assemblies and cutting presets"
@@ -117,6 +136,7 @@ class ToolLibrary(_Base):
 
 class StockFixture(_Base):
     icon = "cam2027-stock.svg"
+    atelier = "stock"
     accel = "Ctrl+Shift+B"
     text = "Stock & fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
@@ -126,6 +146,7 @@ class StockFixture(_Base):
         if proj is None:
             return
         dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
+        theme.apply(dlg)
         dlg.setWindowTitle(tr("Stock & fixture"))
         form = QtWidgets.QFormLayout(dlg)
         kind = QtWidgets.QComboBox()
@@ -209,6 +230,7 @@ class StockFixture(_Base):
 
 class AddOperation(_Base):
     icon = "cam2027-add-operation.svg"
+    atelier = "contour"
     accel = "Ctrl+Shift+O"
     text = "Add operation"
     tooltip = "Add a machining operation using a tool assembly and a cutting preset"
@@ -227,13 +249,14 @@ class AddOperation(_Base):
             if s.Object.Document.Name == proj.doc.Name and getattr(s.Object, "Shape", None):
                 base.append((s.Object, list(s.SubElementNames)))
         dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
+        theme.apply(dlg)
         dlg.setWindowTitle(tr("Add operation"))
         form = QtWidgets.QFormLayout(dlg)
         name = QtWidgets.QLineEdit(tr("Operation"))
         form.addRow(tr("Name"), name)
         kind = QtWidgets.QComboBox()
         for key, meta in STRATEGIES.items():
-            kind.addItem(tr(meta["label"]), key)
+            kind.addItem(theme.icon(STRATEGY_ICONS.get(key, "contour")), tr(meta["label"]), key)
         form.addRow(tr("Strategy"), kind)
         limits = QtWidgets.QLabel()
         limits.setWordWrap(True)
@@ -263,7 +286,7 @@ class AddOperation(_Base):
         form.addRow(tr("Geometry (selection)"), sel_label)
         hint = QtWidgets.QLabel(tr("Depths, passes and strategy settings are edited in the next window (tabs), with values prefilled from the cutting preset."))
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9aa7b8;")
+        theme.set_role(hint, "muted")
         form.addRow(hint)
         bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
@@ -322,6 +345,7 @@ def default_params(kind, tool, values):
 
 class Compute(_Base):
     icon = "cam2027-compute.svg"
+    atelier = "recalculate"
     accel = "Ctrl+Shift+R"
     text = "Recompute toolpaths"
     tooltip = "Recompute every operation and refresh the summary"
@@ -339,6 +363,7 @@ class Compute(_Base):
 
 class Export(_Base):
     icon = "cam2027-export.svg"
+    atelier = "export-gcode"
     accel = "Ctrl+Shift+E"
     text = "Export G-code"
     tooltip = "Post-process, check and write the G-code and the setup sheet"
@@ -350,6 +375,7 @@ class Export(_Base):
                 _warn(tr("No job to export."))
             return
         dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
+        theme.apply(dlg)
         dlg.setWindowTitle(tr("Export G-code"))
         dlg.resize(900, 650)
         lay = QtWidgets.QVBoxLayout(dlg)
@@ -429,26 +455,27 @@ class Export(_Base):
 
 
 def _format_checks(analysis, issues):
-    """Contrôles en HTML : erreurs en rouge, « non vérifiable » en ambre, avertissements en orange."""
+    """Contrôles en HTML : niveau en texte ET en couleur sémantique du thème (jamais la couleur seule)."""
     import html
 
-    colors = {"error": "#e06060", "warning": "#e0a050", "unverifiable": "#e0c060", "info": "#9aa7b8", "ok": "#5ec8a0"}
     lines = [html.escape(tr("Lines: {n}, units: {u}, axes: {a}", n=analysis["lines"], u=analysis["units"],
                             a=" ".join(analysis["axes"]))),
              html.escape(tr("Codes: {c}", c=" ".join(analysis["codes"])))]
     for axis, (lo, hi) in sorted(analysis["bbox"].items()):
-        lines.append("%s: %.3f .. %.3f" % (axis, lo, hi))
+        lines.append("%s: %.3f .. %.3f mm" % (axis, lo, hi) if axis in "XYZ" else "%s: %.3f .. %.3f" % (axis, lo, hi))
     lines.append("")
     if not issues:
-        lines.append("<span style='color:%s'>%s</span>" % (colors["ok"], html.escape(tr("No issue found (see the documentation for what is checked)."))))
+        lines.append("<span style='color:%s'>%s</span>" % (
+            theme.status_color("ok"), html.escape(tr("No issue found among the checks performed (see the documentation for what is checked)."))))
     for level, msg in issues:
-        color = colors.get(level, colors["info"])
-        lines.append("<span style='color:%s'><b>[%s]</b> %s</span>" % (color, html.escape(tr(level).upper()), html.escape(msg)))
-    return "<html><body style='font-family: monospace'>" + "<br>".join(lines) + "</body></html>"
+        lines.append("<span style='color:%s'><b>[%s]</b> %s</span>" % (
+            theme.status_color(level), html.escape(tr(level).upper()), html.escape(msg)))
+    return "<html><body style='font-family: Consolas, monospace'>" + "<br>".join(lines) + "</body></html>"
 
 
 class Simulate(_Base):
     icon = "cam2027-simulate.svg"
+    atelier = "play"
     accel = "Ctrl+Shift+S"
     text = "Simulate"
     tooltip = "Simulate material removal with the FreeCAD CAM simulator"
@@ -471,8 +498,23 @@ class Simulate(_Base):
         FreeCADGui.runCommand(name)
 
 
+class Theme(_Base):
+    icon = "CAM2027.svg"
+    atelier = "visibility"
+    text = "Theme: system / dark / light"
+    tooltip = "Cycle the CAM2027 panel theme (follows FreeCAD by default)"
+
+    def Activated(self):
+        order = list(theme.THEMES)
+        nxt = order[(order.index(theme.preference()) + 1) % len(order)]
+        theme.set_preference(nxt)
+        panels.restyle_all()
+        FreeCAD.Console.PrintMessage(tr("CAM2027 theme: {name}", name=tr(nxt)) + "\n")
+
+
 class Machine(_Base):
     icon = "cam2027-machine.svg"
+    atelier = "settings"
     accel = "Ctrl+Shift+M"
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
@@ -483,6 +525,7 @@ class Machine(_Base):
             return
         m = proj.machine
         dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
+        theme.apply(dlg)
         dlg.setWindowTitle(tr("Machine profile"))
         form = QtWidgets.QFormLayout(dlg)
         widgets = {}
@@ -559,10 +602,12 @@ COMMANDS = [
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
     ("CAM2027_Machine", Machine),
+    ("CAM2027_Theme", Theme),
     ("CAM2027_About", About),
 ]
-TOOLBAR = [name for name, _cls in COMMANDS]
-MENU = TOOLBAR
+#: barre d'outils = commandes de travail ; À propos et thème restent dans le menu
+TOOLBAR = [name for name, _cls in COMMANDS if name not in ("CAM2027_About", "CAM2027_Theme")]
+MENU = [name for name, _cls in COMMANDS]
 
 _registered = False
 

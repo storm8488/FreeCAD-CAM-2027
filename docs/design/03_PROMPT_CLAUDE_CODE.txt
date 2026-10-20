@@ -1,0 +1,83 @@
+Tu interviens sur le fork natif FreeCAD CAM de ce dépôt. Applique la direction artistique « ATELIER » fournie dans ce dossier pour obtenir une application de FAO moderne, lisible et performante, destinée notamment au fraisage X/Y/Z/A et à une bibliothèque de fraises détaillée.
+
+Lis intégralement :
+- 00_LIRE_MOI.txt ;
+- 01_DIRECTION_ARTISTIQUE.txt ;
+- 02_DESIGN_TOKENS.json ;
+- 05_CONTROLES.txt ;
+- 06_ASSETS_POUR_CLAUDE.txt ;
+- assets/manifest.json.
+Ouvre 07_CATALOGUE_ASSETS.html pour examiner les assets, puis 04_APERCU_VISUEL.html pour examiner les thèmes clair/sombre et les trois écrans. Utilise assets/logo-reference.png comme référence de marque si présent.
+
+Ce dossier complète le cahier des charges fonctionnel du logiciel. Il ne prouve pas la présence de stratégies d'usinage, de simulation ou de 4 axes dans le code existant. Les valeurs affichées dans les maquettes sont fictives. Ne les transforme pas en préréglages de production.
+
+Commence par auditer le dépôt, ses instructions, la branche, les modifications locales, la version FreeCAD, Qt/PySide, le mode de compilation et le lancement. Identifie les composants UI existants et leurs connexions métier. Préserve le travail existant. Fais les choix routiniers de façon autonome et indique tes hypothèses. Si une information indispensable manque, termine d'abord les tâches indépendantes et pose une question ciblée.
+
+Objectif visuel :
+- graphite, cobalt et rouge identitaire discret ;
+- vue 3D centrale et panneaux redimensionnables ;
+- densité de logiciel technique, hiérarchie nette et unités toujours visibles ;
+- français cohérent, thèmes sombre/clair, mise à l'échelle DPI ;
+- composants réutilisables et vrais états de calcul ;
+- aucune confusion entre parcours calculé, vérifié et prêt à exporter.
+
+Architecture :
+1. Conserve la pile native Qt/PySide du dépôt. N'introduis ni application web embarquée ni migration de framework pour reproduire le HTML.
+2. Importe les tokens dans une couche de thème unique, avec noms sémantiques. Adapte les unités à Qt sans double mise à l'échelle.
+3. Sépare le thème des modèles FAO et des services de calcul.
+4. Limite les sélecteurs QSS au périmètre CAM. Traite séparément les couleurs du viewport.
+5. Conserve les mécanismes existants pour les tâches longues et respecte les contraintes de thread du noyau.
+6. Utilise les icônes du projet si cohérentes et disponibles ; documente la provenance des nouveaux assets. Ne télécharge pas une dépendance ou une police sans nécessité.
+7. Référence le logo source sans le présenter comme un SVG. N'utilise pas le mot-symbole complet en miniature. Si une variante de production manque, signale-la et utilise un fallback typographique lisible.
+
+Travaille par lots exécutables :
+A. ThemeManager/adaptateur équivalent, composants de base, navigation, disposition et préférences.
+B. Arbre d'opérations et panneau d'édition raccordés aux données réelles.
+C. Bibliothèque d'outils : recherche, table, fiche géométrie, porte-outil, conditions, héritage/surcharge.
+D. Simulation et export : contrôles réels, portée de vérification, avertissements, axes et postprocesseur.
+E. Cohérence, DPI, clavier, traduction et états particuliers.
+
+Pour chaque lot :
+- explique brièvement le changement prévu et les fichiers concernés ;
+- implémente, lance puis vérifie le résultat ;
+- conserve un incrément utilisable ;
+- rapporte les capacités existantes, modifiées et encore manquantes.
+Une fois un lot suffisamment vérifié, passe au suivant dans le périmètre autorisé. Ne t'arrête pas à un plan ou à des captures de maquette.
+
+Règles métier de présentation :
+- unités explicites ; parse et affichage selon la locale, sans changer les conventions internes ;
+- paramètres invalides expliqués, aucune conversion silencieuse en zéro ;
+- paramètres essentiels visibles, options avancées accessibles ;
+- valeur saisie, héritée et calculée distinguées ;
+- calcul périmé affiché dès que les dépendances le rendent invalide ;
+- aucun contrôle non exécuté affiché comme réussi ;
+- aucun bouton de production sans effet ;
+- pas de stratégie « 4 axes simultanés » annoncée si elle n'est pas réellement calculée et post-traitée ;
+- A autour de X dans la convention cible, à confirmer avec la machine effective ;
+- la légende de parcours utilise couleur ET motif ;
+- les nombres fictifs de la référence ne sont pas des recommandations de coupe.
+
+Vérification minimale ciblée :
+- ouverture de l'application réelle et des écrans modifiés ;
+- thème clair/sombre, états vide/chargement/erreur/désactivé ;
+- clavier et focus ;
+- fenêtres 1280 × 800 et 1600 × 1000, mise à l'échelle 100/150/200 % lorsque l'environnement le permet ;
+- lecture des valeurs en français, validation et persistance ;
+- modification d'une opération, invalidation/recalcul, sauvegarde/réouverture ;
+- parcours/export de référence déjà pris en charge, afin de détecter une régression ;
+- absence de blocage évident du thread UI pendant les opérations longues.
+
+Ajoute des tests pertinents pour les transformations de données et les états. Évite les tests qui ne font que recopier l'implémentation ou vérifier une couleur. N'invente pas des résultats si l'environnement ne permet pas un contrôle : indique exactement ce qui reste non vérifié.
+
+Livraison attendue :
+- code intégré au dépôt avec un mode de lancement précis ;
+- composants et tokens documentés ;
+- captures des principaux écrans si disponibles ;
+- résumé des changements et contrôles réellement exécutés ;
+- liste courte des limites, écarts justifiés et assets manquants.
+
+Les tokens font foi pour les valeurs visuelles, la charte pour les règles d'expérience et le modèle réel pour les capacités FAO. Le HTML est une référence de composition. Ne recopie pas ses données fictives ni sa structure DOM dans le produit natif.
+
+
+COMPLÉMENT ASSETS
+Intègre les SVG de assets/icons/ via la couche d’icônes du dépôt, avec les bons thèmes et noms accessibles. Reproduis les états des planches controls-dark et controls-light avec de vrais composants Qt. Les images de boutons ne sont pas des boutons fonctionnels. Les tokens et SVG exacts priment sur la planche d’inspiration générée. Les deux PNG de marque sont des propositions : conserve le logo existant s’il est déjà validé, et présente ces variantes sans les déclarer approuvées.

@@ -1,0 +1,59 @@
+FREECAD CAM — ASSETS POUR CLAUDE CODE
+Version 1.1 — complément à la direction « Atelier »
+
+COMMENCER PAR OUVRIR
+07_CATALOGUE_ASSETS.html : galerie hors ligne de tous les assets.
+assets/sheets/controls-dark.png et controls-light.png : planches exactes des contrôles.
+assets/sheets/icons-dark.png et icons-light.png : vue d’ensemble des 32 icônes.
+
+1. CE QUI EST FOURNI
+• 2 images de marque : logo horizontal et symbole carré, en PNG avec alpha.
+• 1 planche d’inspiration des composants, générée en image.
+• 32 icônes originales de commande, chacune en sombre et clair : 64 SVG et 64 PNG.
+• 4 commandes × 6 états × 2 thèmes : 48 SVG et 48 PNG de référence.
+• 4 planches exactes, chacune en SVG et PNG.
+• manifest.json : chemins, noms accessibles, états, dimensions et rôle des assets.
+
+2. LOGO ET SYMBOLE
+assets/logos/logo-proposition.png
+assets/logos/symbole-proposition.png
+Ces deux images forment une NOUVELLE PROPOSITION issue du F rouge, de l’engrenage bleu et de la fraise décrits précédemment. Elles ne sont pas les octets du logo initial accepté : celui-ci reste inaccessible au téléchargement automatique.
+Le logo horizontal a un texte sombre : le placer sur une surface claire. Le symbole peut être présenté sur fond clair ou sombre ; vérifier ses bords et sa lisibilité aux tailles cibles.
+Ces images sont matricielles, avec quelques effets de volume. Elles guident l’identité ; elles ne remplacent pas un master vectoriel final. Ne pas renommer un PNG en SVG. Ne pas affirmer que la variante est validée par l’utilisateur. Garder le logo initial s’il est déjà présent dans le dépôt, et proposer ces images comme variantes.
+Le symbole fourni ne constitue pas encore un .ico multi-résolutions contrôlé en 16 px. Préparer ce fichier lors de l’intégration de la marque validée.
+
+3. ICÔNES DIRECTEMENT EXPLOITABLES
+assets/icons/dark/*.svg : traits clairs pour surfaces sombres.
+assets/icons/light/*.svg : traits sombres pour surfaces claires.
+Grille : 24 × 24. Trait : 1,75. Extrémités et raccords arrondis. Aucun texte ni police dans ces SVG.
+Les PNG font 96 × 96 et conservent la transparence ; préférer les SVG avec QIcon/QSvgRenderer si le dépôt les prend en charge.
+Tailles UI : 16, 20 ou 24 pixels logiques, selon la commande. Vérifier à 16 px les outils qui ont des détails.
+Utiliser les noms accessibles français du manifest. Une icône seule possède une info-bulle et un nom accessible. Conserver un texte visible sur les commandes principales.
+Pour les icônes d’état, appliquer la couleur sémantique du thème au rendu ; les fichiers fournis sont volontairement monochromes. Ne pas interpréter check.svg comme une garantie de sécurité machine.
+axis-a.svg est un symbole de rotation autour d’un axe horizontal ; la convention réelle A autour de X vient de la configuration machine, pas de l’icône.
+
+4. BOUTONS : IMAGES DE RÉFÉRENCE, CONTRÔLES NATIFS
+assets/buttons/{dark,light}/<action>-<state>.svg et .png.
+Actions : calculate, play, export-gcode, tool-library.
+États : default, hover, pressed, focus, disabled, busy.
+Chaque source a une toile 192 × 48 autour d’un bouton logique 180 × 32. La marge montre le contour de focus. Le PNG est rendu en 384 × 96, soit 2×. La largeur 180 est une référence, pas une contrainte rigide de traduction.
+Recréer les boutons en QPushButton/QToolButton ou composants équivalents du dépôt. Ne pas utiliser les PNG comme boutons cliquables. Les libellés restent de vrais textes traduisibles ; les tailles s’adaptent à la police et au DPI.
+Pour busy, conserver la géométrie et montrer un état réel de calcul. Les arcs des images sont statiques ; ce dossier ne livre aucun moteur de tâche ni animation.
+Pour disabled, exposer la condition d’activation dans une aide accessible. Pour focus, utiliser le contour défini par les tokens. Un état pressed est momentané ; ne pas le confondre avec une option cochée.
+
+5. PRIORITÉ DES RÉFÉRENCES
+1) Modèle et capacités réelles pour le comportement métier.
+2) 02_DESIGN_TOKENS.json et 01_DIRECTION_ARTISTIQUE.txt pour le système visuel.
+3) SVG de assets/sheets/ et assets/buttons/ pour les dimensions et états exacts.
+4) assets/references/ui-reference.png pour l’ambiance seulement.
+La planche générée contient des écarts possibles de taille, de dessin et de texte. Ne pas relever les couleurs dans ses pixels, ni la découper pour fabriquer l’interface. Les tokens et SVG exacts priment.
+Les valeurs d’outil et de coupe sont fictives. Elles ne constituent pas une bibliothèque technique validée.
+
+6. INTÉGRATION CONSEILLÉE
+Lire manifest.json. Associer chaque action à son SVG et à son libellé. Charger la variante correspondant au thème. Centraliser les chemins et les couleurs. Traiter Qt/QSS et le viewport séparément. Conserver les callbacks et modèles métier existants. Ne pas afficher une commande comme disponible si son moteur est absent.
+Les SVG de contrôles utilisent Segoe UI/Consolas disponibles sur le poste de rendu. Les polices ne sont pas redistribuées. Utiliser les polices système prévues par la charte ; sur un autre système, le rendu du texte peut varier.
+
+7. PROVENANCE ET LIMITES
+Les dessins des 32 icônes sont originaux et construits pour ce dossier ; les planches de contrôles sont produites depuis les tokens. Aucun jeu d’icônes tiers n’est inclus.
+Les deux PNG de marque et la planche ui-reference.png ont été générés à partir de consignes visuelles. Ils sont des propositions, sans affiliation officielle à FreeCAD.
+Le choix de licence du dépôt et l’usage final du nom/logo devront être documentés dans le projet. Ce pack n’accorde aucune autorisation au nom du projet FreeCAD.

@@ -1,0 +1,41 @@
+FREECAD CAM — DOSSIER DE DIRECTION ARTISTIQUE
+Version 1.1 • 20 octobre 2026 • Cible produit : édition 2027
+Nom de travail du fork : FreeCAD CAM
+Direction : ATELIER — précision, clarté, maîtrise.
+
+À REMETTRE À CLAUDE CODE
+1. Extraire cette archive à la racine du projet, dans docs/design/.
+2. Ouvrir 07_CATALOGUE_ASSETS.html puis 04_APERCU_VISUEL.html. Ils fonctionnent hors ligne.
+3. Donner à Claude le contenu complet de 03_PROMPT_CLAUDE_CODE.txt.
+4. Claude doit lire la charte et les tokens, inspecter le dépôt, puis appliquer progressivement le style à la véritable interface native.
+
+CONTENU
+01_DIRECTION_ARTISTIQUE.txt : charte et règles d'expérience.
+02_DESIGN_TOKENS.json : valeurs de référence pour les thèmes sombre et clair.
+03_PROMPT_CLAUDE_CODE.txt : consigne d'intégration prête à copier.
+04_APERCU_VISUEL.html : planche de marque et trois maquettes, avec choix du thème.
+assets/AJOUTER_LE_LOGO.txt : consigne pour joindre le PNG source accepté.
+05_CONTROLES.txt : vérifications du dossier et limites.
+
+PÉRIMÈTRE
+Ce dossier définit une direction et des interfaces de référence. Il n'ajoute ni calcul de parcours, ni simulation, ni postprocesseur au logiciel. Les vues, les dimensions et les valeurs de coupe de la maquette sont illustratives. Elles ne constituent pas des réglages recommandés pour usiner de l'aluminium.
+
+Les exigences fonctionnelles du projet restent définies par le cahier des charges : FAO native locale issue de FreeCAD CAM, axes X/Y/Z/A, bibliothèque d'outils complète, parcours, simulation et export vérifiable.
+
+Le nom FreeCAD CAM est un nom de travail. La présentation du produit doit identifier clairement un fork indépendant basé sur FreeCAD, sans laisser entendre qu'il s'agit d'une édition officielle.
+
+La source du logo est une image matricielle de référence. Le dossier ne prétend pas fournir un logo vectoriel final ou une famille complète d'icônes d'installation.
+
+
+LOGO SOURCE
+Sa récupération automatique a échoué après deux délais d’attente. Le PNG n’est donc pas inclus. La charte reprend son identité, et l’aperçu utilise désormais une NOUVELLE PROPOSITION de logo explicitement indiquée. Joindre le logo accepté à Claude Code avec ce dossier.
+
+COMPLÉMENT ASSETS v1.1
+06_ASSETS_POUR_CLAUDE.txt : consignes détaillées.
+07_CATALOGUE_ASSETS.html : galerie.
+assets/logos/ : deux propositions PNG.
+assets/references/ : planche d’inspiration.
+assets/icons/ : 32 icônes en deux thèmes, SVG et PNG.
+assets/buttons/ : 48 états de boutons, SVG et PNG.
+assets/sheets/ : quatre planches exactes, SVG et PNG.
+assets/manifest.json : index et rôles des fichiers.

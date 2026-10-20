@@ -614,5 +614,16 @@
   "Sheet under the 2D drawing (top at Z 0)": "Panneau sous le dessin 2D (dessus à Z 0)",
   "Sheet thickness (mm)": "Épaisseur du panneau (mm)",
   "Sheet margin around the drawing (mm)": "Marge du panneau autour du dessin (mm)",
-  "The project already has a job: the sheet is only available for a new 2D project.": "Le projet a déjà un job : le panneau n'est disponible que pour un nouveau projet 2D."
+  "The project already has a job: the sheet is only available for a new 2D project.": "Le projet a déjà un job : le panneau n'est disponible que pour un nouveau projet 2D.",
+
+  "_section_theme": "ajouts",
+  "Theme: system / dark / light": "Thème : système / sombre / clair",
+  "Cycle the CAM2027 panel theme (follows FreeCAD by default)": "Fait tourner le thème des panneaux CAM2027 (suit FreeCAD par défaut)",
+  "CAM2027 theme: {name}": "Thème CAM2027 : {name}",
+  "system": "système",
+  "dark": "sombre",
+  "light": "clair",
+  "done": "fait",
+  "to do": "à faire",
+  "No issue found among the checks performed (see the documentation for what is checked).": "Aucun problème parmi les contrôles effectués (voir la documentation pour la liste des contrôles)."
 }

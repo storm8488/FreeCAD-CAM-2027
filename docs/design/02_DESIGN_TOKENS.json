@@ -1,0 +1,224 @@
+{
+  "metadata": {
+    "name": "FreeCAD CAM — Atelier",
+    "version": "1.1",
+    "purpose": "Direction artistique et contrat visuel; aucune fonction FAO implémentée",
+    "units": "logical_px sauf mention explicite",
+    "defaultTheme": "system",
+    "previewTheme": "dark"
+  },
+  "brand": {
+    "red": "#E74B42",
+    "blue": "#215ED6"
+  },
+  "typography": {
+    "familyUI": [
+      "Segoe UI",
+      "Noto Sans",
+      "sans-serif"
+    ],
+    "familyMono": [
+      "Consolas",
+      "DejaVu Sans Mono",
+      "monospace"
+    ],
+    "sizes": {
+      "caption": 12,
+      "body": 14,
+      "section": 16,
+      "title": 22,
+      "display": 40
+    },
+    "weights": {
+      "regular": 400,
+      "medium": 600,
+      "bold": 700
+    },
+    "lineHeight": 1.45
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "xxl": 32,
+    "hero": 48
+  },
+  "radius": {
+    "input": 4,
+    "panel": 6,
+    "dialog": 8
+  },
+  "density": {
+    "comfortable": {
+      "control": 32,
+      "row": 32
+    },
+    "compact": {
+      "control": 28,
+      "row": 28
+    },
+    "minimumPointerTarget": 28,
+    "touchTarget": 44
+  },
+  "layout": {
+    "minimumWindow": {
+      "width": 1280,
+      "height": 800
+    },
+    "referenceWindow": {
+      "width": 1600,
+      "height": 1000
+    },
+    "leftPanel": {
+      "default": 240,
+      "min": 200,
+      "max": 360
+    },
+    "rightPanel": {
+      "default": 320,
+      "min": 280,
+      "max": 440
+    },
+    "viewportMin": 520,
+    "toolbar": 44,
+    "statusbar": 24
+  },
+  "icons": {
+    "small": 16,
+    "normal": 20,
+    "large": 24,
+    "stroke": 1.75
+  },
+  "motion": {
+    "hoverMs": 100,
+    "panelMs": 160,
+    "reduceMotion": true,
+    "animateToolpathsOnlyOnUserAction": true
+  },
+  "themes": {
+    "dark": {
+      "background": "#131B24",
+      "surface": "#1B2633",
+      "raised": "#253345",
+      "viewport": "#111923",
+      "text": "#F1F5FA",
+      "muted": "#AFBDCE",
+      "border": "#708398",
+      "divider": "#34465B",
+      "primary": "#215ED6",
+      "onPrimary": "#FFFFFF",
+      "primaryHover": "#1B50B8",
+      "selected": "#203B5E",
+      "selectedText": "#D9E8FF",
+      "focus": "#8CB7FF",
+      "success": "#67D5A6",
+      "warning": "#F4C16B",
+      "danger": "#FF9292",
+      "info": "#6BD9EE",
+      "disabledText": "#8290A1",
+      "overlay": "#00000099"
+    },
+    "light": {
+      "background": "#EDF2F7",
+      "surface": "#FFFFFF",
+      "raised": "#F5F7FB",
+      "viewport": "#EEF2F6",
+      "text": "#182433",
+      "muted": "#526176",
+      "border": "#77879B",
+      "divider": "#D4DDE7",
+      "primary": "#215ED6",
+      "onPrimary": "#FFFFFF",
+      "primaryHover": "#1B50B8",
+      "selected": "#E8F0FF",
+      "selectedText": "#184DAF",
+      "focus": "#215ED6",
+      "success": "#08734D",
+      "warning": "#8A5200",
+      "danger": "#B52639",
+      "info": "#007487",
+      "disabledText": "#6F7B8B",
+      "overlay": "#15233466"
+    }
+  },
+  "scene": {
+    "dark": {
+      "stock": "#B8C6D7",
+      "stockEdge": "#65788D",
+      "cut": "#8CB7FF",
+      "rapid": "#F4C16B",
+      "plunge": "#C6ACFF",
+      "selection": "#6BD9EE",
+      "collision": "#FF9292",
+      "fixture": "#718096",
+      "grid": "#293848"
+    },
+    "light": {
+      "stock": "#B8C6D7",
+      "stockEdge": "#526176",
+      "cut": "#215ED6",
+      "rapid": "#8A5200",
+      "plunge": "#7242AA",
+      "selection": "#007C91",
+      "collision": "#B52639",
+      "fixture": "#718096",
+      "grid": "#D4DDE7"
+    },
+    "axes": {
+      "X": "#E74B42",
+      "Y": "#29A46C",
+      "Z": "#458BFF",
+      "A": "#AA79D6",
+      "alwaysLabel": true
+    },
+    "lineStyles": {
+      "cut": "solid",
+      "rapid": "dashed",
+      "plunge": "dotted",
+      "selection": "thick_outline",
+      "collision": "cross_and_hatch"
+    },
+    "referenceLineWidth": 2,
+    "note": "Vérifier la lisibilité sur la géométrie réelle; appliquer halo/contraste adaptatif. Les couleurs d'axes ne codent pas les états de validation."
+  },
+  "components": {
+    "button": {
+      "height": 32,
+      "radius": 4,
+      "icon": 20,
+      "fontSize": 14,
+      "focusOutline": 2,
+      "focusGap": 2,
+      "states": {
+        "default": {
+          "primaryFill": "primary",
+          "secondaryFill": "raised"
+        },
+        "hover": {
+          "primaryFill": "primaryHover",
+          "secondaryFill": "selected"
+        },
+        "pressed": {
+          "fill": "selected",
+          "text": "selectedText",
+          "border": "focus"
+        },
+        "focus": {
+          "outline": "focus"
+        },
+        "disabled": {
+          "fill": "surface",
+          "text": "disabledText",
+          "border": "divider"
+        },
+        "busy": {
+          "geometry": "unchanged",
+          "label": "progress verb",
+          "indicator": "indeterminate only when progress is not measurable"
+        }
+      }
+    }
+  }
+}

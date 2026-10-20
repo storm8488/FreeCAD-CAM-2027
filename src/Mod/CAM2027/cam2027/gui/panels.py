@@ -14,7 +14,7 @@ from ..tools.model import (
 )
 from ..tools.fusion_import import import_fusion_library
 from ..tools import bridge
-from . import state
+from . import state, theme
 from .preview import ToolPreview
 
 _FIELD_LABELS = {
@@ -815,6 +815,10 @@ class ToolLibraryPanel(QtWidgets.QWidget):
 # ---------------------------------------------------------------------------
 
 
+_STEP_ICONS = {"model": "open-project", "stock": "stock", "ops": "contour", "export": "export-gcode"}
+_LIST_ICONS = {"edit": "settings", "dup": "redo", "del": "delete"}
+
+
 class ProjectPanel(QtWidgets.QWidget):
     """Panneau de flux de travail : étapes Pièce → Brut & montage → Opérations → Contrôle & export,
     liste des opérations (actif, ordre, dupliquer, supprimer, modifier) et données machine manquantes."""
@@ -853,6 +857,7 @@ class ProjectPanel(QtWidgets.QWidget):
             text = QtWidgets.QLabel()
             text.setWordWrap(True)
             btn = QtWidgets.QPushButton(tr(button))
+            btn.setIcon(theme.icon(_STEP_ICONS[key]))
             btn.clicked.connect(lambda _c=False, cmd=command: FreeCADGui.runCommand(cmd))
             steps.addWidget(status, i, 0)
             steps.addWidget(text, i, 1)
@@ -878,21 +883,27 @@ class ProjectPanel(QtWidgets.QWidget):
             ("del", "Delete", self.delete_selected),
         ):
             b = QtWidgets.QPushButton(tr(label))
+            if key in _LIST_ICONS:
+                b.setIcon(theme.icon(_LIST_ICONS[key]))
+            if key == "del":
+                theme.set_role(b, "danger")
             b.clicked.connect(slot)
             row.addWidget(b)
             self.buttons[key] = b
         lay.addLayout(row)
         row2 = QtWidgets.QHBoxLayout()
         recompute = QtWidgets.QPushButton(tr("Recompute toolpaths"))
+        recompute.setIcon(theme.icon("recalculate"))
         recompute.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Compute"))
         row2.addWidget(recompute)
         simulate = QtWidgets.QPushButton(tr("Simulate"))
+        simulate.setIcon(theme.icon("play"))
         simulate.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Simulate"))
         row2.addWidget(simulate)
         lay.addLayout(row2)
         self.steps = QtWidgets.QLabel()
         self.steps.setWordWrap(True)
-        self.steps.setStyleSheet("color: #e0b050;")
+        theme.set_role(self.steps, "warning")
         lay.addWidget(self.steps)
         self._updating = False
         self.refresh()
@@ -901,8 +912,11 @@ class ProjectPanel(QtWidgets.QWidget):
 
     def _set_step(self, key, done, detail=""):
         status, text, btn, label = self.step_rows[key]
-        status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % ("#5ec8a0" if done else "#9aa7b8", "✔" if done else "○"))
-        text.setText("<b>%s</b>%s" % (tr(label), (" <span style='color:#9aa7b8'>%s</span>" % detail) if detail else ""))
+        status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % (
+            theme.status_color("done" if done else "todo"), "✔" if done else "○"))
+        status.setToolTip(tr("done") if done else tr("to do"))
+        text.setText("<b>%s</b>%s" % (tr(label), (" <span style='color:%s'>%s</span>" % (theme.color("muted"), detail))
+                                     if detail else ""))
 
     def refresh(self):
         self._updating = True
@@ -978,8 +992,9 @@ class ProjectPanel(QtWidgets.QWidget):
                 tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
             if not valid:
                 tips.append(tr("INVALID"))
+                item.setIcon(0, theme.icon("warning"))
                 for col in range(item.columnCount()):
-                    item.setForeground(col, QtGui.QBrush(QtGui.QColor("#e06060")))
+                    item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.status_color("error"))))
             if tips:
                 item.setToolTip(0, "\n".join(tips))
             self.tree.addTopLevelItem(item)
@@ -998,6 +1013,17 @@ class ProjectPanel(QtWidgets.QWidget):
             self._set_step("export", False, (proj.job.PostProcessor if proj.has_job else "") or "")
         missing = proj.machine.unknown_fields()
         self.steps.setText(tr("Machine data to fill in: {fields}", fields=", ".join(missing)) if missing else "")
+        self._mark_next_step()
+
+    def _mark_next_step(self):
+        """Action principale contextuelle : le bouton de la première étape non faite est en bleu."""
+        nxt = None
+        for key, _label, _button, _command in self.STEPS:
+            status = self.step_rows[key][0].toolTip()
+            if nxt is None and status != tr("done"):
+                nxt = key
+        for key, (_status, _text, btn, _label) in self.step_rows.items():
+            theme.set_role(btn, "primary" if key == nxt else "")
 
     # -- actions ---------------------------------------------------------------
 
@@ -1108,7 +1134,9 @@ def _dock(key, title, factory, area=QtCore.Qt.RightDockWidgetArea):
     if dock is None or not _is_alive(dock):
         dock = QtWidgets.QDockWidget(title, mw)
         dock.setObjectName("CAM2027_" + key)
-        dock.setWidget(factory())
+        widget = factory()
+        theme.apply(widget)
+        dock.setWidget(widget)
         mw.addDockWidget(area, dock)
         _docks[key] = dock
     dock.show()
@@ -1122,6 +1150,14 @@ def _is_alive(widget):
         return True
     except RuntimeError:
         return False
+
+
+def restyle_all():
+    """Réapplique le thème courant aux panneaux CAM2027 ouverts (après changement de thème)."""
+    for dock in list(_docks.values()):
+        if _is_alive(dock) and dock.widget() is not None:
+            theme.apply(dock.widget())
+    refresh_project_panel()
 
 
 def show_tool_library():
