@@ -157,6 +157,9 @@ def run():
     # export dialog rendering (non modal grab)
     text, analysis, issues = proj.preview_gcode()
     log("gcode lines=%d issues=%s" % (analysis["lines"], [l for l, _m in issues]))
+    from cam2027.project import export as exportmod
+    summary_html = commands._format_summary(exportmod.export_summary(proj, analysis, issues))
+    log("summary html: %d chars, has machine validation row: %s" % (len(summary_html), "Validation machine" in summary_html))
     html_checks = commands._format_checks(analysis, issues)
     log("checks html: %d chars, colored=%s" % (len(html_checks), "color:" in html_checks))
     lib_panel.add_starter_tools()

@@ -247,3 +247,41 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
         lines.append("Machine data still to fill in: %s" % ", ".join(missing))
     lines.append("")
     return "\n".join(lines)
+
+
+def export_summary(project, analysis, issues):
+    """Récapitulatif avant export : liste de ``(libellé, valeur, niveau, paramètres)``.
+
+    Niveau : ``ok`` / ``info`` / ``warning`` / ``unverifiable`` / ``error``. Les libellés sont
+    en anglais (traduits par l'interface, ``valeur`` est un gabarit ``str.format`` sur ``paramètres``). Rien n'est présenté comme vérifié s'il ne l'a pas été :
+    les contrôles non exécutés gardent leur niveau « non vérifiable ».
+    """
+    from .operations import COMPUTE_STATES
+
+    job = project.job
+    machine = project.machine
+    rows = [
+        ("Machine", "%s (%s)" % (machine.name, machine.controller), "info"),
+        ("Post processor", "%s %s" % (job.PostProcessor, job.PostProcessorArgs or ""), "info"),
+        ("Units", analysis.get("units") or "?", "ok" if analysis.get("units") == "mm" else "warning"),
+        ("Work offsets", " ".join(analysis.get("fixtures") or []) or "none", "ok" if analysis.get("fixtures") else "warning"),
+        ("Axes used", " ".join(analysis.get("axes") or []), "info"),
+    ]
+    for op in project.operations():
+        state = project.operation_state(op)
+        label, level = COMPUTE_STATES[state]
+        rows.append(("Operation: %s" % op.Label, label, {"ok": "ok", "muted": "info", "todo": "warning",
+                                                       "stale": "warning", "warning": "warning",
+                                                       "error": "error"}.get(level, "info")))
+    counts = {}
+    for lvl, _msg in issues:
+        counts[lvl] = counts.get(lvl, 0) + 1
+    if counts.get("error"):
+        rows.append(("Checks", "{n} blocking", "error", {"n": counts["error"]}))
+    elif counts.get("unverifiable") or counts.get("warning"):
+        rows.append(("Checks", "{w} warning(s), {u} not verifiable", "unverifiable",
+                     {"w": counts.get("warning", 0), "u": counts.get("unverifiable", 0)}))
+    else:
+        rows.append(("Checks", "no issue among the checks performed", "ok"))
+    rows.append(("Machine validation", "not done (static checks only, no simulation of the machine)", "unverifiable"))
+    return [r if len(r) == 4 else r + ({},) for r in rows]

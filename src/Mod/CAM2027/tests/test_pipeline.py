@@ -777,6 +777,27 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(proj.operation_state(op2), "failed")
         proj.close()
 
+    def test_export_summary(self):
+        """Récapitulatif avant export : machine, post, unités, repères, axes, état de chaque opération, contrôles."""
+        proj, lib, clone = self._project_with_job("Summary test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op, _rec = proj.add_operation("profile", "Contour", asm.id, endmill.presets[0].id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        proj.compute()
+        text, analysis, issues = proj.preview_gcode()
+        rows = exportmod.export_summary(proj, analysis, issues)
+        d = {label: (value, level) for label, value, level, _params in rows}
+        self.assertEqual(d["Units"], ("mm", "ok"))
+        self.assertEqual(d["Work offsets"], ("G54", "ok"))
+        self.assertEqual(d["Operation: Contour"], ("Computed", "ok"))
+        self.assertEqual(d["Checks"][1], "unverifiable")  # courses inconnues : jamais « ok »
+        self.assertEqual(d["Machine validation"][1], "unverifiable")
+        proj.update_operation(op, {"StepDown": 2.0})
+        rows = exportmod.export_summary(proj, analysis, issues)
+        self.assertIn(("Operation: Contour", "To recompute", "warning", {}), rows)
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

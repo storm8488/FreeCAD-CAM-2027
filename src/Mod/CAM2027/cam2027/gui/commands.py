@@ -408,13 +408,17 @@ class Export(_Base):
         preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
         checks = QtWidgets.QTextEdit(); checks.setReadOnly(True)
         sheet = QtWidgets.QPlainTextEdit(); sheet.setReadOnly(True)
+        summary = QtWidgets.QTextEdit(); summary.setReadOnly(True)
+        tabs.addTab(summary, tr("Summary before export"))
         tabs.addTab(preview, tr("G-code preview"))
         tabs.addTab(checks, tr("Checks"))
         tabs.addTab(sheet, tr("Setup sheet"))
         lay.addWidget(tabs)
         btns = QtWidgets.QHBoxLayout()
         b_prev = QtWidgets.QPushButton(tr("Preview"))
-        b_exp = QtWidgets.QPushButton(tr("Export"))
+        b_exp = QtWidgets.QPushButton(tr("Export G-code"))
+        b_exp.setIcon(theme.icon("export-gcode"))
+        theme.set_role(b_exp, "primary")
         b_close = QtWidgets.QPushButton(tr("Close"))
         btns.addWidget(b_prev); btns.addWidget(b_exp); btns.addStretch(); btns.addWidget(b_close)
         lay.addLayout(btns)
@@ -426,6 +430,7 @@ class Export(_Base):
                 checks.setPlainText(tr("Post-processing failed: {error}", error=str(exc)))
                 return
             preview.setPlainText(text)
+            summary.setHtml(_format_summary(exportmod.export_summary(proj, analysis, issues)))
             checks.setHtml(_format_checks(analysis, issues))
             sheet.setPlainText(exportmod.prep_sheet(proj, [], analysis, issues, [out.text()]))
 
@@ -452,6 +457,24 @@ class Export(_Base):
         b_close.clicked.connect(dlg.accept)
         do_preview()
         exec_dialog(dlg)
+
+
+def _format_summary(rows):
+    """Récapitulatif en HTML : un tableau libellé / valeur / niveau (texte + couleur)."""
+    import html
+
+    cells = []
+    for label, value, level, params in rows:
+        if label.startswith("Operation: "):
+            label = tr("Operation: {name}", name=label[len("Operation: "):])
+        else:
+            label = tr(label)
+        cells.append("<tr><td style='padding:2px 12px 2px 0'>%s</td><td><b>%s</b></td>"
+                     "<td style='padding-left:12px;color:%s'>[%s]</td></tr>" % (
+                         html.escape(label), html.escape(tr(value, **params)), theme.status_color(level),
+                         html.escape(tr(level).upper())))
+    return "<html><body><table>%s</table><p>%s</p></body></html>" % (
+        "".join(cells), html.escape(tr("Exporting writes a file only. Nothing is sent to the machine.")))
 
 
 def _format_checks(analysis, issues):

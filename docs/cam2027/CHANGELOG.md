@@ -14,6 +14,9 @@
   principale dès qu'un calcul est périmé. Test `test_compute_states` (45 tests).
 - Bibliothèque d'outils : colonnes T et Lc (mm), unités dans les en-têtes, icône par type
   d'outil, tri numérique par colonne (défaut : numéro T).
+- Export : onglet « Récapitulatif avant export » (machine, postprocesseur, unités, repères, axes,
+  état de chaque opération, bilan des contrôles, validation machine « non faite »), bouton
+  principal « Exporter le G-code ». Test `test_export_summary` (46 tests).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).
