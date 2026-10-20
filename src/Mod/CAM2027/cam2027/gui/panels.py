@@ -899,6 +899,7 @@ class ProjectPanel(QtWidgets.QWidget):
                                    tr("Z (mm)"), tr("Time (estimate)")])
         self.tree.headerItem().setToolTip(1, tr("To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine."))
         self.tree.setRootIsDecorated(False)
+        self.tree.setMinimumHeight(160)  # au moins quatre lignes d'opérations visibles
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
         self.tree.itemChanged.connect(self.on_item_changed)
