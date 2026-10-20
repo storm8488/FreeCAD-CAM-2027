@@ -135,6 +135,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         for label, slot in (
             (tr("Save library"), self.save_library), (tr("Import Fusion..."), self.import_fusion),
             (tr("Export library..."), self.export_library), (tr("Import library..."), self.import_library),
+            (tr("Add missing starter tools"), self.add_starter_tools),
         ):
             b = QtWidgets.QPushButton(label)
             b.clicked.connect(slot)
@@ -756,6 +757,16 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             return
         self.refresh_list()
         self.status.setText(tr("Library saved: {path} (revision {rev})", path=path, rev=self.lib.revision))
+
+    def add_starter_tools(self):
+        from ..tools.library import merge_starter_tools
+
+        added = merge_starter_tools(self.lib)
+        self.refresh_list()
+        if added:
+            self.status.setText(tr("Added starter tools: {names} (not saved yet)", names=", ".join(added)))
+        else:
+            self.status.setText(tr("No starter tool missing."))
 
     def import_fusion(self):
         path, _f = QtWidgets.QFileDialog.getOpenFileName(self, tr("Import a Fusion tool library"), "",

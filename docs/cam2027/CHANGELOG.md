@@ -30,6 +30,10 @@
   coupant = ToolBit + ToolController remplacés. Test `test_change_operation_tool` (36 tests).
 - Dogbones (`Path.Dressup.DogboneII`) comme troisième habillage (contour, poche, adaptatif) ;
   test `test_dogbones` (37 tests).
+- Bibliothèque : bouton « Ajouter les outils de démarrage manquants » (`merge_starter_tools`,
+  fusion par nom, numéros d'outil libres ; test `test_merge_starter_tools`, 38 tests).
+- Dialogue d'export : contrôles colorés (erreur rouge, avertissement orange, non vérifiable
+  ambre, OK vert).
 
 ## 0.1.3 — 2026-10-20
 

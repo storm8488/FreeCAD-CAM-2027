@@ -324,4 +324,37 @@ def starter_library():
     return lib
 
 
-__all__ = ["ToolLibrary", "starter_library", "default_library_path", "migrate", "TOOL_TYPES", "EXTENSION"]
+def merge_starter_tools(lib):
+    """Ajoute à ``lib`` les outils de démarrage absents (comparés par nom) avec leurs assemblages.
+
+    Les numéros d'outil des assemblages ajoutés suivent le plus grand numéro déjà
+    utilisé ; le porte-outil de démarrage est ajouté s'il manque (par nom).
+    Retourne la liste des noms d'outils ajoutés. Ne sauvegarde pas.
+    """
+    starter = starter_library()
+    existing_names = {t.name for t in lib.tools.values()}
+    holders_by_name = {h.name: h for h in lib.holders.values()}
+    next_number = max([a.output.tool_number for a in lib.assemblies.values()] + [0]) + 1
+    added = []
+    for tool in sorted(starter.tools.values(), key=lambda t: t.name.lower()):
+        if tool.name in existing_names:
+            continue
+        lib.add_tool(tool)
+        for asm in starter.assemblies_for_tool(tool.id):
+            holder = starter.holders.get(asm.holder_id) if asm.holder_id else None
+            if holder is not None:
+                if holder.name in holders_by_name:
+                    asm.holder_id = holders_by_name[holder.name].id
+                elif holder.id not in lib.holders:
+                    lib.add_holder(holder)
+                    holders_by_name[holder.name] = holder
+            asm.output.tool_number = next_number
+            asm.name = "T%d %s" % (next_number, tool.name)
+            next_number += 1
+            lib.add_assembly(asm)
+        added.append(tool.name)
+    return added
+
+
+__all__ = ["ToolLibrary", "starter_library", "merge_starter_tools", "default_library_path", "migrate", "TOOL_TYPES",
+           "EXTENSION"]

@@ -345,7 +345,7 @@ class Export(_Base):
         tabs = QtWidgets.QTabWidget()
         preview = QtWidgets.QPlainTextEdit(); preview.setReadOnly(True)
         preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
-        checks = QtWidgets.QPlainTextEdit(); checks.setReadOnly(True)
+        checks = QtWidgets.QTextEdit(); checks.setReadOnly(True)
         sheet = QtWidgets.QPlainTextEdit(); sheet.setReadOnly(True)
         tabs.addTab(preview, tr("G-code preview"))
         tabs.addTab(checks, tr("Checks"))
@@ -365,14 +365,14 @@ class Export(_Base):
                 checks.setPlainText(tr("Post-processing failed: {error}", error=str(exc)))
                 return
             preview.setPlainText(text)
-            checks.setPlainText(_format_checks(analysis, issues))
+            checks.setHtml(_format_checks(analysis, issues))
             sheet.setPlainText(exportmod.prep_sheet(proj, [], analysis, issues, [out.text()]))
 
         def do_export():
             try:
                 result = proj.export_gcode(out.text(), post.currentText(), args.text())
             except ExportBlocked as exc:
-                checks.setPlainText(_format_checks(exc.analysis, exc.issues))
+                checks.setHtml(_format_checks(exc.analysis, exc.issues))
                 tabs.setCurrentWidget(checks)
                 _warn(tr("Export blocked by the checks: {errors}", errors=str(exc)))
                 return
@@ -380,7 +380,7 @@ class Export(_Base):
                 _warn(tr("Export failed: {error}", error=str(exc)))
                 return
             preview.setPlainText(result["gcode"])
-            checks.setPlainText(_format_checks(result["analysis"], result["issues"]))
+            checks.setHtml(_format_checks(result["analysis"], result["issues"]))
             sheet.setPlainText(result["sheet_text"])
             _info(tr("Written: {files}\nSetup sheet: {sheet}\nLoad the file in CNCjs yourself; nothing is sent automatically.",
                      files=", ".join(result["files"]), sheet=result["sheet"]))
@@ -394,16 +394,22 @@ class Export(_Base):
 
 
 def _format_checks(analysis, issues):
-    lines = [tr("Lines: {n}, units: {u}, axes: {a}", n=analysis["lines"], u=analysis["units"], a=" ".join(analysis["axes"])),
-             tr("Codes: {c}", c=" ".join(analysis["codes"]))]
+    """Contrôles en HTML : erreurs en rouge, « non vérifiable » en ambre, avertissements en orange."""
+    import html
+
+    colors = {"error": "#e06060", "warning": "#e0a050", "unverifiable": "#e0c060", "info": "#9aa7b8", "ok": "#5ec8a0"}
+    lines = [html.escape(tr("Lines: {n}, units: {u}, axes: {a}", n=analysis["lines"], u=analysis["units"],
+                            a=" ".join(analysis["axes"]))),
+             html.escape(tr("Codes: {c}", c=" ".join(analysis["codes"])))]
     for axis, (lo, hi) in sorted(analysis["bbox"].items()):
         lines.append("%s: %.3f .. %.3f" % (axis, lo, hi))
     lines.append("")
     if not issues:
-        lines.append(tr("No issue found (see the documentation for what is checked)."))
+        lines.append("<span style='color:%s'>%s</span>" % (colors["ok"], html.escape(tr("No issue found (see the documentation for what is checked)."))))
     for level, msg in issues:
-        lines.append("[%s] %s" % (tr(level).upper(), msg))
-    return "\n".join(lines)
+        color = colors.get(level, colors["info"])
+        lines.append("<span style='color:%s'><b>[%s]</b> %s</span>" % (color, html.escape(tr(level).upper()), html.escape(msg)))
+    return "<html><body style='font-family: monospace'>" + "<br>".join(lines) + "</body></html>"
 
 
 class Simulate(_Base):

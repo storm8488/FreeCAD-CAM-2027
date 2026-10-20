@@ -580,5 +580,10 @@
   "Left": "Gauche",
   "Right": "Droite",
   "fixed": "fixe",
-  "custom": "personnalisée"
+  "custom": "personnalisée",
+
+  "_section_lib": "ajouts",
+  "Add missing starter tools": "Ajouter les outils de démarrage manquants",
+  "Added starter tools: {names} (not saved yet)": "Outils de démarrage ajoutés : {names} (non enregistrés)",
+  "No starter tool missing.": "Aucun outil de démarrage ne manque."
 }

@@ -136,6 +136,28 @@ class TestToolModel(unittest.TestCase):
 
 
 class TestLibrary(unittest.TestCase):
+    def test_merge_starter_tools(self):
+        """Les outils de démarrage absents sont ajoutés avec des numéros libres ; rien n'est dupliqué."""
+        from cam2027.tools.library import merge_starter_tools
+
+        lib = starter_library()
+        tm = lib.search("thread mill")[0]
+        for asm in lib.assemblies_for_tool(tm.id):
+            lib.remove_assembly(asm.id)
+        lib.remove_tool(tm.id)
+        n_tools, n_asm = lib.summary()["tools"], lib.summary()["assemblies"]
+        highest = max(a.output.tool_number for a in lib.assemblies.values())
+        added = merge_starter_tools(lib)
+        self.assertEqual(added, [tm.name])
+        self.assertEqual(lib.summary()["tools"], n_tools + 1)
+        self.assertEqual(lib.summary()["assemblies"], n_asm + 1)
+        back = lib.search("thread mill")[0]
+        asm = lib.assemblies_for_tool(back.id)[0]
+        self.assertEqual(asm.output.tool_number, highest + 1)
+        self.assertEqual(lib.summary()["holders"], 1)  # porte-outil ER20 réutilisé (même nom)
+        self.assertEqual(merge_starter_tools(lib), [])
+        self.assertEqual(lib.summary()["tools"], n_tools + 1)
+
     def test_starter_roundtrip(self):
         lib = starter_library()
         self.assertGreaterEqual(lib.summary()["tools"], 7)

@@ -133,6 +133,10 @@ def run():
     # export dialog rendering (non modal grab)
     text, analysis, issues = proj.preview_gcode()
     log("gcode lines=%d issues=%s" % (analysis["lines"], [l for l, _m in issues]))
+    html_checks = commands._format_checks(analysis, issues)
+    log("checks html: %d chars, colored=%s" % (len(html_checks), "color:" in html_checks))
+    lib_panel.add_starter_tools()
+    log("library status: %s" % lib_panel.status.text()[:80])
     tb = [t for t in mw.findChildren(QtWidgets.QToolBar) if t.windowTitle() == "CAM2027"]
     log("toolbar found: %s, actions: %d" % (bool(tb), len(tb[0].actions()) if tb else 0))
     for name, _cls in commands.COMMANDS:
