@@ -132,7 +132,18 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   de l'axe A (droite parallèle à X passant par le centre renseigné), les opérations sont calculées en
   3 axes sur cette copie, et une opération « Index A… » (`G0 Z` dégagement puis `G0 A…`) est recréée
   automatiquement devant chaque changement d'angle. A ne bouge jamais pendant une coupe (contrôlé :
-  erreur à l'export sinon). Pas d'usinage simultané XYZA, pas d'enroulement, pas de G93.
+  erreur à l'export hors G93).
+- **Continu : gravure enroulée seulement** (Usiner > Gravure enroulée). Le dessin est tracé à
+  plat dans le repère déroulé (X le long de l'axe, Y = longueur d'arc sur le brut, Y 0 à A 0, un
+  tour = 2πR) ; la fraise suit les traits à profondeur constante. Pas de compensation du rayon
+  d'outil, pas de poche ni de contour décalé enroulés, pas d'usinage 3D rotatif. Les coupes sont
+  en G93 (F = 1 / durée en minutes, calculée à la longueur réelle au rayon de coupe) puis G94.
+  Le brut rond doit être centré sur l'axe A du profil. La vue des parcours de FreeCAD ignore A :
+  l'opération est masquée et remplacée par un aperçu « (preview) » du trajet réel sur la pièce.
+- FreeCAD 1.0 replie A dans ±180° avant le postprocesseur, même pour un placement neutre
+  (`PathUtils.getPathWithPlacement` → `Command.transform`). Pendant l'export, CAM2027 applique la
+  règle de FreeCAD 1.1 (parcours rendu tel quel si le placement est neutre) ; un saut de A de plus
+  de 45° dans un seul mouvement de coupe est refusé à l'export, quelle qu'en soit la cause.
 - Rien n'est supposé : sans centre de l'axe A ni sens positif dans le profil machine, les opérations
   indexées sont refusées. Sens « main droite » = A positif antihoraire vu depuis +X (RS274) ;
   « main gauche » inverse le signe écrit.

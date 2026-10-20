@@ -11,6 +11,7 @@ lui-même.
 """
 
 import datetime
+import contextlib
 import os
 import re
 
@@ -34,6 +35,37 @@ def available_postprocessors():
     return sorted(Path.Preferences.allAvailablePostProcessors())
 
 
+#: saut de A maximal dans un seul mouvement de coupe (l'enroulement découpe à 2°)
+MAX_A_STEP_DEG = 45.0
+
+
+@contextlib.contextmanager
+def _identity_placement_passthrough():
+    """FreeCAD 1.0 : ``PathUtils.getPathWithPlacement`` passe chaque commande dans ``Command.transform``,
+    qui recompose A avec la rotation du placement et le replie dans ±180° même pour un placement
+    neutre (A200 devient A-160 : la pièce tournerait de presque un tour pendant une coupe enroulée).
+    FreeCAD 1.1 rend le parcours tel quel quand le placement est neutre ; même règle ici, seulement
+    pendant l'appel au postprocesseur (aucun fichier FreeCAD modifié)."""
+    try:
+        from PathScripts import PathUtils
+    except ImportError:  # pragma: no cover
+        yield
+        return
+    original = PathUtils.getPathWithPlacement
+
+    def passthrough(pathobj):
+        placement = getattr(pathobj, "Placement", None)
+        if pathobj.Path is not None and placement is not None and placement.isIdentity():
+            return pathobj.Path
+        return original(pathobj)
+
+    PathUtils.getPathWithPlacement = passthrough
+    try:
+        yield
+    finally:
+        PathUtils.getPathWithPlacement = original
+
+
 def postprocess(job, post_name=None, post_args=None):
     """Retourne la liste ``[(nom_section, gcode), ...]`` produite par le postprocesseur."""
     from Path.Post.Processor import PostProcessorFactory
@@ -47,7 +79,8 @@ def postprocess(job, post_name=None, post_args=None):
     processor = PostProcessorFactory.get_post_processor(job, job.PostProcessor)
     if processor is None:
         raise ValueError("postprocesseur introuvable : %s" % job.PostProcessor)
-    sections = processor.export()
+    with _identity_placement_passthrough():
+        sections = processor.export()
     out = []
     for name, gcode in sections:
         if not isinstance(gcode, str):
@@ -86,8 +119,15 @@ def analyze_gcode(text):
     max_feed = 0.0
     spindle = set()
     motion = None  # mode de déplacement modal (G0 / G1 / G2 / G3)
-    a_feed_lines = 0  # lignes où A change pendant un mouvement de coupe (4 axes simultanés)
+    a_feed_lines = 0  # lignes où A change pendant un mouvement de coupe hors G93 (avance ambiguë)
     a_positions = []  # valeurs successives de A (positionnements)
+    inverse_time = False  # G93 actif (4e axe continu : F = 1 / durée du mouvement en minutes)
+    a_wrap_lines = 0  # coupes avec A en G93 (enroulement)
+    g93_missing_f = 0  # mouvements de coupe en G93 sans mot F (interdit : F n'est pas modal en G93)
+    g93_arcs = 0  # arcs en G93 (non produits par CAM2027, non contrôlés)
+    max_a_rate = 0.0  # vitesse angulaire maximale de A en G93 (deg/min)
+    max_a_step = 0.0  # plus grand changement de A dans un seul mouvement de coupe (deg)
+    a_current = None
     for raw in text.splitlines():
         line = raw.split(";")[0]
         line = re.sub(r"\(.*?\)", "", line).strip()
@@ -100,12 +140,31 @@ def analyze_gcode(text):
                 g = str(int(float(number))) if float(number).is_integer() else number
                 if g in ("0", "1", "2", "3"):
                     motion = "G" + g
+                elif g == "93":
+                    inverse_time = True
+                elif g == "94":
+                    inverse_time = False
+        has_axis = any(letter.upper() in "XYZABC" for letter, _n in words)
+        f_words = [float(n) for letter, n in words if letter.upper() == "F"]
+        if inverse_time and motion in ("G1", "G2", "G3") and has_axis:
+            if not f_words:
+                g93_missing_f += 1
+            if motion in ("G2", "G3"):
+                g93_arcs += 1
         if any(letter.upper() == "A" for letter, _n in words):
             a_value = [float(n) for letter, n in words if letter.upper() == "A"][-1]
             if motion in ("G1", "G2", "G3"):
-                a_feed_lines += 1
+                if a_current is not None:
+                    max_a_step = max(max_a_step, abs(a_value - a_current))
+                if inverse_time:
+                    a_wrap_lines += 1
+                    if a_current is not None and f_words:
+                        max_a_rate = max(max_a_rate, abs(a_value - a_current) * f_words[-1])
+                else:
+                    a_feed_lines += 1
             else:
                 a_positions.append(a_value)
+            a_current = a_value
         for letter, number in words:
             letter = letter.upper()
             if letter in ("G", "M"):
@@ -124,7 +183,7 @@ def analyze_gcode(text):
                 v = float(number)
                 lo, hi = bbox.get(letter, (v, v))
                 bbox[letter] = (min(lo, v), max(hi, v))
-            elif letter == "F":
+            elif letter == "F" and not inverse_time:  # en G93, F n'est pas une vitesse en mm/min
                 max_feed = max(max_feed, float(number))
             elif letter == "S":
                 spindle.add(float(number))
@@ -140,6 +199,12 @@ def analyze_gcode(text):
         "spindle_speeds": sorted(spindle),
         "a_feed_lines": a_feed_lines,
         "a_positions": a_positions,
+        "a_wrap_lines": a_wrap_lines,
+        "g93_missing_f": g93_missing_f,
+        "g93_arcs": g93_arcs,
+        "max_a_rate": max_a_rate,
+        "max_a_step": max_a_step,
+        "ends_in_g93": inverse_time,
     }
 
 
@@ -166,6 +231,13 @@ def verify(analysis, machine, stock_bounds=None):
         issues.append(("error", "B/C words present: only A (about X) is supported"))
     if "A" in rot and machine.rotary.present:
         issues.extend(_verify_rotary(analysis, machine))
+    if analysis.get("g93_missing_f"):
+        issues.append(("error", "%d inverse-time (G93) move(s) without an F word" % analysis["g93_missing_f"]))
+    if analysis.get("g93_arcs"):
+        issues.append(("error", "%d arc(s) in inverse-time mode (G93): not checked, not supported"
+                       % analysis["g93_arcs"]))
+    if analysis.get("ends_in_g93"):
+        issues.append(("error", "the program ends in inverse-time mode (G93): G94 missing"))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):
         travel = getattr(machine, attr)
         span = analysis["bbox"].get(axis)
@@ -199,14 +271,25 @@ def verify(analysis, machine, stock_bounds=None):
 
 
 def _verify_rotary(analysis, machine):
-    """Contrôles 4e axe indexé (3+1) : A positionné en rapide seulement, plage, firmware."""
+    """Contrôles 4e axe : A en rapide (3+1) ou en coupe seulement en temps inverse G93 (continu), plage,
+    vitesse angulaire, firmware."""
     rot = machine.rotary
     issues = []
     if rot.about != "X":
         issues.append(("error", "rotary axis declared about %s: only A about X is supported" % rot.about))
     if analysis.get("a_feed_lines"):
-        issues.append(("error", "A changes during %d cutting move(s): simultaneous 4-axis motion is not supported "
-                                "(indexed 3+1 only)" % analysis["a_feed_lines"]))
+        issues.append(("error", "A changes during %d cutting move(s) outside inverse-time mode (G93): the feed of "
+                                "a simultaneous X/Z/A move is ambiguous" % analysis["a_feed_lines"]))
+    if analysis.get("max_a_step", 0.0) > MAX_A_STEP_DEG:
+        issues.append(("error", "A jumps by %.1f deg in a single cutting move: the part would spin during the cut"
+                       % analysis["max_a_step"]))
+    if analysis.get("a_wrap_lines"):
+        if rot.max_feed_deg_min is None:
+            issues.append(("unverifiable", "A axis max feed unknown: rotation up to %.0f deg/min not checked"
+                           % analysis["max_a_rate"]))
+        elif analysis["max_a_rate"] > rot.max_feed_deg_min + 1e-6:
+            issues.append(("error", "A rotation %.0f deg/min exceeds the A axis maximum %.0f deg/min"
+                           % (analysis["max_a_rate"], rot.max_feed_deg_min)))
     lo, hi = analysis["bbox"].get("A", (None, None))
     if rot.min_deg is None or rot.max_deg is None:
         issues.append(("unverifiable", "A range unknown: A%.3f..A%.3f not checked" % (lo, hi)))

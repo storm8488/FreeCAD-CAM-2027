@@ -25,6 +25,7 @@ from . import docobjects, importers, stock as stockmod, operations as opsmod, ex
 from . import dressups as dressupmod
 from . import sheet as sheetmod
 from . import indexing
+from . import wrap as wrapmod
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -239,6 +240,116 @@ class Project(object):
             self._renumber()
         return op, record
 
+    def add_wrapped_engraving(self, name, assembly_id, preset_id, base, depth, step_down, safe_margin=5.0):
+        """4e axe continu : gravure des contours d'un dessin déroulé, enroulée sur le brut rond (G93).
+
+        ``base`` : ``[(objet, sous-éléments)]`` du dessin dans le repère déroulé (X le long de l'axe,
+        Y = longueur d'arc, Y 0 à A 0) ; ``depth`` < 0 sous la surface. Retourne ``(op, record)``.
+        """
+        import Path.Op.Custom as Custom
+
+        indexing.check_machine(self.machine)
+        job = self.job
+        asm, tool, holder = self.library.resolve_assembly(assembly_id)
+        preset = tool.preset(preset_id)
+        values = preset.resolve(tool)
+        toolbit, bit_warnings = bridge.create_toolbit(self.doc, tool, label="%s (T%d)" % (tool.name, asm.output.tool_number))
+        tc, _ = bridge.create_tool_controller(self.doc, asm, tool, values, toolbit=toolbit, label="TC: %s" % name)
+        job.Proxy.addToolController(tc)
+        previous = FreeCAD.ActiveDocument
+        FreeCAD.setActiveDocument(self.doc.Name)
+        try:
+            op = Custom.Create(wrapmod.WRAP_PREFIX, parentJob=job)
+        finally:
+            if previous is not None and previous.Name != self.doc.Name:
+                FreeCAD.setActiveDocument(previous.Name)
+        op.Label = name
+        op.ToolController = tc
+        op.Source = "Text"
+        if FreeCAD.GuiUp and op.ViewObject is not None:
+            op.ViewObject.Visibility = False  # la vue des parcours ignore A : l'aperçu « (preview) » le remplace
+        reg = self.registry
+        record = {
+            "kind": wrapmod.KIND,
+            "label": name,
+            "order": len(reg),
+            "assembly_id": asm.id,
+            "tool_id": tool.id,
+            "holder_id": holder.id if holder else None,
+            "preset_id": preset.id,
+            "values": values,
+            "tool_controller": tc.Name,
+            "toolbit": toolbit.Name,
+            "params": {"depth": float(depth), "step_down": float(step_down), "safe_margin": float(safe_margin)},
+            "wrap_base": [[obj.Name, list(subs)] for obj, subs in base],
+            "ignored_params": [],
+            "warnings": bit_warnings,
+            "index_deg": None,
+        }
+        reg[op.Name] = record
+        self._save_registry(reg)
+        try:
+            self._generate_wrap(op)
+        except Exception:
+            self.remove_operation(op)
+            raise
+        indexing.sync(self)
+        self._renumber()
+        return op, self.registry[op.Name]
+
+    def update_wrapped_engraving(self, op, depth=None, step_down=None, safe_margin=None):
+        reg = self.registry
+        params = reg[op.Name]["params"]
+        for key, value in (("depth", depth), ("step_down", step_down), ("safe_margin", safe_margin)):
+            if value is not None:
+                params[key] = float(value)
+        self._save_registry(reg)
+        self._generate_wrap(op)
+
+    def _generate_wrap(self, op):
+        """(Re)calcule le G-code enroulé depuis le dessin, le brut rond et le profil machine."""
+        reg = self.registry
+        rec = reg[op.Name]
+        p = rec["params"]
+        cy, cz, sign = indexing.check_machine(self.machine)
+        radius = wrapmod.radius_of_stock(self.job)
+        wrapmod.check_stock_axis(self.job, (cy, cz))
+        base = []
+        for name, subs in rec["wrap_base"]:
+            obj = self.doc.getObject(name)
+            if obj is None:
+                raise ValueError("wrapped engraving %s: drawing object %s not found" % (op.Label, name))
+            base.append((obj, subs))
+        wires = wrapmod.drawing_wires(base)
+        warnings = wrapmod.check_layout(wires, radius)
+        moves = wrapmod.flat_engrave_moves(wires, p["depth"], p["step_down"], p["safe_margin"])
+        values = rec["values"]
+        lines = wrapmod.wrap_moves(moves, radius, (cy, cz), sign, values["feed_mm_min"], values["plunge_feed_mm_min"])
+        op.Gcode = wrapmod.path_gcode(lines)
+        self._wrap_preview(op, wrapmod.preview_polylines(moves, radius, (cy, cz)))
+        rec["warnings"] = [w for w in rec.get("warnings", []) if not w.startswith("drawing Y")] + warnings
+        self._save_registry(reg)
+        self.doc.recompute()
+        return lines
+
+    def _wrap_preview(self, op, polylines):
+        """Objet d'aperçu (hors job) : trajet réel de la fraise autour de la pièce."""
+        import Part
+
+        name = op.Name + "_Preview"
+        obj = self.doc.getObject(name) or self.doc.addObject("Part::Feature", name)
+        obj.Label = "%s (preview)" % op.Label
+        obj.Shape = Part.Compound([Part.makePolygon(pts) for pts in polylines]) if polylines else Part.Shape()
+        if FreeCAD.GuiUp and obj.ViewObject is not None:
+            obj.ViewObject.LineColor = (0.2, 0.55, 1.0)
+            obj.ViewObject.LineWidth = 2.0
+            if "OnTopWhenSelected" in obj.ViewObject.PropertiesList:  # le trajet est sous la surface
+                obj.ViewObject.OnTopWhenSelected = "Enabled"
+        return obj
+
+    def wrapped_operations(self):
+        return [o for o in self.operations() if wrapmod.is_wrap_op(o)]
+
     def index_angles(self):
         """Angles A utilisés par les opérations (triés)."""
         return sorted({rec["index_deg"] for rec in self.registry.values() if rec.get("index_deg") is not None})
@@ -362,6 +473,10 @@ class Project(object):
         rec = self.registry.get(op.Name)
         if rec is None:
             raise ValueError("opération %s absente du registre" % op.Label)
+        if rec["kind"] == wrapmod.KIND:
+            base = [(self.doc.getObject(n), subs) for n, subs in rec["wrap_base"]]
+            return self.add_wrapped_engraving(op.Label + " (copy)", rec["assembly_id"], rec["preset_id"], base,
+                                              **rec["params"])
         params = opsmod.read_params(op, opsmod.STRATEGIES[rec["kind"]]["params"])
         new, record = self.add_operation(rec["kind"], op.Label + " (copy)", rec["assembly_id"], rec["preset_id"],
                                          base=[(obj, list(subs)) for obj, subs in (op.Base or [])], params=params)
@@ -393,6 +508,8 @@ class Project(object):
         reg = self.registry
         rec = reg.pop(op.Name, None)
         self.job.Operations.Group = [o for o in self.job.Operations.Group if o.Name != op.Name]
+        if self.doc.getObject(op.Name + "_Preview") is not None:
+            self.doc.removeObject(op.Name + "_Preview")
         self.doc.removeObject(op.Name)
         if rec:
             tc = self.doc.getObject(rec.get("tool_controller") or "")
@@ -454,6 +571,8 @@ class Project(object):
 
     def compute(self):
         """Recalcule le document et retourne un résumé par opération."""
+        for op in self.wrapped_operations():
+            self._generate_wrap(op)  # le dessin ou le brut ont pu changer
         self.doc.recompute()
         results = []
         for op in self.operations():

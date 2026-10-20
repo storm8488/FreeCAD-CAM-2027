@@ -993,6 +993,7 @@ class ProjectPanel(QtWidgets.QWidget):
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
         from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES
+        from ..project.wrap import KIND as WRAP_KIND, LABEL as WRAP_LABEL
 
         if proj.has_job:
             models = [m.Label for m in proj.job.Model.Group]
@@ -1038,7 +1039,7 @@ class ProjectPanel(QtWidgets.QWidget):
             if indexing.is_index_op(op):
                 strategy_text = tr("A axis positioning (automatic)")
             else:
-                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", kind))
+                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", WRAP_LABEL if kind == WRAP_KIND else kind))
                 if rec.get("index_deg") is not None:
                     strategy_text += "  @A%g" % rec["index_deg"]
             item = QtWidgets.QTreeWidgetItem([
@@ -1156,6 +1157,13 @@ class ProjectPanel(QtWidgets.QWidget):
     def edit_selected(self):
         proj, op = self._selected()
         if op is None:
+            return
+        from ..project import wrap
+
+        if wrap.is_wrap_op(op):
+            from .commands import open_wrap_dialog
+
+            open_wrap_dialog(proj, op)
             return
         from . import opeditor
 

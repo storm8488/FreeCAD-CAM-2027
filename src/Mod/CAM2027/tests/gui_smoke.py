@@ -347,6 +347,47 @@ def run():
     viewr.fitAll()
     QtWidgets.QApplication.processEvents()
     viewr.saveImage(os.path.join(OUT, "view3d_relief.png"), 1000, 700, "White")
+    # 4e axe continu : gravure enroulée sur un brut rond R20
+    import Part
+    from cam2027.gui.wrapdlg import WrapDialog
+    from cam2027.project.machine import RotaryAxis
+    rstep = os.path.join(tmp, "round.step")
+    Part.makeCylinder(20, 80, FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(1, 0, 0)).exportStep(rstep)
+    projw = Project.create("Wrap", lib)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(projw.doc.Name)
+    machine = projw.machine
+    machine.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0),
+                                positive_direction="right_hand", min_deg=-720.0, max_deg=720.0)
+    projw.set_machine(machine)
+    wpart = projw.import_model(rstep, label="Round").objects[0]
+    projw.create_job([wpart], stock={"kind": "cylinder_x", "radius": 20.0, "length": 84.0, "x_start": -2.0,
+                                     "center": (0.0, 0.0)})
+    circ = 2 * math.pi * 20.0
+    V = FreeCAD.Vector
+    unrolled = projw.doc.addObject("Part::Feature", "Unrolled")
+    unrolled.Shape = Part.Compound([
+        Part.makePolygon([V(10, 5, 0), V(70, 5, 0), V(70, circ - 5, 0), V(10, circ - 5, 0), V(10, 5, 0)]),
+        Part.makeLine(V(15, 10, 0), V(65, circ - 10, 0))])
+    projw.doc.recompute()
+    unrolled.ViewObject.Visibility = False
+    wdlg = WrapDialog(projw, mw, selected=[unrolled])
+    QtWidgets.QApplication.processEvents()
+    log("wrap dialog: drawing %s, info %s" % (wdlg.drawing.currentText(), wdlg.layout_info.text()[:40]))
+    grab(wdlg, "wrap_dialog.png")
+    wop = wdlg.apply()
+    wdlg.reject()
+    wres = {r["name"]: r for r in projw.compute()}[wop.Label]
+    wtext, wana, wissues = projw.preview_gcode()
+    log("wrap: commands %d, valid %s, A %s, G93 cuts %d, errors %s" % (
+        wres["commands"], wres["valid"], wana["bbox"].get("A"), wana["a_wrap_lines"],
+        [m for lvl, m in wissues if lvl == "error"]))
+    for o in [wpart] + list(projw.job.Model.Group):  # le trajet est 0,5 mm sous la surface
+        o.ViewObject.Transparency = 70
+    vieww = FreeCADGui.getDocument(projw.doc.Name).activeView()
+    vieww.viewIsometric()
+    vieww.fitAll()
+    QtWidgets.QApplication.processEvents()
+    vieww.saveImage(os.path.join(OUT, "view3d_wrap.png"), 1000, 700, "White")
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)

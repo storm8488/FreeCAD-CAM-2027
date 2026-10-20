@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **4e axe continu : gravure enroulée** (étape 4.2) : un dessin déroulé est gravé autour du brut
+  rond, X / Z / A simultanés en temps inverse G93 (F calculé à la longueur réelle), retour G94 ;
+  aperçu 3D du trajet réel ; positionnements 3+1 recréés après l'enroulement. Contrôles d'export :
+  A en coupe seulement en G93, F sur chaque mouvement G93, pas d'arc en G93, pas de fin en G93,
+  vitesse angulaire contre le profil. Test `test_wrapped_4th_axis` (52 tests).
 - **Relief depuis une image** (étape 4.1) : PNG / JPG / BMP en niveaux de gris → solide relief
   (largeur, hauteur, épaisseur sous le relief, inversion, lissage, résolution ; longueur selon les
   proportions de l'image), dialogue Préparer > Relief depuis une image (aussi depuis Importer) ;

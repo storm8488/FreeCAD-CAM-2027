@@ -1090,6 +1090,124 @@ class TestPipeline(unittest.TestCase):
         self.assertTrue(any("simultaneous" in m for _l, m in exportmod.verify(a2, machine)))
         proj.close()
 
+    def test_wrapped_4th_axis(self):
+        """4e axe continu : gravure d'un dessin déroulé enroulée sur un brut rond R20 (X, Z, A simultanés, G93)."""
+        import math
+        from cam2027.project.machine import RotaryAxis
+        from cam2027.project import indexing, wrap
+
+        radius, depth = 20.0, -0.5
+        circ = 2 * math.pi * radius
+        step = os.path.join(self.tmp, "round.step")
+        Part.makeCylinder(radius, 80, FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(1, 0, 0)).exportStep(step)
+        lib = starter_library()
+        proj = Project.create("Wrap test", lib, self._machine())
+        part = proj.import_model(step, label="Round").objects[0]
+        proj.create_job([part], stock={"kind": "cylinder_x", "radius": radius, "length": 84.0, "x_start": -2.0,
+                                       "center": (0.0, 0.0)})
+        V = FreeCAD.Vector
+        drawing = proj.doc.addObject("Part::Feature", "Unrolled")
+        drawing.Shape = Part.Compound([
+            Part.makePolygon([V(10, 5, 0), V(50, 5, 0), V(50, circ - 5, 0), V(10, circ - 5, 0), V(10, 5, 0)]),
+            Part.makeLine(V(20, 10, 0), V(40, circ / 2, 0)),  # diagonale : hélice sur un demi-tour
+        ])
+        proj.doc.recompute()
+        tool = lib.search("3 mm flat end mill")[0]
+        asm, pre = lib.assemblies_for_tool(tool.id)[0], tool.presets[0]
+        with self.assertRaises(ValueError):  # sans axe A renseigné : refus
+            proj.add_wrapped_engraving("Wrap", asm.id, pre.id, [(drawing, [])], depth, 0.25)
+        machine = self._machine()
+        machine.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0),
+                                    positive_direction="right_hand", min_deg=-720.0, max_deg=720.0)
+        proj.set_machine(machine)
+        op, rec = proj.add_wrapped_engraving("Wrap", asm.id, pre.id, [(drawing, [])], depth, 0.25)
+        self.assertEqual(rec["kind"], wrap.KIND)
+        self.assertEqual(rec["warnings"], [])
+        summary = {r["name"]: r for r in proj.compute()}["Wrap"]
+        self.assertTrue(summary["valid"])
+        self.assertEqual(proj.operation_state(op), "computed")
+        self.assertEqual(indexing.order_issues(proj), [])
+
+        text, analysis, issues = proj.preview_gcode()
+        self.assertIn("G93", analysis["codes"])
+        self.assertGreater(analysis["a_wrap_lines"], 100)
+        self.assertEqual((analysis["a_feed_lines"], analysis["g93_missing_f"], analysis["ends_in_g93"]), (0, 0, False))
+        self.assertNotIn("error", [lvl for lvl, _m in issues], issues)
+        self.assertTrue(any(l == "unverifiable" and "A axis max feed unknown" in m for l, m in issues), issues)
+        lo, hi = analysis["bbox"]["A"]
+        self.assertGreaterEqual(lo, 0.0 - 1e-6)
+        self.assertLessEqual(hi, 360.0)
+        self.assertGreater(hi, 340.0)  # le rectangle fait presque le tour
+
+        feed = rec["values"]["feed_mm_min"]
+        drawing_shape = drawing.Shape
+        inverse, prev, checked = False, None, 0
+        for raw in text.splitlines():
+            line = raw.strip()
+            if line.startswith("("):
+                continue
+            if line.startswith("G93"):
+                inverse = True
+            elif line.startswith("G94"):
+                inverse = False
+            words = dict((w[0], float(w[1:])) for w in line.split() if w[0] in "XAZF" and len(w) > 1)
+            if line.startswith("G1") and inverse:
+                self.assertIn("F", words, line)
+                x, a, z = words["X"], words["A"], words["Z"]
+                if prev is not None and abs(z - prev[2]) < 1e-6 and z < radius - 1e-6:  # coupe à niveau constant
+                    # vitesse réelle = longueur au rayon de coupe × F (temps inverse) = avance du préréglage
+                    length = math.hypot(x - prev[0], math.radians(a - prev[1]) * z)
+                    if length > 0.05:  # au-delà des arrondis de sortie (3 décimales)
+                        self.assertAlmostEqual(length * words["F"], feed, delta=0.02 * feed)
+                    # point enroulé -> dessin déroulé : il est sur un trait du dessin
+                    d = drawing_shape.distToShape(Part.Vertex(V(x, math.radians(a) * radius, 0)))[0]
+                    self.assertLess(d, 0.02, line)
+                    self.assertIn(round(z - radius, 3), (-0.25, -0.5), line)
+                    checked += 1
+                prev = (x, a, z)
+            elif line.startswith("G0"):
+                prev = None
+        self.assertGreater(checked, 100)
+        # aperçu 3D (la vue des parcours de FreeCAD ignore A) : trajet réel autour de la pièce
+        preview = proj.doc.getObject(op.Name + "_Preview")
+        self.assertIsNotNone(preview)
+        on_level = 0
+        for vtx in preview.Shape.Vertexes:
+            r = math.hypot(vtx.Point.y, vtx.Point.z)
+            if abs(r - (radius - 0.5)) < 1e-6 or abs(r - (radius - 0.25)) < 1e-6:
+                theta = math.atan2(vtx.Point.y, vtx.Point.z) % (2 * math.pi)
+                d = drawing_shape.distToShape(Part.Vertex(V(vtx.Point.x, theta * radius, 0)))[0]
+                self.assertLess(d, 0.02, vtx.Point)
+                on_level += 1
+        self.assertGreater(on_level, 100)
+        # vitesse angulaire plafonnée dans le profil : refus si dépassée
+        machine.rotary.max_feed_deg_min = 100.0
+        proj.set_machine(machine)
+        _t, a2, issues2 = proj.preview_gcode()
+        self.assertTrue(any(l == "error" and "exceeds the A axis maximum" in m for l, m in issues2), issues2)
+        # G93 mal formé : F manquant, programme fini en G93
+        bad = exportmod.analyze_gcode("G21 G54\nG0 X0 Z25 A0\nG93\nG1 X1 A5 Z19 F100\nG1 X2 A10\n")
+        bad_msgs = [m for _l, m in exportmod.verify(bad, machine)]
+        self.assertTrue(any("without an F word" in m for m in bad_msgs), bad_msgs)
+        self.assertTrue(any("ends in inverse-time mode" in m for m in bad_msgs), bad_msgs)
+        # A replié dans ±180° (défaut de FreeCAD 1.0 corrigé à l'export) : saut pendant une coupe refusé
+        jump = exportmod.analyze_gcode("G21 G54\nG0 X0 Z25 A179\nG93\nG1 X1 A-179 Z19 F100\nG94\n")
+        self.assertTrue(any("A jumps by 358.0 deg" in m for _l, m in exportmod.verify(jump, machine)))
+        self.assertLess(analysis["max_a_step"], 3.0)
+        # dessin plus long que la circonférence : recouvrement signalé
+        long_line = Part.Wire([Part.makeLine(V(0, 0, 0), V(0, circ + 10, 0))])
+        self.assertTrue(wrap.check_layout([long_line], radius))
+        # sauvegarde / réouverture : le parcours enroulé est régénéré à l'identique
+        n_lines = len(op.Gcode)
+        fcstd = os.path.join(self.tmp, "wrap.FCStd")
+        proj.save(fcstd)
+        proj.close()
+        proj2 = Project.open(fcstd)
+        proj2.compute()
+        op2 = proj2.wrapped_operations()[0]
+        self.assertEqual(len(op2.Gcode), n_lines)
+        proj2.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

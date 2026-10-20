@@ -761,5 +761,13 @@
   "Base thickness under the relief (mm)": "Épaisseur sous le relief (mm)",
   "Smoothing (passes)": "Lissage (passes)",
   "Resolution (points on the long side)": "Résolution (points sur le grand côté)",
-  "Light = high. The relief bottom is at Z 0; machine it with 3D roughing and 3D finishing.": "Clair = haut. Le dessous du relief est à Z 0 ; usinez-le avec l'ébauche 3D puis la finition 3D."
+  "Light = high. The relief bottom is at Z 0; machine it with 3D roughing and 3D finishing.": "Clair = haut. Le dessous du relief est à Z 0 ; usinez-le avec l'ébauche 3D puis la finition 3D.",
+  "Wrapped engraving (continuous A axis)": "Gravure enroulée (4e axe continu)",
+  "Wrapped engraving (A axis)": "Gravure enroulée (axe A)",
+  "Engrave an unrolled drawing around the round stock: X, Z and A move together (continuous 4th axis, G93)": "Grave un dessin déroulé autour du brut rond : X, Z et A bougent ensemble (4e axe continu, G93)",
+  "Wrapped engraving": "Gravure enroulée",
+  "Unrolled drawing": "Dessin déroulé",
+  "Depth below the surface (mm)": "Profondeur sous la surface (mm)",
+  "Safe height above the surface (mm)": "Hauteur de sécurité au-dessus de la surface (mm)",
+  "Round stock R {r} mm. Draw unrolled: X along the A axis, Y = arc length from 0 to {c} mm (A 0 to 360 deg). Cuts move X, Z and A together in inverse-time feed (G93).": "Brut rond R {r} mm. Dessinez à plat : X le long de l'axe A, Y = longueur d'arc de 0 à {c} mm (A de 0 à 360°). Les coupes bougent X, Z et A ensemble, avance en temps inverse (G93)."
 }

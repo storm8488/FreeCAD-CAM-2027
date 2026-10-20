@@ -392,6 +392,43 @@ class AddOperation(_Base):
         opeditor.open_editor(proj, op, on_close=on_close, title=tr("New operation: {name}", name=op.Label))
 
 
+class WrapEngrave(_Base):
+    atelier = "axis-a"
+    text = "Wrapped engraving (A axis)"
+    tooltip = "Engrave an unrolled drawing around the round stock: X, Z and A move together (continuous 4th axis, G93)"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        open_wrap_dialog(proj)
+
+
+def open_wrap_dialog(proj, op=None):
+    """Création ou modification d'une gravure enroulée ; retourne l'opération ou None."""
+    from .wrapdlg import WrapDialog
+
+    selected = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+    dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
+    if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+        return None
+    try:
+        result = dlg.apply()
+        proj.compute()
+    except Exception as exc:
+        _warn(tr("Operation failed: {error}", error=str(exc)))
+        _after_change()
+        return None
+    rec = proj.registry.get(result.Name, {})
+    if rec.get("warnings"):
+        _info("\n".join(rec["warnings"]))
+    _after_change()
+    return result
+
+
 def default_params(kind, tool, values):
     """Paramètres initiaux d'une opération dérivés du préréglage (passe axiale, recouvrement, etc.)."""
     params = {"StepDown": values["axial_engagement_mm"]}
@@ -761,6 +798,7 @@ COMMANDS = [
     ("CAM2027_ToolLibrary", ToolLibrary),
     ("CAM2027_StockFixture", StockFixture),
     ("CAM2027_AddOperation", AddOperation),
+    ("CAM2027_WrapEngrave", WrapEngrave),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -781,7 +819,7 @@ WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout"
 STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
-    ("Machining", ["CAM2027_AddOperation", "CAM2027_Compute"]),
+    ("Machining", ["CAM2027_AddOperation", "CAM2027_WrapEngrave", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate"]),
     ("Export", ["CAM2027_Export"]),
 )

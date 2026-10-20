@@ -178,7 +178,9 @@ def sync(project):
         rec = reg.get(base_operation(obj).Name, {})
         return rec.get("index_deg")
 
-    if all(angle_of(o) is None for o in ops):
+    from .wrap import is_wrap_op
+
+    if all(angle_of(o) is None for o in ops) and not any(is_wrap_op(o) for o in ops):
         return []
     _cy, _cz, sign = check_machine(project.machine)
     created = []
@@ -188,6 +190,10 @@ def sync(project):
     FreeCAD.setActiveDocument(doc.Name)
     try:
         for obj in ops:
+            if is_wrap_op(obj):  # 4e axe continu : se positionne seul, laisse A à un angle quelconque
+                group.append(obj)
+                current = None
+                continue
             angle = angle_of(obj) or 0.0
             if current is None or abs(angle - current) > 1e-9:
                 from .dressups import base_operation
@@ -225,9 +231,15 @@ def order_issues(project):
     reg = project.registry
     current = None
     used = False
+    from .wrap import is_wrap_op
+
     for obj in project.operations():
         if is_index_op(obj):
             current = getattr(obj, ANGLE_PROPERTY, None)
+            continue
+        if is_wrap_op(obj):
+            current = None
+            used = True
             continue
         angle = reg.get(base_operation(obj).Name, {}).get("index_deg")
         used = used or angle is not None
