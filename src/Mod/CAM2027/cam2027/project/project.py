@@ -347,6 +347,57 @@ class Project(object):
                 obj.ViewObject.OnTopWhenSelected = "Enabled"
         return obj
 
+    def material_check(self, resolution=None, tolerance=0.02):
+        """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.
+
+        Retourne un dict : volume enlevé, entaille maximale (et position), reste maximal / moyen,
+        rapides dans la matière, opérations simulées / non simulées (avec la raison), approximations.
+        La carte calculée reste dans ``self.last_zmap`` (affichage).
+        """
+        from . import sim
+
+        if getattr(self.job.Stock, "Radius", None) is not None:
+            raise ValueError("material check: round stock (4th axis) is not supported, only box stock")
+        resolution = resolution or sim.DEFAULT_RESOLUTION
+        self.compute()
+        zmap = sim.ZMap.from_bounds(self.stock_bounds(), resolution)
+        simulated, skipped, approximations = [], [], []
+        pos = None
+        for obj in self.operations():
+            if indexing.is_index_op(obj):
+                continue
+            base = dressupmod.base_operation(obj)
+            if getattr(base, "Active", True) is False:
+                continue
+            rec = self.registry.get(base.Name) or {}
+            if wrapmod.is_wrap_op(obj):
+                skipped.append((obj.Label, "uses the A axis (wrapped)"))
+                pos = None
+                continue
+            if rec.get("index_deg") not in (None, 0, 0.0):
+                skipped.append((obj.Label, "indexed at A%g" % rec["index_deg"]))
+                pos = None
+                continue
+            if not rec.get("tool_id"):
+                skipped.append((obj.Label, "unknown tool"))
+                continue
+            profile, note = sim.ToolProfile.from_library_tool(self.library.tool(rec["tool_id"]))
+            if note:
+                approximations.append((obj.Label, note))
+            segments, pos = sim.path_segments(obj.Path.Commands, pos)
+            for rapid, p0, p1 in segments:
+                zmap.sweep(p0, p1, profile, rapid=rapid)
+            simulated.append(obj.Label)
+        heights = sim.model_heights(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)])
+        report = sim.compare(zmap, heights, tolerance)
+        report.update(removed_volume=zmap.removed_volume(), rapid_hits=zmap.rapid_hits,
+                      rapid_hit_at=zmap.rapid_hit_at, simulated=simulated, skipped=skipped,
+                      approximations=approximations, resolution=resolution, tolerance=tolerance,
+                      cells=(zmap.nx, zmap.ny))
+        self.last_zmap = zmap
+        self.last_heights = heights
+        return report
+
     def wrapped_operations(self):
         return [o for o in self.operations() if wrapmod.is_wrap_op(o)]
 

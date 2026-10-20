@@ -309,6 +309,49 @@ def run():
     view4.fitAll()
     QtWidgets.QApplication.processEvents()
     view4.saveImage(os.path.join(OUT, "view3d_4axes.png"), 1000, 700, "White")
+    # contrôle matière (Z-map) puis simulateur FreeCAD réglé et lancé
+    import time
+    from PySide import QtGui
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj.doc.Name)
+    mrep = proj.material_check()
+    commands.show_material_result(proj, mrep)
+    log("material check: simulated %s, skipped %s, gouge %.3f, leftover max %.2f, removed %.0f mm3, rapids %d" % (
+        mrep["simulated"], mrep["skipped"], mrep["gouge_max"], mrep["leftover_max"], mrep["removed_volume"],
+        mrep["rapid_hits"]))
+    log("material report: %s" % commands.material_report_text(mrep).splitlines()[1:3])
+    for o in proj.doc.Objects:
+        if o.Name not in ("CAM2027SimStock", "CAM2027SimGouges") and o.ViewObject is not None and o.Name != "Job":
+            o.ViewObject.Visibility = False
+    viewm = FreeCADGui.getDocument(proj.doc.Name).activeView()
+    viewm.viewIsometric()
+    viewm.fitAll()
+    QtWidgets.QApplication.processEvents()
+    viewm.saveImage(os.path.join(OUT, "view3d_material_check.png"), 1000, 700, "White")
+    before = set(int(w.winId()) for w in QtGui.QGuiApplication.topLevelWindows())
+    ex4 = commands.start_simulator(proj4, play=False)  # opérations sur A décochées (le simulateur ignore A)
+    log("simulator 4 axes: excluded %s" % ex4)
+    assert ex4 == ["Poche flanc"], ex4
+    FreeCADGui.Control.closeDialog()
+    QtWidgets.QApplication.processEvents()
+    excluded = commands.start_simulator(proj)
+    end = time.time() + 3.0
+    while time.time() < end:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.05)
+    new_windows = [w for w in QtGui.QGuiApplication.topLevelWindows()
+                   if int(w.winId()) not in before and w.isVisible() and int(w.winId()) != int(mw.winId())]
+    log("simulator: excluded %s, new windows %s, task panel %s" % (
+        excluded, [(w.title(), w.width(), w.height()) for w in new_windows], FreeCADGui.Control.activeDialog()))
+    for w in new_windows:
+        pix = QtGui.QGuiApplication.primaryScreen().grabWindow(w.winId())
+        pix.save(os.path.join(OUT, "simulator_window.png"))
+        log("screenshot simulator_window.png (%dx%d)" % (pix.width(), pix.height()))
+        break
+    grab(mw, "simulator_main.png")
+    for w in new_windows:
+        w.close()
+    FreeCADGui.Control.closeDialog()
+    QtWidgets.QApplication.processEvents()
     # relief depuis une image : dialogue, création, finition 3D, vue
     import math
     from PySide import QtGui

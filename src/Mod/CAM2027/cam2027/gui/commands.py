@@ -632,7 +632,114 @@ class Simulate(_Base):
         proj.doc.recompute()
         FreeCADGui.Selection.clearSelection()
         FreeCADGui.Selection.addSelection(proj.job)
+        if name == "CAM_SimulatorGL":
+            excluded = start_simulator(proj)
+            if excluded:
+                _info(tr("Not simulated (the FreeCAD simulator ignores the A axis): {ops}", ops=", ".join(excluded)))
+            return
         FreeCADGui.runCommand(name)
+
+
+_simulation = None  # garde le simulateur en vie (sinon le ramasse-miettes ferme sa fenêtre)
+
+
+def start_simulator(proj, play=True):
+    """Simulateur d'enlèvement de matière de FreeCAD (fenêtre avec lecture / pause / pas à pas), réglé :
+    opérations qui utilisent A décochées, lecture lancée. Retourne les libellés exclus."""
+    global _simulation
+    from Path.Main.Gui import SimulatorGL
+    from ..project import indexing, wrap
+
+    FreeCAD.setActiveDocument(proj.doc.Name)  # le simulateur liste les jobs de FreeCAD.ActiveDocument
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj.doc.Name)
+    FreeCADGui.Selection.clearSelection()
+    FreeCADGui.Selection.addSelection(proj.job)
+    sim = SimulatorGL.CAMSimulation()
+    sim.Activate()
+    form = sim.taskForm.form
+    reg = proj.registry
+    excluded = []
+    for i, op in enumerate(sim.operations):
+        rec = reg.get(proj.base_operation(op).Name, {})
+        uses_a = wrap.is_wrap_op(op) or indexing.is_index_op(op) or rec.get("index_deg") not in (None, 0, 0.0)
+        if uses_a:
+            form.listOperations.item(i).setCheckState(QtCore.Qt.CheckState.Unchecked)
+            if not indexing.is_index_op(op):
+                excluded.append(op.Label)
+    _simulation = sim
+    if play and form.toolButtonPlay.isEnabled():
+        sim.SimPlay()
+    return excluded
+
+
+class MaterialCheck(_Base):
+    atelier = "measure"
+    text = "Material check"
+    tooltip = "Simulate material removal on a height map and compare with the part: gouges, stock left, rapids in the material"
+
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job or not proj.operations():
+            _warn(tr("No operation to simulate."))
+            return
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            rep = proj.material_check()
+            show_material_result(proj, rep)
+        except Exception as exc:
+            _warn(tr("Material check failed: {error}", error=str(exc)))
+            return
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        _info(material_report_text(rep))
+
+
+def show_material_result(proj, rep):
+    """Brut simulé (gris) et entailles (rouge) dans la vue 3D ; objets hors job, remplacés à chaque contrôle."""
+    import Mesh  # noqa: F401
+    from ..project import sim
+
+    doc = proj.doc
+    objs = []
+    for name, mesh, colour in (
+            ("CAM2027SimStock", sim.surface_mesh(proj.last_zmap), (0.62, 0.66, 0.72)),
+            ("CAM2027SimGouges", sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights,
+                                                                                rep["tolerance"]), lift=0.02),
+             (0.9, 0.15, 0.15))):
+        obj = doc.getObject(name) or doc.addObject("Mesh::Feature", name)
+        obj.Mesh = mesh
+        obj.Label = tr("Simulated stock") if name == "CAM2027SimStock" else tr("Gouges")
+        if FreeCAD.GuiUp and obj.ViewObject is not None:
+            obj.ViewObject.ShapeColor = colour
+            obj.ViewObject.Visibility = mesh.CountFacets > 0
+        objs.append(obj)
+    doc.recompute()
+    return objs
+
+
+def material_report_text(rep):
+    lines = [tr("Material check (height map, {res} mm grid, 3 axes)", res="%g" % rep["resolution"]),
+             tr("Removed: {v} cm3", v="%.1f" % (rep["removed_volume"] / 1000.0))]
+    if rep["gouge_max"] > rep["tolerance"]:
+        x, y, _z = rep["gouge_at"]
+        lines.append(tr("GOUGE: the tool cuts {d} mm into the part (worst at X {x} Y {y}, {n} cells)",
+                        d="%.2f" % rep["gouge_max"], x="%.1f" % x, y="%.1f" % y, n=rep["gouge_cells"]))
+    else:
+        lines.append(tr("No gouge found on the top of the part (tolerance {t} mm)", t="%g" % rep["tolerance"]))
+    if rep["part_cells"]:
+        x, y, _z = rep["leftover_at"]
+        lines.append(tr("Stock left on the part: max {m} mm (at X {x} Y {y}), mean {a} mm",
+                        m="%.2f" % rep["leftover_max"], x="%.1f" % x, y="%.1f" % y, a="%.2f" % rep["leftover_mean"]))
+    if rep["rapid_hits"]:
+        lines.append(tr("RAPID MOVES IN THE MATERIAL: {n}", n=rep["rapid_hits"]))
+    for label, reason in rep["skipped"]:
+        lines.append(tr("Not simulated: {op} ({reason})", op=label, reason=reason))
+    for label, note in rep["approximations"]:
+        lines.append(tr("Approximation: {op}: {note}", op=label, note=note))
+    lines.append(tr("Not checked: vertical walls, undercuts, holder and clamp collisions."))
+    return "\n".join(lines)
 
 
 class Theme(_Base):
@@ -802,6 +909,7 @@ COMMANDS = [
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
+    ("CAM2027_MaterialCheck", MaterialCheck),
     ("CAM2027_Machine", Machine),
     ("CAM2027_Theme", Theme),
     ("CAM2027_AdvancedMode", AdvancedMode),
@@ -810,7 +918,7 @@ COMMANDS = [
 ]
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
 TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
-           "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "Separator", "CAM2027_Export",
+           "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator", "CAM2027_Export",
            "Separator", "CAM2027_Machine"]
 MENU = [name for name, _cls in COMMANDS]
 #: menu « CAM2027 » en atelier dans FreeCAD complet (dans le logiciel, ces commandes vont dans Affichage / Aide)
@@ -820,7 +928,7 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "CAM2027_WrapEngrave", "CAM2027_Compute"]),
-    ("Simulate", ["CAM2027_Simulate"]),
+    ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),
 )
 

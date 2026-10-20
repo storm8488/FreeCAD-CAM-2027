@@ -769,5 +769,20 @@
   "Unrolled drawing": "Dessin déroulé",
   "Depth below the surface (mm)": "Profondeur sous la surface (mm)",
   "Safe height above the surface (mm)": "Hauteur de sécurité au-dessus de la surface (mm)",
-  "Round stock R {r} mm. Draw unrolled: X along the A axis, Y = arc length from 0 to {c} mm (A 0 to 360 deg). Cuts move X, Z and A together in inverse-time feed (G93).": "Brut rond R {r} mm. Dessinez à plat : X le long de l'axe A, Y = longueur d'arc de 0 à {c} mm (A de 0 à 360°). Les coupes bougent X, Z et A ensemble, avance en temps inverse (G93)."
+  "Round stock R {r} mm. Draw unrolled: X along the A axis, Y = arc length from 0 to {c} mm (A 0 to 360 deg). Cuts move X, Z and A together in inverse-time feed (G93).": "Brut rond R {r} mm. Dessinez à plat : X le long de l'axe A, Y = longueur d'arc de 0 à {c} mm (A de 0 à 360°). Les coupes bougent X, Z et A ensemble, avance en temps inverse (G93).",
+  "Not simulated (the FreeCAD simulator ignores the A axis): {ops}": "Non simulé (le simulateur FreeCAD ignore l'axe A) : {ops}",
+  "Material check": "Contrôle matière",
+  "Simulate material removal on a height map and compare with the part: gouges, stock left, rapids in the material": "Simule l'enlèvement de matière sur une carte de hauteur et compare avec la pièce : entailles, matière restante, rapides dans la matière",
+  "Material check failed: {error}": "Contrôle matière impossible : {error}",
+  "Simulated stock": "Brut simulé",
+  "Gouges": "Entailles",
+  "Material check (height map, {res} mm grid, 3 axes)": "Contrôle matière (carte de hauteur, grille {res} mm, 3 axes)",
+  "Removed: {v} cm3": "Enlevé : {v} cm³",
+  "GOUGE: the tool cuts {d} mm into the part (worst at X {x} Y {y}, {n} cells)": "ENTAILLE : la fraise entre de {d} mm dans la pièce (pire point X {x} Y {y}, {n} cellules)",
+  "No gouge found on the top of the part (tolerance {t} mm)": "Aucune entaille trouvée sur le dessus de la pièce (tolérance {t} mm)",
+  "Stock left on the part: max {m} mm (at X {x} Y {y}), mean {a} mm": "Matière restante sur la pièce : max {m} mm (en X {x} Y {y}), moyenne {a} mm",
+  "RAPID MOVES IN THE MATERIAL: {n}": "RAPIDES DANS LA MATIÈRE : {n}",
+  "Not simulated: {op} ({reason})": "Non simulé : {op} ({reason})",
+  "Approximation: {op}: {note}": "Approximation : {op} : {note}",
+  "Not checked: vertical walls, undercuts, holder and clamp collisions.": "Non contrôlé : parois verticales, contre-dépouilles, collisions porte-outil et brides."
 }

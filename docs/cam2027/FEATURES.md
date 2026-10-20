@@ -79,7 +79,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Fonction cible | Statut | Composant | Travail restant |
 |---|---|---|---|
 | Affichage des trajectoires | disponible | vue 3D FreeCAD (Path) | visuel | — |
-| Enlèvement de matière | absent | simulateur CAM FreeCAD (non intégré) | jalon F |
+| Enlèvement de matière | disponible | Simuler : simulateur CAM de FreeCAD (`CAM_SimulatorGL`, fenêtre avec lecture / pause / pas à pas / vitesse) lancé réglé, opérations sur A exclues ; Simuler > Contrôle matière : carte de hauteur (`project/sim.py`, grille 0,5 mm, fraises plate / boule / torique / conique) comparée à la pièce : volume enlevé, entailles (rouge), matière restante, rapides dans la matière | auto (`test_sim.py` : rainures plate / boule / V exactes, arcs, rapide, dessus de pièce ; surfaçage juste = 0 entaille et 5376 mm³ ; surfaçage 1 mm trop bas = entaille 1,0 mm ; dôme fini sans entaille) + visuel (fenêtre du simulateur, brut simulé) | 4e axe non simulé, parois verticales et contre-dépouilles non contrôlées |
 | Collisions (outil, porte-outil, brides) | absent | — | jalon F ; brides visuelles seulement |
 | Postprocesseur identifié, unités, axes, commandes autorisées | disponible | `export.py` | auto | listes de codes pour autres contrôleurs |
 | Aperçu G-code, fiche de préparation | disponible | dialogue Export | visuel | PDF |

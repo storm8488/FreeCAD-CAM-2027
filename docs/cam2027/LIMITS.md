@@ -106,11 +106,16 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   contrôleurs « non vérifiable »), mots A/B/C vs axe rotatif déclaré, enveloppe XYZ vs
   courses, avance max, plage broche, Z sous le brut, présence d'un repère. Toute donnée
   machine inconnue produit « non vérifiable », jamais un « OK ».
-- Simulation = le simulateur CAM de FreeCAD lancé sur le job (commande « Simuler »,
-  `CAM_SimulatorGL` en 1.1, repli `CAM_Simulator`) ; son panneau est celui de FreeCAD
-  (en anglais ou dans la langue de FreeCAD), vérifié seulement par l'enregistrement de la
-  commande (gui_smoke), pas visuellement. Pas de contrôle de collision outil /
-  porte-outil / brides, pas de cinématique.
+- Simulation = le simulateur CAM de FreeCAD (commande « Simuler », `CAM_SimulatorGL`, repli
+  `CAM_Simulator`) : CAM2027 choisit le job, décoche les opérations qui utilisent A (le simulateur
+  ignore A : indexées hors A0, enroulées) en le signalant, puis lance la lecture ; sa fenêtre (lecture,
+  pause, pas à pas, vitesse) et son panneau sont ceux de FreeCAD. Vérifié par le test graphique
+  (fenêtre ouverte et capturée), pas le contenu de son rendu.
+- Contrôle matière (Simuler > Contrôle matière) : carte de hauteur 3 axes à 0,5 mm ; une colonne ne
+  voit que le dessus : parois verticales, contre-dépouilles et collisions porte-outil / brides ne sont
+  pas contrôlées (dit dans le rapport). Fraises autres que plate / boule / torique / conique simulées
+  comme plates (signalé). Brut rond (4e axe) refusé. Une entaille est un écart de plus de 0,02 mm sous
+  le dessus de la pièce au centre d'une colonne.
 - Fiche de préparation en Markdown (pas de PDF).
 
 ## Interface

@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Simulation d'enlèvement de matière** (étape 4.3) : « Simuler » lance le simulateur CAM de
+  FreeCAD réglé (job choisi, opérations sur A exclues et signalées, lecture lancée) ; nouveau
+  « Contrôle matière » : carte de hauteur 3 axes comparée à la pièce (volume enlevé, entailles en
+  rouge, matière restante, rapides dans la matière), brut simulé affiché. `test_sim.py` (59 tests).
 - **4e axe continu : gravure enroulée** (étape 4.2) : un dessin déroulé est gravé autour du brut
   rond, X / Z / A simultanés en temps inverse G93 (F calculé à la longueur réelle), retour G94 ;
   aperçu 3D du trajet réel ; positionnements 3+1 recréés après l'enroulement. Contrôles d'export :
