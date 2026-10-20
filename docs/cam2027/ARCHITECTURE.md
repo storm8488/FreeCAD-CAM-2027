@@ -49,6 +49,7 @@ src/Mod/CAM2027/
       operations.py            stratégies FreeCAD exposées + limites, résumé de parcours,
                                lecture/écriture typée des propriétés, tables de filets
       paramspec.py             libellés / onglets / aides des paramètres d'opération
+      dressups.py              attaches et rampe d'entrée (habillages FreeCAD remplaçant l'opération)
       export.py                postprocesseur, analyse G-code, contrôles, fiche
       project.py               Project : create/open, import, job, opérations, export, save
     gui/

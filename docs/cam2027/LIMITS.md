@@ -79,6 +79,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   sélection 3D dans l'onglet Géométrie n'est vérifiée que visuellement.
 - Les paramètres non pris en charge par une stratégie sont listés (`ignored_params`) et
   affichés dans le panneau projet.
+- Habillages : attaches (contours fermés seulement) et rampe d'entrée. L'habillage
+  **remplace** l'opération dans le groupe « Operations » du job (sinon FreeCAD exporterait
+  le parcours deux fois) ; l'opération de base reste dans le document et le registre reste
+  indexé par son nom. Positions des attaches réparties automatiquement (nombre, largeur,
+  hauteur, angle, rayon réglables ; déplacement individuel = panneau FreeCAD « Holding
+  Tags » dans l'atelier CAM standard). Pas de dogbones, pas d'entrées/sorties en arc
+  (LeadInOut), pas de rampe sur perçage/hélice/filetage. Dupliquer une opération ne copie
+  pas ses habillages.
 
 ## Export et contrôles
 

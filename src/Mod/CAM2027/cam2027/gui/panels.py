@@ -929,25 +929,26 @@ class ProjectPanel(QtWidgets.QWidget):
         bad = 0
         for op in ops:
             s = toolpath_summary(op)
-            rec = reg.get(op.Name, {})
+            base = proj.base_operation(op)
+            rec = reg.get(base.Name, {})
             kind = rec.get("kind", "?")
-            tc = getattr(op, "ToolController", None)
+            tc = getattr(base, "ToolController", None)
             tool_text = ""
             if tc is not None:
                 v = bridge.tool_controller_values(tc)
                 tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
-            valid = op.isValid() and (s["commands"] > 0 or not op.Active)
+            valid = op.isValid() and (s["commands"] > 0 or not base.Active)
             if not valid:
                 bad += 1
             item = QtWidgets.QTreeWidgetItem([
                 op.Label, tr(STRATEGIES.get(kind, {}).get("label", kind)), tool_text,
-                str(s["commands"]) if op.Active else tr("(inactive)"),
+                str(s["commands"]) if base.Active else tr("(inactive)"),
                 "%.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0) if s["commands"] else "",
                 str(s["cycle_time"] or ""),
             ])
             item.setData(0, QtCore.Qt.UserRole, op.Name)
             item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
-            item.setCheckState(0, QtCore.Qt.Checked if op.Active else QtCore.Qt.Unchecked)
+            item.setCheckState(0, QtCore.Qt.Checked if base.Active else QtCore.Qt.Unchecked)
             tips = list(rec.get("warnings", []))
             if rec.get("ignored_params"):
                 tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
@@ -1018,7 +1019,7 @@ class ProjectPanel(QtWidgets.QWidget):
             return
         from . import opeditor
 
-        opeditor.open_editor(proj, op)
+        opeditor.open_editor(proj, proj.base_operation(op))
 
     def move_selected(self, delta):
         proj, op = self._selected()

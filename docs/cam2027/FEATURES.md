@@ -38,7 +38,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` | impl. | reconnaissance automatique des trous |
 | Alésage hélicoïdal | disponible | `Path.Op.Helix` | impl. | test auto |
 | Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
-| Attaches, rampes, dogbones | absent | habillages FreeCAD | — | intégrer dans le dialogue d'opération |
+| Attaches, rampes | partiel | habillages FreeCAD `Path.Dressup.Tags` et `RampEntry` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`) + visuel | dogbones, entrées/sorties (LeadInOut), positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
 
 ## Opérations 3D
 

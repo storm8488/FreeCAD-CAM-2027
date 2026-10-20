@@ -20,6 +20,9 @@
   Dupliquer / Supprimer), recalcul et simulation.
 - Commande « Simuler » : lance le simulateur FreeCAD (`CAM_SimulatorGL`, sinon
   `CAM_Simulator`) sur le job du projet.
+- Attaches (Holding Tags) et rampe d'entrée comme options d'une opération
+  (`project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur) ; l'habillage
+  remplace l'opération dans le job. Test `test_dressups` (33 tests sur 1.1.4 et 1.0.2).
 
 ## 0.1.3 — 2026-10-20
 

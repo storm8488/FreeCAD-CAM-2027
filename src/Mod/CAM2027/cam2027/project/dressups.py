@@ -1,0 +1,161 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Habillages FreeCAD exposés comme options d'une opération : attaches et rampe d'entrée.
+
+Un habillage est un objet FreeCAD qui prend le parcours de l'opération
+(``Base``) et le transforme. Dans le job CAM2027 **il remplace l'opération
+dans le groupe « Operations »** : FreeCAD postprocesse tous les objets actifs
+du groupe, et laisser l'opération de base à côté de son habillage sortirait
+le parcours deux fois. L'opération de base reste dans le document (dépendance
+recalculée) ; ``base_operation()`` la retrouve depuis n'importe quel habillage.
+
+Les noms d'objets contiennent « Dressup » : les utilitaires FreeCAD
+(``Path.Dressup.Utils.baseOp`` / ``hasEntryMethod``) s'appuient sur ce mot.
+"""
+
+import importlib
+
+import FreeCAD
+
+#: clé -> module, libellé, paramètres (nom -> genre pour l'éditeur), limites
+DRESSUPS = {
+    "tags": {
+        "module": "Path.Dressup.Tags",
+        "label": "Holding tags",
+        "suffix": "_DressupTags",
+        "params": (("Width", "length"), ("Height", "length"), ("Angle", "angle"), ("Radius", "length")),
+        "limits": "Profile paths only (closed contour); tags are spread evenly along the contour, "
+                  "positions can be moved in the FreeCAD tag panel.",
+    },
+    "ramp": {
+        "module": "Path.Dressup.Gui.RampEntry",
+        "label": "Ramp entry",
+        "suffix": "_DressupRamp",
+        "params": (("Angle", "angle"), ("Method", "enum"), ("RampFeedRate", "enum"), ("UseStartDepth", "bool"),
+                   ("DressupStartDepth", "length")),
+        "limits": "Replaces vertical plunges by ramps along the path; not for drilling, helix or thread milling.",
+    },
+}
+
+ORDER = ("ramp", "tags")  # ordre d'empilement : la rampe au plus près de l'opération, les attaches au-dessus
+
+
+def is_dressup(obj):
+    return "Dressup" in obj.Name and hasattr(obj, "Base")
+
+
+def base_operation(obj):
+    """Opération sous-jacente (traverse la chaîne d'habillages)."""
+    while is_dressup(obj) and obj.Base is not None:
+        obj = obj.Base
+    return obj
+
+
+def dressup_chain(top):
+    """Liste des habillages du plus haut au plus proche de l'opération."""
+    chain = []
+    obj = top
+    while is_dressup(obj) and obj.Base is not None:
+        chain.append(obj)
+        obj = obj.Base
+    return chain
+
+
+def dressup_kind(obj):
+    for key, meta in DRESSUPS.items():
+        if obj.Name.endswith(meta["suffix"]) or meta["suffix"] in obj.Name:
+            return key
+    return None
+
+
+def top_of(job, op):
+    """Objet du groupe « Operations » qui représente ``op`` (l'opération ou son habillage le plus haut)."""
+    for obj in job.Operations.Group:
+        if obj.Name == op.Name or base_operation(obj).Name == op.Name:
+            return obj
+    return op
+
+
+def add_dressup(job, op, kind, params=None, count=None):
+    """Ajoute l'habillage ``kind`` au-dessus de ``op`` (ou de son habillage courant) et le met dans le groupe."""
+    if kind not in DRESSUPS:
+        raise ValueError("habillage inconnu : %r (disponibles : %s)" % (kind, ", ".join(DRESSUPS)))
+    meta = DRESSUPS[kind]
+    current = top_of(job, op)
+    if any(dressup_kind(d) == kind for d in dressup_chain(current)):
+        raise ValueError("l'opération %s a déjà un habillage %s" % (op.Label, kind))
+    doc = job.Document
+    previous = FreeCAD.ActiveDocument
+    FreeCAD.setActiveDocument(doc.Name)
+    try:
+        mod = importlib.import_module(meta["module"])
+        name = base_operation(current).Name + meta["suffix"]
+        if kind == "tags":
+            obj = mod.Create(current, name=name)
+            if obj is None:
+                raise ValueError("FreeCAD refuse les attaches sur %s (contour fermé requis)" % op.Label)
+            if count:
+                obj.Proxy.generateTags(obj, int(count))
+        else:
+            obj = doc.addObject("Path::FeaturePython", name)
+            dbo = mod.ObjectDressup(obj)
+            obj.Base = current
+            job.Proxy.addOperation(obj, current)
+            dbo.setup(obj)
+    finally:
+        if previous is not None and previous.Name != doc.Name:
+            try:
+                FreeCAD.setActiveDocument(previous.Name)
+            except Exception:
+                pass
+    obj.Label = "%s + %s" % (base_operation(current).Label, meta["label"].lower())
+    # l'habillage remplace l'objet qu'il enveloppe dans le groupe
+    job.Operations.Group = [o for o in job.Operations.Group if o.Name != current.Name]
+    if FreeCAD.GuiUp and obj.ViewObject is not None:
+        try:
+            if kind == "tags":
+                import Path.Dressup.Gui.Tags as TagsGui
+
+                obj.ViewObject.Proxy = TagsGui.PathDressupTagViewProvider(obj.ViewObject)
+            else:
+                obj.ViewObject.Proxy = mod.ViewProviderDressup(obj.ViewObject)
+            current.ViewObject.Visibility = False
+            obj.ViewObject.Visibility = True
+        except Exception as exc:  # fournisseur de vue absent : l'habillage reste calculable
+            FreeCAD.Console.PrintWarning("CAM2027: dressup view provider: %s\n" % exc)
+    from .operations import set_params
+
+    ignored = set_params(obj, params or {})
+    if kind == "tags" and params and any(k in params for k in ("Width", "Height", "Angle", "Radius")):
+        obj.Proxy.generateTags(obj, int(count or max(len(obj.Positions), 1)))
+    return obj, ignored
+
+
+def remove_dressup(job, obj):
+    """Retire l'habillage ``obj`` ; ce qu'il enveloppait reprend sa place dans le groupe."""
+    base = obj.Base
+    group = list(job.Operations.Group)
+    if obj in group:
+        i = group.index(obj)
+        group[i] = base
+    else:
+        # habillage intermédiaire : rebrancher celui du dessus
+        for upper in group:
+            for d in dressup_chain(upper):
+                if d.Base is not None and d.Base.Name == obj.Name:
+                    d.Base = base
+    job.Operations.Group = group
+    if FreeCAD.GuiUp and base is not None and base.ViewObject is not None:
+        base.ViewObject.Visibility = True
+    job.Document.removeObject(obj.Name)
+    return base
+
+
+def dressup_params(obj):
+    """Valeurs courantes des paramètres exposés d'un habillage (plus ``Count`` pour les attaches)."""
+    from .operations import read_params
+
+    kind = dressup_kind(obj)
+    values = read_params(obj, [n for n, _k in DRESSUPS[kind]["params"]]) if kind else {}
+    if kind == "tags":
+        values["Count"] = len(obj.Positions)
+    return values

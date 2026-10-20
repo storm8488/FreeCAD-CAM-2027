@@ -55,6 +55,19 @@ def plate_top_outer_edges(clone):
     return names
 
 
+def vertical_plunges(path):
+    """Nombre de descentes en avance de travail (G1) sans déplacement XY."""
+    x = y = z = None
+    count = 0
+    for c in path.Commands:
+        p = c.Parameters
+        nx, ny, nz = p.get("X", x), p.get("Y", y), p.get("Z", z)
+        if c.Name == "G1" and None not in (x, y, z, nz) and nz < z - 1e-6 and abs(nx - x) < 1e-6 and abs(ny - y) < 1e-6:
+            count += 1
+        x, y, z = nx, ny, nz
+    return count
+
+
 def hole_face(clone):
     """Face cylindrique de l'avant-trou."""
     for i, f in enumerate(clone.Shape.Faces, 1):
@@ -431,6 +444,56 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(list(op1.Base[0][1]), [face])
         proj.set_operation_base(op1, [])
         self.assertEqual(list(op1.Base), [])
+        proj.close()
+
+    def test_dressups(self):
+        """Attaches sur un contour (remontées au-dessus de Z final, pas de double export) ; rampe d'entrée."""
+        from cam2027.project import export as exportmod
+
+        proj, lib, clone = self._project_with_job("Dressup test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op, _rec = proj.add_operation("profile", "Contour", asm.id, endmill.presets[0].id, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        base_cmds = proj.compute()[0]["commands"]
+        self.assertGreater(vertical_plunges(op.Path), 0)
+        lines0 = len("\n".join(g for _n, g in exportmod.postprocess(proj.job)).splitlines())
+
+        tags, ignored = proj.add_dressup(op, "tags", params={"Height": 4.0, "Width": 8.0}, count=4)
+        self.assertEqual(ignored, [])
+        self.assertEqual(len(tags.Positions), 4)
+        self.assertEqual([o.Name for o in proj.operations()], [tags.Name])
+        self.assertIs(proj.base_operation(tags), op)
+        self.assertEqual(proj.registry[op.Name]["dressups"][0]["kind"], "tags")
+        r = proj.compute()[0]
+        self.assertGreater(r["commands"], base_cmds)
+        self.assertAlmostEqual(r["zmin"], 0.0, places=3)
+        # à la dernière couche (Z 0), le parcours remonte au sommet des attaches (Z = 0 + hauteur)
+        feed_z = sorted(set(round(c.Parameters["Z"], 3) for c in tags.Path.Commands
+                            if c.Name in ("G1", "G2", "G3") and "Z" in c.Parameters))
+        self.assertIn(4.0, feed_z)
+        # export : une seule occurrence du contour (l'habillage remplace l'opération)
+        text = "\n".join(g for _n, g in exportmod.postprocess(proj.job))
+        self.assertEqual(text.count("(Begin operation: %s)" % op.Label), 0)
+        self.assertEqual(text.count("(Begin operation: %s)" % tags.Label), 1)
+        self.assertGreater(len(text.splitlines()), lines0)
+
+        with self.assertRaises(ValueError):
+            proj.add_dressup(op, "tags")
+        ramp, _ignored = proj.add_dressup(op, "ramp", params={"Angle": 5.0})
+        self.assertEqual(len(proj.dressups(op)), 2)
+        self.assertEqual([o.Name for o in proj.operations()], [ramp.Name])
+        proj.compute()
+        self.assertEqual(vertical_plunges(ramp.Path), 0)
+        self.assertEqual(sorted(d["kind"] for d in proj.registry[op.Name]["dressups"]), ["ramp", "tags"])
+
+        proj.remove_dressup(op, "tags")
+        self.assertEqual([o.Name for o in proj.operations()], [ramp.Name])
+        self.assertEqual(len(proj.dressups(op)), 1)
+        proj.remove_dressup(op, "ramp")
+        self.assertEqual([o.Name for o in proj.operations()], [op.Name])
+        self.assertEqual(proj.registry[op.Name]["dressups"], [])
+        self.assertEqual(proj.compute()[0]["commands"], base_cmds)
         proj.close()
 
     def test_strategy_translations(self):

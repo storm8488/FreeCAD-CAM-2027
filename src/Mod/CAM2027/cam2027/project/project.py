@@ -22,6 +22,7 @@ from ..version import __version__, DATA_VERSION
 from ..tools.library import ToolLibrary
 from ..tools import bridge
 from . import docobjects, importers, stock as stockmod, operations as opsmod, export as exportmod
+from . import dressups as dressupmod
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -228,7 +229,7 @@ class Project(object):
         op.Base = [(opsmod.model_clone(self.job, obj), list(subs)) for obj, subs in (base or [])]
 
     def set_operation_active(self, op, active):
-        op.Active = bool(active)
+        dressupmod.base_operation(op).Active = bool(active)
 
     def move_operation(self, op, delta):
         """Déplace l'opération de ``delta`` rangs dans l'ordre d'usinage ; retourne son nouvel indice."""
@@ -242,7 +243,10 @@ class Project(object):
         return j
 
     def duplicate_operation(self, op):
-        """Copie l'opération (mêmes outil, préréglage, géométrie et valeurs courantes) juste après l'original."""
+        """Copie l'opération (mêmes outil, préréglage, géométrie et valeurs courantes ; habillages non copiés)
+        juste après l'original."""
+        top = dressupmod.top_of(self.job, op)
+        op = dressupmod.base_operation(op)
         rec = self.registry.get(op.Name)
         if rec is None:
             raise ValueError("opération %s absente du registre" % op.Label)
@@ -252,13 +256,16 @@ class Project(object):
         new.Active = op.Active
         group = list(self.job.Operations.Group)
         group.remove(new)
-        group.insert(group.index(op) + 1, new)
+        group.insert(group.index(top) + 1, new)
         self.job.Operations.Group = group
         self._renumber()
         return new, record
 
     def remove_operation(self, op):
-        """Supprime l'opération, son ToolController et son ToolBit, et l'entrée de registre."""
+        """Supprime l'opération (et ses habillages), son ToolController et son ToolBit, et l'entrée de registre."""
+        op = dressupmod.base_operation(op)
+        for d in self.dressups(op):
+            dressupmod.remove_dressup(self.job, d)
         reg = self.registry
         rec = reg.pop(op.Name, None)
         self.job.Operations.Group = [o for o in self.job.Operations.Group if o.Name != op.Name]
@@ -277,9 +284,48 @@ class Project(object):
     def _renumber(self):
         reg = self.registry
         for i, o in enumerate(self.job.Operations.Group):
-            if o.Name in reg:
-                reg[o.Name]["order"] = i
+            name = dressupmod.base_operation(o).Name
+            if name in reg:
+                reg[name]["order"] = i
         self._save_registry(reg)
+
+    # -- habillages (attaches, rampe) ------------------------------------------
+
+    def base_operation(self, obj):
+        return dressupmod.base_operation(obj)
+
+    def dressups(self, op):
+        """Habillages (objets FreeCAD) empilés sur ``op``, du plus haut au plus proche."""
+        return dressupmod.dressup_chain(dressupmod.top_of(self.job, op))
+
+    def add_dressup(self, op, kind, params=None, count=None):
+        """Ajoute un habillage (``tags`` ou ``ramp``) à l'opération ; retourne (objet, paramètres ignorés)."""
+        base = dressupmod.base_operation(op)
+        obj, ignored = dressupmod.add_dressup(self.job, base, kind, params=params, count=count)
+        reg = self.registry
+        rec = reg.get(base.Name)
+        if rec is not None:
+            rec.setdefault("dressups", [])
+            rec["dressups"] = [d for d in rec["dressups"] if d["kind"] != kind]
+            rec["dressups"].append({"kind": kind, "name": obj.Name, "params": _jsonable(params or {}),
+                                    "count": count})
+            self._save_registry(reg)
+        self._renumber()
+        return obj, ignored
+
+    def remove_dressup(self, op, kind):
+        """Retire l'habillage ``kind`` de l'opération (sans effet s'il n'existe pas)."""
+        base = dressupmod.base_operation(op)
+        for d in self.dressups(base):
+            if dressupmod.dressup_kind(d) == kind:
+                dressupmod.remove_dressup(self.job, d)
+                break
+        reg = self.registry
+        rec = reg.get(base.Name)
+        if rec is not None and rec.get("dressups"):
+            rec["dressups"] = [d for d in rec["dressups"] if d["kind"] != kind]
+            self._save_registry(reg)
+        self._renumber()
 
     def compute(self):
         """Recalcule le document et retourne un résumé par opération."""

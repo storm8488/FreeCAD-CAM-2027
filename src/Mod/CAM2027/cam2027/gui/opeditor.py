@@ -19,6 +19,23 @@ from ..project import paramspec
 from . import state, panels
 
 
+_DRESSUP_KINDS = ("profile", "pocket", "adaptive", "slot", "millface")
+_DRESSUP_CHOICES = {
+    "Method": ("RampMethod1", "RampMethod2", "RampMethod3", "Helix"),
+    "RampFeedRate": ("Horizontal Feed Rate", "Vertical Feed Rate", "Ramp Feed Rate", "Custom"),
+}
+_DRESSUP_LABELS = {
+    "Width": "Tag width",
+    "Height": "Tag height",
+    "Angle": "Angle",
+    "Radius": "Fillet radius",
+    "Method": "Ramp method",
+    "RampFeedRate": "Ramp feed rate",
+    "UseStartDepth": "Only below a start depth",
+    "DressupStartDepth": "Ramp start depth",
+}
+
+
 class OperationEditor(QtWidgets.QDialog):
     """Dialogue non modal ; ``on_close(accepted)`` est appelé à la fermeture."""
 
@@ -64,6 +81,9 @@ class OperationEditor(QtWidgets.QDialog):
         for key, label in paramspec.GROUPS:
             if by_group.get(key):
                 self.tabs.addTab(self._params_tab(by_group[key]), tr(label))
+        self.dressup_boxes = {}
+        if self.kind in _DRESSUP_KINDS:
+            self.tabs.addTab(self._dressup_tab(), tr("Entry, exit & tabs"))
         lay.addWidget(self.tabs)
 
         self.status = QtWidgets.QLabel()
@@ -222,11 +242,80 @@ class OperationEditor(QtWidgets.QDialog):
             return QtWidgets.QLineEdit(value or "")
         return None
 
+    def _dressup_tab(self):
+        from ..project import dressups as dressupmod
+
+        w = QtWidgets.QWidget()
+        lay = QtWidgets.QVBoxLayout(w)
+        info = QtWidgets.QLabel(tr("Dressups transform the computed toolpath: holding tags keep the part attached to the stock on a profile cut, a ramp entry replaces vertical plunges. 0 = FreeCAD default value."))
+        info.setWordWrap(True)
+        lay.addWidget(info)
+        existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
+        for key in ("tags", "ramp"):
+            if key == "tags" and self.kind != "profile":
+                continue
+            meta = dressupmod.DRESSUPS[key]
+            box = QtWidgets.QGroupBox(tr(meta["label"]))
+            box.setCheckable(True)
+            box.setChecked(key in existing)
+            form = QtWidgets.QFormLayout(box)
+            limits = QtWidgets.QLabel(tr(meta["limits"]))
+            limits.setWordWrap(True)
+            limits.setStyleSheet("color: #9aa7b8;")
+            form.addRow(limits)
+            widgets = {}
+            values = dressupmod.dressup_params(existing[key]) if key in existing else {}
+            if key == "tags":
+                count = QtWidgets.QSpinBox()
+                count.setRange(0, 50)
+                count.setValue(int(values.get("Count", 4)))
+                form.addRow(tr("Number of tags"), count)
+                widgets["Count"] = ("int", count)
+            for name, pkind in meta["params"]:
+                widget = self._make_widget(name, pkind, _DRESSUP_CHOICES.get(name, ()), values.get(name))
+                if widget is None:
+                    continue
+                if pkind in ("length", "angle"):
+                    widget.setRange(0, 10000)
+                    widget.setSpecialValueText(tr("(automatic)"))
+                    widget.setValue(float(values.get(name) or 0.0))
+                form.addRow(tr(_DRESSUP_LABELS.get(name, name)), widget)
+                widgets[name] = (pkind, widget)
+            lay.addWidget(box)
+            self.dressup_boxes[key] = (box, widgets)
+        lay.addStretch(1)
+        return w
+
+    def _apply_dressups(self):
+        from ..project import dressups as dressupmod
+        from ..project.operations import set_params
+
+        existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
+        for key, (box, widgets) in self.dressup_boxes.items():
+            wanted = box.isChecked()
+            vals = self._widget_values(widgets)
+            count = vals.pop("Count", None)
+            params = {k: v for k, v in vals.items()
+                      if not (isinstance(v, float) and v == 0.0)}  # 0 = valeur par défaut FreeCAD
+            if wanted and key not in existing:
+                self.proj.add_dressup(self.op, key, params=params or None, count=count)
+            elif wanted:
+                obj = existing[key]
+                set_params(obj, params)
+                if key == "tags" and count is not None and (count != len(obj.Positions) or params):
+                    obj.Proxy.generateTags(obj, int(count))
+            elif key in existing:
+                self.proj.remove_dressup(self.op, key)
+
     # -- lecture / application -------------------------------------------------
 
     def params(self):
+        return self._widget_values(self.widgets)
+
+    @staticmethod
+    def _widget_values(widgets):
         out = {}
-        for n, (kind, w) in self.widgets.items():
+        for n, (kind, w) in widgets.items():
             if isinstance(w, QtWidgets.QComboBox):
                 data = w.currentData()
                 out[n] = data if data is not None else w.currentText()
@@ -245,9 +334,14 @@ class OperationEditor(QtWidgets.QDialog):
                 self.op.Label = label
             self.proj.set_operation_base(self.op, self._base)
             ignored = self.proj.update_operation(self.op, self.params())
-            results = self.proj.compute()
-            mine = [r for r in results if r["name"] == self.op.Label]
-            summary = mine[0] if mine else None
+            self._apply_dressups()
+            self.proj.compute()
+            from ..project import dressups as dressupmod
+            from ..project.operations import toolpath_summary
+
+            top = dressupmod.top_of(self.proj.job, self.op)
+            summary = toolpath_summary(top)
+            summary["valid"] = top.isValid()
         except Exception as exc:
             self.status.setText("<span style='color:#e06060'>%s</span>" % tr("Operation failed: {error}", error=str(exc)))
             return False

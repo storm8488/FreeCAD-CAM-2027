@@ -108,9 +108,17 @@ def run():
     editor.tabs.setCurrentIndex(2)
     kind, widget = editor.widgets["StepDown"]
     widget.setValue(2.5)
+    box, widgets = editor.dressup_boxes["tags"]
+    box.setChecked(True)
+    widgets["Count"][1].setValue(3)
     log("editor apply: %s" % editor.apply())
     log("editor status: %s" % editor.status.text())
     log("StepDown after apply: %s" % op.StepDown)
+    dress = proj.dressups(op)
+    log("dressups after apply: %s, positions %s" % ([d.Name for d in dress], [len(d.Positions) for d in dress if hasattr(d, "Positions")]))
+    editor.tabs.setCurrentIndex(editor.tabs.count() - 1)
+    QtWidgets.QApplication.processEvents()
+    grab(editor, "op_editor_dressups.png")
     editor.accept()
     QtWidgets.QApplication.processEvents()
     view_path = os.path.join(OUT, "view3d.png")
