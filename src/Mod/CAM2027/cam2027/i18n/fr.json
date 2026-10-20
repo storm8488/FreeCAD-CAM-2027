@@ -657,5 +657,9 @@
   "{w} warning(s), {u} not verifiable": "{w} avertissement(s), {u} non vérifiable(s)",
   "no issue among the checks performed": "aucun problème parmi les contrôles effectués",
   "not done (static checks only, no simulation of the machine)": "non faite (contrôles statiques seulement, pas de simulation de la machine)",
-  "Exporting writes a file only. Nothing is sent to the machine.": "L'export écrit seulement un fichier. Rien n'est envoyé à la machine."
+  "Exporting writes a file only. Nothing is sent to the machine.": "L'export écrit seulement un fichier. Rien n'est envoyé à la machine.",
+
+  "_section_about": "ajouts",
+  "Independent fork based on FreeCAD and its CAM workbench (LGPL-2.1-or-later). Not an official FreeCAD release.": "Fork indépendant basé sur FreeCAD et son atelier CAM (LGPL-2.1 ou ultérieure). Ce n'est pas une version officielle de FreeCAD.",
+  "Not available yet: 3D surfacing in this workbench, 4th axis toolpaths, collision checks. Simulation uses the FreeCAD CAM simulator.": "Pas encore disponible : surfaçage 3D dans cet atelier, parcours 4e axe, contrôle de collision. La simulation utilise le simulateur CAM de FreeCAD."
 }

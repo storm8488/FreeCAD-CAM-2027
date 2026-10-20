@@ -605,12 +605,13 @@ class About(_Base):
         env = compat.environment_report()
         text = "\n".join([
             "CAM2027 %s (pinned FreeCAD base: %s)" % (__version__, FREECAD_PINNED_TAG),
+            tr("Independent fork based on FreeCAD and its CAM workbench (LGPL-2.1-or-later). Not an official FreeCAD release."),
             tr("Running on FreeCAD {v} ({build})", v=env["freecad_version"], build=env["freecad_build"]),
             tr("Tool API: {api}, OpenCamLib: {ocl}", api=env["tool_api"], ocl=env["opencamlib"]),
             tr("User config: {dir}", dir=env["user_config_dir"]),
             tr("Logs: FreeCAD.log in the user config directory (launcher starts FreeCAD with -l)."),
             "",
-            tr("Not available yet: 3D surfacing in this workbench, 4th axis, simulation with material removal, collision checks."),
+            tr("Not available yet: 3D surfacing in this workbench, 4th axis toolpaths, collision checks. Simulation uses the FreeCAD CAM simulator."),
         ])
         _info(text)
 
