@@ -15,6 +15,8 @@ import os
 
 import FreeCAD
 
+from ..i18n import Msg, UserError
+
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp")
 DEFAULT_CELLS = 120
 MIN_CELLS = 8
@@ -56,10 +58,10 @@ def load_heightmap(path, cells=DEFAULT_CELLS):
     ensure_image_plugins()
     img = QtGui.QImage(path)
     if img.isNull():
-        raise ValueError("unreadable image: %s" % os.path.basename(path))
+        raise UserError("unreadable image: {file}", file=os.path.basename(path))
     w, h = img.width(), img.height()
     if w < 2 or h < 2:
-        raise ValueError("image too small: %dx%d" % (w, h))
+        raise UserError("image too small: {w}x{h}", w=w, h=h)
     cells = max(MIN_CELLS, min(MAX_CELLS, int(cells)))
     scale = min(1.0, float(cells) / max(w, h))
     nx, ny = max(2, int(round(w * scale))), max(2, int(round(h * scale)))
@@ -124,7 +126,7 @@ def build_shape(heights, width, length, z_bottom=0.0):
     if solid.Volume < 0:
         solid.reverse()
     if not solid.isValid() or not solid.isClosed():
-        raise ValueError("relief solid is not valid")
+        raise UserError("relief solid is not valid")
     return solid
 
 
@@ -132,9 +134,9 @@ def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothi
                 z_bottom=0.0, label=None):
     """Crée l'objet « Relief » (Part::Feature) ; retourne ``(objet, avertissements)``."""
     if width <= 0 or relief_height <= 0:
-        raise ValueError("width and relief height must be positive")
+        raise UserError("width and relief height must be positive")
     if base <= 0:
-        raise ValueError("base thickness must be positive")
+        raise UserError("base thickness must be positive")
     grid, (w_px, h_px) = load_heightmap(path, cells)
     length = width * h_px / float(w_px)
     heights = relief_heights(grid, relief_height, base, invert, smoothing, z_bottom)
@@ -142,11 +144,11 @@ def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothi
     warnings = []
     nx, ny = len(grid), len(grid[0])
     if (nx, ny) != (w_px, h_px):
-        warnings.append("image %dx%d px resampled to %dx%d points" % (w_px, h_px, nx, ny))
+        warnings.append(Msg("image {w}x{h} px resampled to {nx}x{ny} points", w=w_px, h=h_px, nx=nx, ny=ny))
     # boîte optimale : BoundBox suit les points de contrôle de la B-spline et surestime le dessus
     overshoot = shape.optimalBoundingBox().ZMax - max(max(col) for col in heights)
     if overshoot > 0.02 * relief_height:
-        warnings.append("surface overshoots the image by %.2f mm near sharp edges: increase smoothing" % overshoot)
+        warnings.append(Msg("surface overshoots the image by {d:.2f} mm near sharp edges: increase smoothing", d=overshoot))
     obj = doc.addObject("Part::Feature", "Relief")
     obj.Shape = shape
     obj.Label = label or os.path.splitext(os.path.basename(path))[0]

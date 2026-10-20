@@ -12,7 +12,8 @@ import FreeCAD
 import FreeCADGui
 
 from .qt import QtCore, QtGui, QtWidgets
-from ..i18n import tr
+from ..i18n import tr, tr_msg
+from .labels import asm_label, preset_label
 from ..tools import bridge
 from ..project.operations import STRATEGIES, param_kind, read_params, thread_names
 from ..project import paramspec
@@ -168,8 +169,13 @@ class OperationEditor(QtWidgets.QDialog):
         form = QtWidgets.QFormLayout(w)
         lib = self.proj.library
         self.asm_combo = QtWidgets.QComboBox()
+        from ..project.operations import tool_fits
+
+        kind = self.rec.get("kind")
         for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
-            self.asm_combo.addItem("T%d - %s" % (a.output.tool_number, a.name), a.id)
+            # outils du bon type pour la stratégie (et l'outil actuel, même s'il ne convient plus)
+            if tool_fits(kind, lib.tool(a.tool_id)) or a.id == self.rec.get("assembly_id"):
+                self.asm_combo.addItem(asm_label(a), a.id)
         idx = self.asm_combo.findData(self.rec.get("assembly_id"))
         if idx >= 0:
             self.asm_combo.setCurrentIndex(idx)
@@ -207,7 +213,7 @@ class OperationEditor(QtWidgets.QDialog):
             self.cutter_label.setText("%s - %s, D %.3g mm, %d %s" % (
                 tool.name, tr(tool.type_label()), tool.geometry.diameter, tool.flute_count, tr("flutes")))
             for p in tool.presets:
-                self.preset_combo.addItem("%s (%s, %s)" % (p.name, tr(p.usage), p.material or "-"), p.id)
+                self.preset_combo.addItem(preset_label(p), p.id)
             idx = self.preset_combo.findData(select) if select else -1
             self.preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.preset_combo.blockSignals(False)
@@ -226,7 +232,7 @@ class OperationEditor(QtWidgets.QDialog):
         try:
             values = tool.preset(preset_id).resolve(tool)
         except (KeyError, ValueError) as exc:
-            self.values_grid.addWidget(QtWidgets.QLabel(str(exc)), 0, 0)
+            self.values_grid.addWidget(QtWidgets.QLabel(tr_msg(exc)), 0, 0)
             return
         rows = (
             (tr("Spindle speed"), "%.0f rpm" % values["spindle_rpm"]),
@@ -465,7 +471,7 @@ class OperationEditor(QtWidgets.QDialog):
             summary = toolpath_summary(top)
             summary["valid"] = top.isValid()
         except Exception as exc:
-            self.status.setText("<span style='color:%s'>%s</span>" % (theme.status_color("error"), tr("Operation failed: {error}", error=str(exc))))
+            self.status.setText("<span style='color:%s'>%s</span>" % (theme.status_color("error"), tr("Operation failed: {error}", error=tr_msg(exc))))
             return False
         text = []
         if summary:
@@ -521,10 +527,34 @@ class OperationEditor(QtWidgets.QDialog):
 
 
 _open_editors = []
+_observer = None
+
+
+class _DocumentObserver(object):
+    """Ferme les éditeurs d'un document qui se ferme."""
+
+    def slotDeletedDocument(self, doc):
+        for ed in list(_open_editors):
+            try:
+                same = ed.proj.doc.Name == doc.Name
+            except Exception:
+                same = True  # objets déjà détruits
+            if same:
+                ed.on_close = None
+                _open_editors.remove(ed)
+                try:
+                    ed.done(0)
+                    ed.deleteLater()
+                except RuntimeError:
+                    pass
 
 
 def open_editor(proj, op, on_close=None, title=None):
     """Ouvre (non modal) l'éditeur de l'opération ``op`` et le retourne."""
+    global _observer
+    if _observer is None:
+        _observer = _DocumentObserver()
+        FreeCAD.addDocumentObserver(_observer)
     dlg = OperationEditor(proj, op, on_close=on_close, title=title)
     _open_editors.append(dlg)
     dlg.finished.connect(lambda _r: _open_editors.remove(dlg) if dlg in _open_editors else None)

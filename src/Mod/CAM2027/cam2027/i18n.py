@@ -93,13 +93,45 @@ def tr(text, **kwargs):
     return translated
 
 
+class Msg(str):
+    """Message produit par le cœur, traduit à l'affichage : reste une chaîne anglaise (tests, journaux) et garde
+    son gabarit et ses paramètres pour ``tr_msg``."""
+
+    def __new__(cls, template, **params):
+        obj = str.__new__(cls, template.format(**params) if params else template)
+        obj.template = template
+        obj.params = params
+        return obj
+
+
+class UserError(ValueError):
+    """Erreur destinée à l'utilisateur (gabarit anglais + paramètres, traduite par ``tr_msg``)."""
+
+    def __init__(self, template, **params):
+        super(UserError, self).__init__(template.format(**params) if params else template)
+        self.template = template
+        self.params = params
+
+
+def tr_msg(obj):
+    """Texte traduit d'un ``Msg``, d'une ``UserError`` ou d'une chaîne (traduite si elle est au catalogue)."""
+    parts = getattr(obj, "parts", None)
+    if parts is not None:  # plusieurs messages joints
+        return "; ".join(tr_msg(p) for p in parts)
+    template = getattr(obj, "template", None)
+    if template is not None:
+        params = {k: (tr_msg(v) if isinstance(v, (Msg, UserError)) else v) for k, v in obj.params.items()}
+        return tr(template, **params)
+    return tr(str(obj))
+
+
 def missing_translations(code="fr"):
     """Liste les chaînes utilisées par le code et absentes du catalogue (outil de contrôle)."""
     import re
 
     used = set()
     root = os.path.dirname(__file__)
-    pattern = re.compile(r"\btr\(\s*([\"'])((?:\\.|(?!\1).)*)\1")
+    pattern = re.compile(r"\b(?:tr|Msg|UserError)\(\s*([\"'])((?:\\.|(?!\1).)*)\1")
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
             if name.endswith(".py"):

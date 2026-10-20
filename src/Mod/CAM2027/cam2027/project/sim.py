@@ -20,6 +20,8 @@ import math
 
 import FreeCAD
 
+from ..i18n import Msg, UserError
+
 DEFAULT_RESOLUTION = 0.5
 MAX_CELLS = 2_000_000
 _ARC_STEP_MM = 0.25
@@ -61,7 +63,7 @@ class ToolProfile(object):
             return cls("cone", g.diameter, included_angle_deg=g.tip_included_angle_deg), None
         if t in ("endmill", "facemill"):
             return cls("flat", g.diameter), None
-        return cls("flat", g.diameter), "tool type %s simulated as a flat end mill" % t
+        return cls("flat", g.diameter), Msg("tool type {t} simulated as a flat end mill", t=t)
 
     def lift(self, d):
         """Hauteur du dessous de la fraise à la distance ``d`` (tableau numpy, d <= rayon)."""
@@ -89,8 +91,8 @@ class ZMap(object):
         nx = int(math.ceil((xmax - xmin) / resolution))
         ny = int(math.ceil((ymax - ymin) / resolution))
         if nx * ny > MAX_CELLS:
-            raise ValueError("material check: %d x %d cells, increase the resolution (max %d cells)"
-                             % (nx, ny, MAX_CELLS))
+            raise UserError("material check: {nx} x {ny} cells, increase the resolution (max {m} cells)",
+                            nx=nx, ny=ny, m=MAX_CELLS)
         self.res = float(resolution)
         self.x0, self.y0 = float(xmin), float(ymin)
         self.nx, self.ny = nx, ny

@@ -20,6 +20,12 @@ import FreeCAD  # noqa: E402
 
 FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
 
+# résultats indépendants de la langue de la machine : textes sources (anglais), sauf CAM2027_LANG imposé
+from cam2027 import i18n  # noqa: E402
+
+if not os.environ.get("CAM2027_LANG"):
+    i18n.set_language("en")
+
 names = [n[:-3] for n in sorted(os.listdir(HERE)) if n.startswith("test_") and n.endswith(".py")]
 only = [a for a in sys.argv[1:] if a.startswith("test_")]
 if only:

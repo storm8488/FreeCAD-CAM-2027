@@ -12,6 +12,8 @@ import math
 
 import FreeCAD
 
+from ..i18n import UserError
+
 FLAT_SUFFIX = "_FlatArea"
 
 
@@ -19,7 +21,7 @@ def vbit_reach(tool, depth):
     """Distance horizontale du bord à laquelle le V-bit atteint la profondeur ``depth`` (> 0)."""
     g = tool.geometry
     if not g.tip_included_angle_deg:
-        raise ValueError("flat depth clearing needs a V-bit (tool %s has no included angle)" % tool.name)
+        raise UserError("flat depth clearing needs a V-bit (tool {tool} has no included angle)", tool=tool.name)
     half = math.radians(g.tip_included_angle_deg / 2.0)
     return (g.tip_diameter or 0.0) / 2.0 + depth * math.tan(half)
 
@@ -70,9 +72,9 @@ def operation_faces(op):
 
 def check_inlay_depths(female_depth, male_start_depth, male_flat_depth):
     if not 0 < male_start_depth < female_depth:
-        raise ValueError("inlay: the male start depth must be between 0 and the female depth")
+        raise UserError("inlay: the male start depth must be between 0 and the female depth")
     if male_flat_depth <= male_start_depth:
-        raise ValueError("inlay: the male flat depth must be deeper than the male start depth")
+        raise UserError("inlay: the male flat depth must be deeper than the male start depth")
     return {"bottom_gap": female_depth - male_start_depth, "surface_gap": male_flat_depth - male_start_depth}
 
 
@@ -86,7 +88,7 @@ def male_outline(face, vbit, male_start_depth, margin):
     g = male_start_depth * math.tan(half)
     reduced = face.makeOffset2D(-g, 0, False, False, False) if g > 0 else face
     if not reduced.Faces:
-        raise ValueError("inlay: the shape disappears when reduced by the male start depth")
+        raise UserError("inlay: the shape disappears when reduced by the male start depth")
     bb = face.BoundBox
     V = FreeCAD.Vector
     rect = Part.makePolygon([V(bb.XMin - margin, bb.YMin - margin, 0), V(bb.XMax + margin, bb.YMin - margin, 0),

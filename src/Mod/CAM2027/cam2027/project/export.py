@@ -16,6 +16,7 @@ import os
 import re
 
 from .. import compat
+from ..i18n import Msg
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
 
@@ -211,62 +212,68 @@ def analyze_gcode(text):
 def verify(analysis, machine, stock_bounds=None):
     """Compare l'analyse au profil machine. Retourne une liste de (niveau, message).
 
-    niveau : ``"error"``, ``"warning"`` ou ``"unverifiable"``.
+    niveau : ``"error"``, ``"warning"`` ou ``"unverifiable"`` ; message : ``Msg`` (anglais, traduit à l'affichage).
     """
     issues = []
     if analysis["units"] != "mm":
-        issues.append(("error", "G-code units are not millimetres (no G21 found)" if analysis["units"] is None
-                       else "G-code units are inches (G20)"))
+        issues.append(("error", Msg("G-code units are not millimetres (no G21 found)") if analysis["units"] is None
+                       else Msg("G-code units are inches (G20)")))
     allowed = ALLOWED_BY_CONTROLLER.get(machine.controller)
     if allowed is None:
-        issues.append(("unverifiable", "controller %r: no allowed-code list, commands not checked" % machine.controller))
+        issues.append(("unverifiable", Msg("controller {c!r}: no allowed-code list, commands not checked",
+                                           c=machine.controller)))
     else:
         bad = [c for c in analysis["codes"] if c not in allowed]
         if bad:
-            issues.append(("error", "commands not supported by %s: %s" % (machine.controller, ", ".join(bad))))
+            issues.append(("error", Msg("commands not supported by {c}: {codes}", c=machine.controller,
+                                        codes=", ".join(bad))))
     rot = [a for a in analysis["axes"] if a in ("A", "B", "C")]
     if rot and not machine.rotary.present:
-        issues.append(("error", "rotary axis words %s present but the machine has no rotary axis" % ", ".join(rot)))
+        issues.append(("error", Msg("rotary axis words {words} present but the machine has no rotary axis",
+                                    words=", ".join(rot))))
     if "B" in rot or "C" in rot:
-        issues.append(("error", "B/C words present: only A (about X) is supported"))
+        issues.append(("error", Msg("B/C words present: only A (about X) is supported")))
     if "A" in rot and machine.rotary.present:
         issues.extend(_verify_rotary(analysis, machine))
     if analysis.get("g93_missing_f"):
-        issues.append(("error", "%d inverse-time (G93) move(s) without an F word" % analysis["g93_missing_f"]))
+        issues.append(("error", Msg("{n} inverse-time (G93) move(s) without an F word", n=analysis["g93_missing_f"])))
     if analysis.get("g93_arcs"):
-        issues.append(("error", "%d arc(s) in inverse-time mode (G93): not checked, not supported"
-                       % analysis["g93_arcs"]))
+        issues.append(("error", Msg("{n} arc(s) in inverse-time mode (G93): not checked, not supported",
+                                    n=analysis["g93_arcs"])))
     if analysis.get("ends_in_g93"):
-        issues.append(("error", "the program ends in inverse-time mode (G93): G94 missing"))
+        issues.append(("error", Msg("the program ends in inverse-time mode (G93): G94 missing")))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):
         travel = getattr(machine, attr)
         span = analysis["bbox"].get(axis)
         if span is None:
             continue
         if travel is None:
-            issues.append(("unverifiable", "%s travel unknown: envelope %.2f..%.2f mm not checked" % (axis, span[0], span[1])))
+            issues.append(("unverifiable", Msg("{axis} travel unknown: envelope {lo:.2f}..{hi:.2f} mm not checked",
+                                               axis=axis, lo=span[0], hi=span[1])))
         elif span[1] - span[0] > travel + 1e-6:
-            issues.append(("error", "%s envelope (%.2f mm) exceeds travel (%.2f mm)" % (axis, span[1] - span[0], travel)))
+            issues.append(("error", Msg("{axis} envelope ({size:.2f} mm) exceeds travel ({travel:.2f} mm)",
+                                        axis=axis, size=span[1] - span[0], travel=travel)))
     if machine.max_feed_xy_mm_min is None:
-        issues.append(("unverifiable", "max feed unknown: F%.0f not checked" % analysis["max_feed"]))
+        issues.append(("unverifiable", Msg("max feed unknown: F{f:.0f} not checked", f=analysis["max_feed"])))
     elif analysis["max_feed"] > machine.max_feed_xy_mm_min:
-        issues.append(("error", "feed F%.0f exceeds machine maximum %.0f" % (analysis["max_feed"], machine.max_feed_xy_mm_min)))
+        issues.append(("error", Msg("feed F{f:.0f} exceeds machine maximum {m:.0f}", f=analysis["max_feed"],
+                                    m=machine.max_feed_xy_mm_min)))
     if analysis["spindle_speeds"]:
         smax = max(analysis["spindle_speeds"])
         smin = min(s for s in analysis["spindle_speeds"] if s > 0) if any(s > 0 for s in analysis["spindle_speeds"]) else 0
         if machine.spindle_max_rpm is None or machine.spindle_min_rpm is None:
-            issues.append(("unverifiable", "spindle range unknown: S%.0f..S%.0f not checked" % (smin, smax)))
+            issues.append(("unverifiable", Msg("spindle range unknown: S{lo:.0f}..S{hi:.0f} not checked", lo=smin, hi=smax)))
         else:
             if smax > machine.spindle_max_rpm:
-                issues.append(("error", "spindle S%.0f above maximum %.0f" % (smax, machine.spindle_max_rpm)))
+                issues.append(("error", Msg("spindle S{s:.0f} above maximum {m:.0f}", s=smax, m=machine.spindle_max_rpm)))
             if 0 < smin < machine.spindle_min_rpm:
-                issues.append(("error", "spindle S%.0f below minimum %.0f" % (smin, machine.spindle_min_rpm)))
+                issues.append(("error", Msg("spindle S{s:.0f} below minimum {m:.0f}", s=smin, m=machine.spindle_min_rpm)))
     if stock_bounds is not None:
         z = analysis["bbox"].get("Z")
         if z is not None and z[0] < stock_bounds["zmin"] - 1e-6:
-            issues.append(("warning", "Z goes %.2f mm below the stock bottom" % (stock_bounds["zmin"] - z[0])))
+            issues.append(("warning", Msg("Z goes {d:.2f} mm below the stock bottom", d=stock_bounds["zmin"] - z[0])))
     if not analysis["fixtures"]:
-        issues.append(("warning", "no work coordinate system (G54...) in the output"))
+        issues.append(("warning", Msg("no work coordinate system (G54...) in the output")))
     return issues
 
 
@@ -276,30 +283,30 @@ def _verify_rotary(analysis, machine):
     rot = machine.rotary
     issues = []
     if rot.about != "X":
-        issues.append(("error", "rotary axis declared about %s: only A about X is supported" % rot.about))
+        issues.append(("error", Msg("rotary axis declared about {a}: only A about X is supported", a=rot.about)))
     if analysis.get("a_feed_lines"):
-        issues.append(("error", "A changes during %d cutting move(s) outside inverse-time mode (G93): the feed of "
-                                "a simultaneous X/Z/A move is ambiguous" % analysis["a_feed_lines"]))
+        issues.append(("error", Msg("A changes during {n} cutting move(s) outside inverse-time mode (G93): the feed of a simultaneous X/Z/A move is ambiguous",
+                                    n=analysis["a_feed_lines"])))
     if analysis.get("max_a_step", 0.0) > MAX_A_STEP_DEG:
-        issues.append(("error", "A jumps by %.1f deg in a single cutting move: the part would spin during the cut"
-                       % analysis["max_a_step"]))
+        issues.append(("error", Msg("A jumps by {d:.1f} deg in a single cutting move: the part would spin during the cut",
+                                    d=analysis["max_a_step"])))
     if analysis.get("a_wrap_lines"):
         if rot.max_feed_deg_min is None:
-            issues.append(("unverifiable", "A axis max feed unknown: rotation up to %.0f deg/min not checked"
-                           % analysis["max_a_rate"]))
+            issues.append(("unverifiable", Msg("A axis max feed unknown: rotation up to {r:.0f} deg/min not checked",
+                                               r=analysis["max_a_rate"])))
         elif analysis["max_a_rate"] > rot.max_feed_deg_min + 1e-6:
-            issues.append(("error", "A rotation %.0f deg/min exceeds the A axis maximum %.0f deg/min"
-                           % (analysis["max_a_rate"], rot.max_feed_deg_min)))
+            issues.append(("error", Msg("A rotation {r:.0f} deg/min exceeds the A axis maximum {m:.0f} deg/min",
+                                        r=analysis["max_a_rate"], m=rot.max_feed_deg_min)))
     lo, hi = analysis["bbox"].get("A", (None, None))
     if rot.min_deg is None or rot.max_deg is None:
-        issues.append(("unverifiable", "A range unknown: A%.3f..A%.3f not checked" % (lo, hi)))
+        issues.append(("unverifiable", Msg("A range unknown: A{lo:.3f}..A{hi:.3f} not checked", lo=lo, hi=hi)))
     elif lo < rot.min_deg - 1e-6 or hi > rot.max_deg + 1e-6:
-        issues.append(("error", "A%.3f..A%.3f outside the A range %.3f..%.3f deg" % (lo, hi, rot.min_deg, rot.max_deg)))
+        issues.append(("error", Msg("A{lo:.3f}..A{hi:.3f} outside the A range {a:.3f}..{b:.3f} deg", lo=lo, hi=hi,
+                                    a=rot.min_deg, b=rot.max_deg)))
     if machine.controller == "grbl":
-        issues.append(("warning", "standard GRBL 1.1 has no A axis: a 4-axis firmware (grblHAL, GRBL 4-axis fork) is "
-                                  "required"))
+        issues.append(("warning", Msg("standard GRBL 1.1 has no A axis: a 4-axis firmware (grblHAL, GRBL 4-axis fork) is required")))
     if rot.positive_direction is None:
-        issues.append(("unverifiable", "A positive direction not set in the machine profile"))
+        issues.append(("unverifiable", Msg("A positive direction not set in the machine profile")))
     return issues
 
 
@@ -407,5 +414,13 @@ def export_summary(project, analysis, issues):
                      {"w": counts.get("warning", 0), "u": counts.get("unverifiable", 0)}))
     else:
         rows.append(("Checks", "no issue among the checks performed", "ok"))
-    rows.append(("Machine validation", "not done (static checks only, no simulation of the machine)", "unverifiable"))
+    last = project.last_check() if hasattr(project, "last_check") else None
+    if last is None or last.get("fingerprint") != project._paths_fingerprint():
+        rows.append(("Material and collision check", "not run for these toolpaths (Simulate > Material and collision check)",
+                     "unverifiable"))
+    elif last["events"] or (last["gouge_max"] > last["tolerance"]):
+        rows.append(("Material and collision check", "{n} problem(s) found", "error",
+                     {"n": len(last["events"]) + (1 if last["gouge_max"] > last["tolerance"] else 0)}))
+    else:
+        rows.append(("Material and collision check", "done: no gouge or collision found (height map, 3 axes)", "ok"))
     return [r if len(r) == 4 else r + ({},) for r in rows]

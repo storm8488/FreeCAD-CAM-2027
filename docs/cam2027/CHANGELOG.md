@@ -2,6 +2,21 @@
 
 ## Non publié
 
+- **Fiabilisation de l'interface** (bugs trouvés en test par l'utilisateur) : STL fermé converti en
+  solide affiné à l'import (fonds de poche plans retrouvés) ; pièce détectée pour STL et SVG (étape 1,
+  Brut et montage) ; import sans projet = projet créé ; assemblage de plusieurs corps fusionné en une
+  pièce (sinon chaque contour traversait les autres corps) ; « Ajouter une opération » : seuls les
+  outils compatibles avec la stratégie (V-carving -> V-bit…), nom tiré de la stratégie, fonds de poche /
+  dessus trouvés sans sélection, toute la pièce (plus seulement le premier objet), aucune opération vide
+  créée ; panneau Tâches vide masqué ; contrôle matière / collisions mémorisé dans le document (l'export
+  ne le voyait pas) et entailles bloquantes à l'export ; messages du cœur et contrôles d'export traduits
+  (`Msg` / `UserError`) ; dialogues : Brut et montage n'affiche que les champs du type choisi (et propose
+  bien le panneau pour un dessin seul), profil machine sur deux colonnes (tient en 800 px) avec la vitesse
+  de A et les erreurs de saisie nommées, fond plat avec sa profondeur, « T1 - T1 » corrigé, matières
+  traduites, outil de gravure proposé pour l'enroulement ; incrustation : marge du mâle selon la fraise
+  plate, femelle laissée active ; éditeur fermé avec son document ; attente visible (import, calcul).
+  Banc de scénarios `tests/gui_scenarios.py` (19 scénarios, fichiers de l'utilisateur) et
+  `tests/test_ui_logic.py` (72 tests).
 - **Logo validé** (étape 4.6) : proposition horizontale du dossier d'assets, symbole recadré et
   texte remplacé par « CAM2027 · FAO · USINAGE CNC » ; `scripts/make-branding.py` produit symbole,
   logos clair / sombre, petit logo, écran de démarrage et icône ; `.ico` 16 à 256 px depuis le PNG.

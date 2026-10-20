@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication."""
 
-from ..i18n import tr
+from ..i18n import tr, tr_msg
+from .labels import asm_label, preset_label
 from ..project import sheet as sheetmod
 from . import theme
 from .qt import QtCore, QtWidgets
@@ -13,7 +14,7 @@ def tool_pickers(lib, keep=lambda tool: True):
     preset = QtWidgets.QComboBox()
     for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
         if keep(lib.tool(a.tool_id)):
-            asm.addItem("T%d - %s" % (a.output.tool_number, a.name), a.id)
+            asm.addItem(asm_label(a), a.id)
 
     def fill():
         preset.clear()
@@ -21,7 +22,7 @@ def tool_pickers(lib, keep=lambda tool: True):
             return
         tool = lib.tool(lib.assembly(asm.currentData()).tool_id)
         for p in tool.presets:
-            preset.addItem("%s (%s, %s)" % (p.name, tr(p.usage), p.material or "-"), p.id)
+            preset.addItem(preset_label(p), p.id)
 
     asm.currentIndexChanged.connect(lambda _i: fill())
     fill()
@@ -76,6 +77,9 @@ class FlatDepthDialog(QtWidgets.QDialog):
         if selected_op is not None:
             self.vcarve.setCurrentIndex(max(0, self.vcarve.findData(proj.base_operation(selected_op).Name)))
         form.addRow(tr("V-carve operation"), self.vcarve)
+        self.depth = _spin(0.1, 100.0, 3.0)
+        self.depth.setToolTip(tr("The V-carve is limited to this depth; wider areas are cleared flat at this depth."))
+        form.addRow(tr("Flat depth (mm)"), self.depth)
         self.asm, self.preset = tool_pickers(proj.library, is_flat)
         form.addRow(tr("Flat end mill"), self.asm)
         form.addRow(tr("Cutting preset"), self.preset)
@@ -85,6 +89,8 @@ class FlatDepthDialog(QtWidgets.QDialog):
 
     def apply(self):
         op = self.proj.doc.getObject(self.vcarve.currentData())
+        start = float(op.StartDepth.getValueAs("mm"))
+        self.proj.update_operation(op, {"FinalDepth": start - self.depth.value()})
         return self.proj.add_flat_clearing(op, self.asm.currentData(), self.preset.currentData())
 
 
@@ -132,7 +138,7 @@ class InlayDialog(QtWidgets.QDialog):
                                  b="%.2f" % g["bottom_gap"], s="%.2f" % g["surface_gap"]))
             ok = self.drawing.count() > 0 and self.vasm.count() > 0 and self.fasm.count() > 0
         except ValueError as exc:
-            self.gaps.setText(str(exc))
+            self.gaps.setText(tr_msg(exc))
             ok = False
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(ok)
 

@@ -139,6 +139,19 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   d'outils (hors document) ne sont pas annulables.
 - Vérification visuelle : captures `tests/screenshots/` produites par `tests/gui_smoke.py`.
 
+## Import et pièce
+
+- STL / OBJ fermé de 200 000 triangles au plus : converti en solide affiné à l'import (triangles
+  coplanaires fusionnés) ; au-delà ou ouvert : reste un maillage, utilisable par les opérations 3D de
+  surface seulement (message à l'import).
+- Plusieurs corps importés (assemblage STEP) : « Brut et montage » sans sélection les **fusionne** en une
+  seule pièce jusqu'à 20 000 faces (environ 1 s pour 300 faces, 1 min pour 37 000) ; au-delà, ils restent
+  séparés et le message le dit. Sélectionner les corps voulus avant « Brut et montage » pour n'en usiner
+  que certains.
+- Sans sélection, « Ajouter une opération » prend toute la pièce ; poche et adaptative prennent les fonds
+  de poche (faces planes horizontales entre le dessous et le dessus), surfaçage le dessus ; rien de
+  pertinent : l'opération n'est pas créée et le message dit quoi sélectionner.
+
 ## Flux 2D avancé
 
 - **Fond plat** : la zone plate est la face réduite de la portée du V-bit (rayon de pointe + profondeur ×

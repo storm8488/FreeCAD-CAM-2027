@@ -16,6 +16,8 @@ import json
 import os
 
 import FreeCAD
+
+from ..i18n import Msg, UserError, tr
 import Path.Main.Job as PathJob
 
 from ..version import __version__, DATA_VERSION
@@ -112,6 +114,30 @@ class Project(object):
         return self.info.Job is not None
 
     # -- modèle ---------------------------------------------------------------
+
+    def model_candidates(self):
+        """Ce que « Brut et montage » usine sans sélection : solides et maillages importés, hors objets techniques
+        (brut, clones du job, brides, panneau, copies tournées, aperçus) ; un maillage converti en solide ne
+        compte pas deux fois."""
+        from . import stock as stockmod
+
+        technical = {o.Name for o in stockmod.clamps(self.doc)}  # clones, copies tournées : par leur nom
+        if self.has_job and getattr(self.job, "Stock", None) is not None:
+            technical.add(self.job.Stock.Name)
+        out = []
+        for o in self.doc.Objects:
+            if o.Name in technical or o.Name in ("Stock", sheetmod.SHEET_NAME) or o.Name.startswith(("Clone", "Job")):
+                continue
+            if o.Name.endswith(("_Preview", "_FlatArea", sheetmod.FACE_SUFFIX)) or "_A" in o.Name and o.Name.rsplit("_A", 1)[0] \
+                    and self.doc.getObject(o.Name.rsplit("_A", 1)[0]) is not None:
+                continue
+            if o.TypeId.startswith("Mesh::"):
+                if o.Mesh.CountFacets and self.doc.getObject(o.Name + "_solid") is None:
+                    out.append(o)
+            elif o.TypeId.startswith("Part::") and getattr(o, "Shape", None) is not None and not o.Shape.isNull() \
+                    and o.Shape.Solids:
+                out.append(o)
+        return out
 
     def import_model(self, path, label=None):
         return importers.import_file(self.doc, path, label)
@@ -320,7 +346,7 @@ class Project(object):
         for name, subs in rec["wrap_base"]:
             obj = self.doc.getObject(name)
             if obj is None:
-                raise ValueError("wrapped engraving %s: drawing object %s not found" % (op.Label, name))
+                raise UserError("wrapped engraving {op}: drawing object {name} not found", op=op.Label, name=name)
             base.append((obj, subs))
         wires = wrapmod.drawing_wires(base)
         warnings = wrapmod.check_layout(wires, radius)
@@ -340,7 +366,7 @@ class Project(object):
 
         name = op.Name + "_Preview"
         obj = self.doc.getObject(name) or self.doc.addObject("Part::Feature", name)
-        obj.Label = "%s (preview)" % op.Label
+        obj.Label = tr("{name} (preview)", name=op.Label)
         obj.Shape = Part.Compound([Part.makePolygon(pts) for pts in polylines]) if polylines else Part.Shape()
         if FreeCAD.GuiUp and obj.ViewObject is not None:
             obj.ViewObject.LineColor = (0.2, 0.55, 1.0)
@@ -365,34 +391,34 @@ class Project(object):
         reg = self.registry
         vrec = reg.get(vcarve_op.Name)
         if not vrec or vrec["kind"] != "vcarve":
-            raise ValueError("flat depth clearing applies to a V-carve operation")
+            raise UserError("flat depth clearing applies to a V-carve operation")
         start = float(vcarve_op.StartDepth.getValueAs("mm"))
         final = float(vcarve_op.FinalDepth.getValueAs("mm"))
         depth = start - final
         if depth <= 1e-6:
-            raise ValueError("the V-carve has no depth limit (final depth = start depth)")
+            raise UserError("the V-carve has no depth limit (final depth = start depth)")
         reach = inlay.vbit_reach(self.library.tool(vrec["tool_id"]), depth)
         faces = inlay.flat_area(inlay.operation_faces(vcarve_op), reach)
         if not faces:
-            raise ValueError("no flat area: the V-bit reaches %.2f mm everywhere in this shape" % depth)
+            raise UserError("no flat area: the V-bit reaches {d:.2f} mm everywhere in this shape", d=depth)
         import Part
 
         area = self.doc.getObject(vcarve_op.Name + inlay.FLAT_SUFFIX)             or self.doc.addObject("Part::Feature", vcarve_op.Name + inlay.FLAT_SUFFIX)
-        area.Label = "%s (flat area)" % vcarve_op.Label
+        area.Label = tr("{name} (flat area)", name=vcarve_op.Label)
         area.Shape = Part.Compound(faces) if len(faces) > 1 else faces[0]
         if FreeCAD.GuiUp and area.ViewObject is not None:
             area.ViewObject.Visibility = False
         label = name or vcarve_op.Label
         values = {"StartDepth": start, "FinalDepth": final, "StepOver": 40}
         values.update(params or {})
-        pocket, _r1 = self.add_operation("pocket2d", "%s - flat" % label, assembly_id, preset_id,
+        pocket, _r1 = self.add_operation("pocket2d", tr("{name} - flat", name=label), assembly_id, preset_id,
                                          base=[(area, ["Face%d" % (i + 1) for i in range(len(area.Shape.Faces))])],
                                          params=values)
-        outline, _r2 = self.add_operation("engrave", "%s - flat outline" % label, vrec["assembly_id"],
+        outline, _r2 = self.add_operation("engrave", tr("{name} - flat outline", name=label), vrec["assembly_id"],
                                           vrec["preset_id"],
                                           base=[(area, ["Edge%d" % (i + 1) for i in range(len(area.Shape.Edges))])],
                                           params={"StartDepth": start, "FinalDepth": final, "StepDown": depth})
-        corners = self._vcarve_corners(vcarve_op, vrec, "%s - sharp corners" % label, start, depth)
+        corners = self._vcarve_corners(vcarve_op, vrec, tr("{name} - sharp corners", name=label), start, depth)
         reg = self.registry
         for op in (pocket, outline, corners):
             if op is not None:
@@ -455,32 +481,34 @@ class Project(object):
         label = name or drawing.Label
         notes = []
         face_clone = self.drawing_clone(drawing, face=True)
-        fv, _r = self.add_operation("vcarve", "%s - female V-carve" % label, vbit_assembly_id, vbit_preset_id,
+        fv, _r = self.add_operation("vcarve", tr("{name} - female V-carve", name=label), vbit_assembly_id, vbit_preset_id,
                                     base=[(face_clone, ["Face1"])],
                                     params={"StartDepth": 0.0, "FinalDepth": -float(female_depth)})
         female = [fv]
         try:
             female[:0] = [o for o in self.add_flat_clearing(fv, flat_assembly_id, flat_preset_id) if o is not None]
         except ValueError as exc:
-            notes.append("female: %s" % exc)
+            notes.append(Msg("female: {why}", why=exc))
         source_face = face_clone.Shape.Faces[0]
         if margin is None:
-            margin = inlay.vbit_reach(vbit, male_flat_depth) + 5.0
+            # la bande autour du bouchon doit recevoir la fraise plate entre les deux flancs en V
+            _fa, flat_tool, _fh = self.library.resolve_assembly(flat_assembly_id)
+            margin = 2 * inlay.vbit_reach(vbit, male_flat_depth) + flat_tool.geometry.diameter + 3.0
         outline, mirror_x = inlay.male_outline(source_face, vbit, male_start_depth, margin)
-        male = Project.create("%s - male" % label, self.library, self.machine)
+        male = Project.create(tr("{name} - male", name=label), self.library, self.machine)
         mobj = male.doc.addObject("Part::Feature", "InlayMale")
-        mobj.Label = "%s (male, mirrored)" % label
+        mobj.Label = tr("{name} (male, mirrored)", name=label)
         mobj.Shape = outline
         male.doc.recompute()
         male.create_sheet_job([mobj], thickness=male_thickness, margin=5.0)
-        mv, _r = male.add_operation("vcarve", "%s - male V-carve" % label, vbit_assembly_id, vbit_preset_id,
+        mv, _r = male.add_operation("vcarve", tr("{name} - male V-carve", name=label), vbit_assembly_id, vbit_preset_id,
                                     base=[(male.drawing_clone(mobj, face=True), ["Face1"])],
                                     params={"StartDepth": 0.0, "FinalDepth": -float(male_flat_depth)})
         male_ops = [mv]
         try:
             male_ops[:0] = [o for o in male.add_flat_clearing(mv, flat_assembly_id, flat_preset_id) if o is not None]
         except ValueError as exc:
-            notes.append("male: %s" % exc)
+            notes.append(Msg("male: {why}", why=exc))
         return {"female_ops": female, "male_project": male, "male_ops": male_ops, "mirror_x": mirror_x,
                 "notes": notes, **gaps}
 
@@ -493,7 +521,7 @@ class Project(object):
         from . import nesting
 
         if self.has_job:
-            raise ValueError("nesting must be done before the sheet job is created")
+            raise UserError("nesting must be done before the sheet job is created")
         objs = []
         for obj in drawings:
             objs.append(obj)
@@ -534,7 +562,7 @@ class Project(object):
         from . import sim
 
         if getattr(self.job.Stock, "Radius", None) is not None:
-            raise ValueError("material check: round stock (4th axis) is not supported, only box stock")
+            raise UserError("material check: round stock (4th axis) is not supported, only box stock")
         resolution = resolution or sim.DEFAULT_RESOLUTION
         self.compute()
         zmap = sim.ZMap.from_bounds(self.stock_bounds(), resolution)
@@ -553,15 +581,15 @@ class Project(object):
                 continue
             rec = self.registry.get(base.Name) or {}
             if wrapmod.is_wrap_op(obj):
-                skipped.append((obj.Label, "uses the A axis (wrapped)"))
+                skipped.append((obj.Label, Msg("uses the A axis (wrapped)")))
                 pos = None
                 continue
             if rec.get("index_deg") not in (None, 0, 0.0):
-                skipped.append((obj.Label, "indexed at A%g" % rec["index_deg"]))
+                skipped.append((obj.Label, Msg("indexed at A{a:g}", a=rec["index_deg"])))
                 pos = None
                 continue
             if not rec.get("tool_id"):
-                skipped.append((obj.Label, "unknown tool"))
+                skipped.append((obj.Label, Msg("unknown tool")))
                 continue
             asm, tool, holder = self.library.resolve_assembly(rec["assembly_id"])
             profile, note = sim.ToolProfile.from_library_tool(tool)
@@ -622,8 +650,51 @@ class Project(object):
                       cells=(zmap.nx, zmap.ny))
         self.last_zmap = zmap
         self.last_heights = heights
-        self._collision_check = (self._paths_fingerprint(), report["collisions"])
+        self._store_check(report)
         return report
+
+    def _store_check(self, report):
+        """Dernier contrôle matière / collisions, enregistré dans le document (chaque commande de l'interface
+        relit le projet depuis le document : un attribut Python serait perdu)."""
+        col = report["collisions"]
+        data = {"fingerprint": self._paths_fingerprint(),
+                "events": [[e[0], e[1], e[2], list(e[3]) if e[3] else None, e[4]] + list(e[5:]) for e in col["events"]],
+                "status": {k: col[k] for k in ("flute_length", "holder", "clamps", "rapids")},
+                "no_holder": col["no_holder"], "clamps_defined": col["clamps_defined"],
+                "not_run": [str(x) for x in col["not_run"]],
+                "gouge_max": report["gouge_max"], "gouge_at": list(report["gouge_at"]) if report["gouge_at"] else None,
+                "tolerance": report["tolerance"]}
+        if "MaterialCheck" not in self.info.PropertiesList:
+            self.info.addProperty("App::PropertyString", "MaterialCheck", "CAM2027", "Last material / collision check (JSON)")
+            self.info.setEditorMode("MaterialCheck", 1)
+        self.info.MaterialCheck = json.dumps(data)
+
+    def last_check(self):
+        raw = getattr(self.info, "MaterialCheck", "")
+        return json.loads(raw) if raw else None
+
+    def merge_models(self, objects, label=None):
+        """Fusionne plusieurs corps en une seule pièce à usiner (assemblage empilé : sans cela, chaque corps
+        est contourné jusqu'au fond du modèle, à travers les autres). Les corps d'origine sont masqués."""
+        import Part
+
+        shapes = [o.Shape for o in objects]
+        fused = shapes[0].fuse(shapes[1:])
+        try:
+            refined = fused.removeSplitter()
+            if refined.isValid():
+                fused = refined
+        except Exception:
+            pass
+        obj = self.doc.addObject("Part::Feature", "MergedPart")
+        obj.Shape = fused
+        obj.Label = label or Msg("{n} bodies merged", n=len(objects))
+        if FreeCAD.GuiUp:
+            for o in objects:
+                if o.ViewObject is not None:
+                    o.ViewObject.Visibility = False
+        self.doc.recompute()
+        return obj
 
     def _paths_fingerprint(self):
         """Empreinte des parcours actifs (un contrôle de collisions ne vaut que pour ces parcours-là)."""
@@ -640,31 +711,39 @@ class Project(object):
     def collision_issues(self):
         """Contrôles d'export issus du dernier contrôle de collisions : erreur si collision ; « non vérifiable »
         si le contrôle n'a pas été lancé, si les parcours ont changé depuis, ou pour ce qu'il n'a pas pu contrôler."""
-        last = getattr(self, "_collision_check", None)
-        if last is None or last[0] != self._paths_fingerprint():
-            return [("unverifiable", "collisions not checked for these toolpaths: run Simulate > Material and "
-                                     "collision check")]
-        col = last[1]
+        last = self.last_check()
+        if last is None or last["fingerprint"] != self._paths_fingerprint():
+            return [("unverifiable", Msg("collisions not checked for these toolpaths: run Simulate > Material and collision check"))]
+        col = dict(last["status"], events=last["events"], no_holder=last["no_holder"],
+                   clamps_defined=last["clamps_defined"], not_run=last["not_run"])
         issues = []
+        if last["gouge_max"] > last["tolerance"] and last["gouge_at"]:
+            rep = last
+            x, y, _z = rep["gouge_at"]
+            issues.append(("error", Msg("material check: the tool cuts {d:.2f} mm into the part (worst at X {x:.1f} Y {y:.1f})",
+                                        d=rep["gouge_max"], x=x, y=y)))
         for event in col["events"]:
             kind, label, index, at = event[0], event[1], event[2], event[3]
-            where = "X%.2f Y%.2f Z%.2f" % at if at else "?"
-            what = {"flute_length": "material above the flute length (shank rubbing)",
-                    "holder": "tool holder touches the material",
-                    "clamp": "collision with clamp %s (%s)" % (event[5], event[6]) if kind == "clamp" else "",
-                    "rapid": "rapid move into the material"}[kind]
-            issues.append(("error", "%s: %s, command %d, tip at %s" % (label, what, index, where)))
-        for key, label in (("flute_length", "flute length"), ("holder", "tool holder"), ("clamps", "clamps"),
-                           ("rapids", "rapid moves")):
+            where = "X%.2f Y%.2f Z%.2f" % tuple(at) if at else "?"
+            what = {"flute_length": Msg("material above the flute length (shank rubbing)"),
+                    "holder": Msg("tool holder touches the material"),
+                    "clamp": Msg("collision with clamp {name} ({part})", name=event[5], part=Msg(event[6]))
+                    if kind == "clamp" else "",
+                    "rapid": Msg("rapid move into the material")}[kind]
+            issues.append(("error", Msg("{op}: {what}, command {n}, tip at {where}", op=label, what=what, n=index,
+                                        where=where)))
+        for key, label in (("flute_length", Msg("flute length")), ("holder", Msg("tool holder")),
+                           ("clamps", Msg("clamps")), ("rapids", Msg("rapid moves"))):
             if col[key] == "not_checked":
                 reason = []
                 if key == "holder" and col["no_holder"]:
-                    reason.append("no holder in the assembly of %s" % ", ".join(col["no_holder"]))
+                    reason.append(Msg("no holder in the assembly of {ops}", ops=", ".join(col["no_holder"])))
                 if key == "clamps" and not col["clamps_defined"]:
-                    reason.append("no clamp defined")
+                    reason.append(Msg("no clamp defined"))
                 if col["not_run"]:
-                    reason.append("not simulated: %s" % ", ".join(col["not_run"]))
-                issues.append(("unverifiable", "%s collisions not checked (%s)" % (label, "; ".join(reason) or "-")))
+                    reason.append(Msg("not simulated: {ops}", ops=", ".join(col["not_run"])))
+                issues.append(("unverifiable", Msg("{what} collisions not checked ({why})", what=label,
+                                                   why=_JoinedMsg(reason) if reason else "-")))
         return issues
 
     def wrapped_operations(self):
@@ -794,13 +873,13 @@ class Project(object):
         if rec is None:
             raise ValueError("opération %s absente du registre" % op.Label)
         if rec["kind"] not in opsmod.STRATEGIES and rec["kind"] != wrapmod.KIND:
-            raise ValueError("%s is generated (flat depth clearing): it cannot be duplicated" % op.Label)
+            raise UserError("{op} is generated (flat depth clearing): it cannot be duplicated", op=op.Label)
         if rec["kind"] == wrapmod.KIND:
             base = [(self.doc.getObject(n), subs) for n, subs in rec["wrap_base"]]
-            return self.add_wrapped_engraving(op.Label + " (copy)", rec["assembly_id"], rec["preset_id"], base,
+            return self.add_wrapped_engraving(tr("{name} (copy)", name=op.Label), rec["assembly_id"], rec["preset_id"], base,
                                               **rec["params"])
         params = opsmod.read_params(op, opsmod.STRATEGIES[rec["kind"]]["params"])
-        new, record = self.add_operation(rec["kind"], op.Label + " (copy)", rec["assembly_id"], rec["preset_id"],
+        new, record = self.add_operation(rec["kind"], tr("{name} (copy)", name=op.Label), rec["assembly_id"], rec["preset_id"],
                                          base=[(obj, list(subs)) for obj, subs in (op.Base or [])], params=params)
         new.Active = op.Active
         if rec.get("index_deg") is not None:  # la géométrie copiée est déjà celle de l'index
@@ -957,6 +1036,17 @@ class Project(object):
 
     def close(self):
         FreeCAD.closeDocument(self.doc.Name)
+
+
+class _JoinedMsg(Msg):
+    """Plusieurs messages joints par « ; », traduits chacun à l'affichage."""
+
+    def __new__(cls, parts):
+        obj = Msg.__new__(cls, "; ".join(str(p) for p in parts))
+        obj.template = "{0}"
+        obj.parts = list(parts)
+        obj.params = {}
+        return obj
 
 
 class ExportBlocked(Exception):

@@ -17,6 +17,8 @@ import os
 
 import FreeCAD
 
+from ..i18n import Msg, UserError, tr
+
 
 class ImportResult(object):
     def __init__(self, kind, objects, warnings=None):
@@ -84,7 +86,7 @@ def import_file(doc, path, label=None):
                         doc.removeObject(placeholder.Name)
             kind = "vector"
         else:
-            raise ValueError("format non pris en charge : %s" % ext)
+            raise UserError("unsupported format: {ext}", ext=ext)
     finally:
         if previous is not None and previous.Name != doc.Name:
             try:
@@ -95,23 +97,53 @@ def import_file(doc, path, label=None):
     objects = _new_objects(doc, before)
     warnings = []
     if not objects:
-        warnings.append("no object created from %s" % os.path.basename(path))
+        warnings.append(Msg("no object created from {file}", file=os.path.basename(path)))
     if label and len(objects) == 1:
         objects[0].Label = label
+    if kind == "mesh":
+        objects, mesh_warnings = meshes_to_solids(doc, objects)
+        warnings.extend(mesh_warnings)
+        if any(getattr(o, "Shape", None) is not None and o.Shape.Solids for o in objects):
+            kind = "solid"
     if kind == "solid":
-        for o in objects:
-            shape = getattr(o, "Shape", None)
-            if shape is None or shape.isNull():
-                warnings.append("%s: empty shape" % o.Label)
-            elif not shape.Solids:
-                warnings.append("%s: no solid (surfaces/wires only)" % o.Label)
-            elif not shape.isValid():
-                warnings.append("%s: invalid shape" % o.Label)
+        # repères, axes, plans et groupes du fichier STEP : ce ne sont pas des pièces, ne rien en dire
+        parts = [o for o in objects if o.TypeId.startswith("Part::")]
+        solids = [o for o in parts if getattr(o, "Shape", None) is not None and not o.Shape.isNull() and o.Shape.Solids]
+        for o in solids:
+            if not o.Shape.isValid():
+                warnings.append(Msg("{name}: invalid shape", name=o.Label))
+        if not solids:
+            warnings.append(Msg("no solid in {file} (surfaces or wires only)", file=os.path.basename(path)))
     return ImportResult(kind, objects, warnings)
 
 
-def mesh_to_solid(doc, mesh_obj, tolerance=0.1):
-    """Convertit un maillage fermé en solide Part (lent sur gros maillages)."""
+#: au-delà, la conversion maillage -> solide est trop lente : le maillage reste un maillage (usinage 3D)
+MESH_SOLID_MAX_FACETS = 200000
+
+
+def meshes_to_solids(doc, objects):
+    """Maillages fermés -> solides affinés (faces coplanaires fusionnées : les fonds de poche redeviennent des
+    faces planes) ; le maillage d'origine est masqué. Retourne ``(objets, avertissements)``."""
+    out, warnings = [], []
+    for o in objects:
+        mesh = getattr(o, "Mesh", None)
+        if mesh is None:
+            out.append(o)
+            continue
+        if not mesh.isSolid():
+            warnings.append(Msg("{name}: open mesh, kept as a mesh: only 3D surface operations can use it", name=o.Label))
+            out.append(o)
+        elif mesh.CountFacets > MESH_SOLID_MAX_FACETS:
+            warnings.append(Msg("{name}: {n} triangles, kept as a mesh (too large to convert): only 3D surface operations can use it",
+                                name=o.Label, n=mesh.CountFacets))
+            out.append(o)
+        else:
+            out.append(mesh_to_solid(doc, o))
+    return out, warnings
+
+
+def mesh_to_solid(doc, mesh_obj, tolerance=0.05):
+    """Convertit un maillage fermé en solide Part affiné ; le maillage est masqué (lent sur gros maillages)."""
     import Part
     import Mesh  # noqa: F401
 
@@ -121,9 +153,19 @@ def mesh_to_solid(doc, mesh_obj, tolerance=0.1):
     shape = Part.Shape()
     shape.makeShapeFromMesh(mesh.Topology, tolerance)
     solid = Part.makeSolid(shape)
+    try:
+        refined = solid.removeSplitter()
+        if refined.isValid() and refined.Solids:
+            solid = refined
+    except Exception:
+        pass
     obj = doc.addObject("Part::Feature", mesh_obj.Name + "_solid")
     obj.Shape = solid
-    obj.Label = mesh_obj.Label + " (solid)"
+    name = mesh_obj.Label
+    mesh_obj.Label = tr("{name} (mesh)", name=name)  # d'abord : le solide reçoit alors le nom exact du fichier
+    obj.Label = name
+    if FreeCAD.GuiUp and mesh_obj.ViewObject is not None:
+        mesh_obj.ViewObject.Visibility = False
     doc.recompute()
     return obj
 

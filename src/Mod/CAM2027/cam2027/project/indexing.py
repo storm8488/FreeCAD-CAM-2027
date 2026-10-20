@@ -19,6 +19,8 @@ renseignés dans le profil machine, sinon l'index est refusé.
 
 import FreeCAD
 
+from ..i18n import Msg
+
 INDEX_PREFIX = "CAM2027Index"
 ANGLE_PROPERTY = "IndexAngle"
 POSITIVE_DIRECTIONS = ("right_hand", "left_hand")
@@ -244,6 +246,7 @@ def order_issues(project):
         angle = reg.get(base_operation(obj).Name, {}).get("index_deg")
         used = used or angle is not None
         if used and (current is None or abs((angle or 0.0) - current) > 1e-9):
-            issues.append(("error", "operation %s expects A%g but the axis is at %s" % (
-                obj.Label, angle or 0.0, "an unknown angle" if current is None else "A%g" % current)))
+            issues.append(("error", Msg("operation {op} expects A{a:g} but the axis is at {now}", op=obj.Label,
+                                        a=angle or 0.0, now=Msg("an unknown angle") if current is None
+                                        else "A%g" % current)))
     return issues

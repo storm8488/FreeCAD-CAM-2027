@@ -10,6 +10,8 @@ gravure, chanfrein) utilisent le vecteur lui-même.
 """
 
 import FreeCAD
+
+from ..i18n import UserError
 import Part
 
 SHEET_NAME = "CAM2027Sheet"
@@ -125,7 +127,7 @@ def make_sheet(doc, vectors, thickness, margin=10.0, rect=None):
     if rect is not None:
         x, y, w, h = (float(v) for v in rect)
         if bb.XMin < x - 1e-6 or bb.YMin < y - 1e-6 or bb.XMax > x + w + 1e-6 or bb.YMax > y + h + 1e-6:
-            raise ValueError("the drawing does not fit in the %.0f x %.0f mm sheet" % (w, h))
+            raise UserError("the drawing does not fit in the {w:.0f} x {h:.0f} mm sheet", w=w, h=h)
         sheet.Shape = Part.makeBox(w, h, thickness, FreeCAD.Vector(x, y, -thickness))
     else:
         sheet.Shape = Part.makeBox(bb.XLength + 2 * margin, bb.YLength + 2 * margin, thickness,

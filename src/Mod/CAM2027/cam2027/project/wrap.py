@@ -19,6 +19,8 @@ import math
 
 import FreeCAD
 
+from ..i18n import Msg, UserError
+
 WRAP_PREFIX = "CAM2027Wrap"
 KIND = "wrap_engrave"
 LABEL = "Wrapped engraving (continuous A axis)"
@@ -36,8 +38,8 @@ def check_stock_axis(job, center, tol=1e-3):
     """Le brut rond doit être centré sur l'axe A du profil machine (sinon l'enroulement serait faux)."""
     base = job.Stock.Placement.Base
     if abs(base.y - center[0]) > tol or abs(base.z - center[1]) > tol:
-        raise ValueError("the round stock axis (Y %.3f, Z %.3f) is not the A axis of the machine profile "
-                         "(Y %.3f, Z %.3f)" % (base.y, base.z, center[0], center[1]))
+        raise UserError("the round stock axis (Y {y:.3f}, Z {z:.3f}) is not the A axis of the machine profile (Y {cy:.3f}, Z {cz:.3f})",
+                        y=base.y, z=base.z, cy=center[0], cz=center[1])
 
 
 def radius_of_stock(job):
@@ -45,7 +47,7 @@ def radius_of_stock(job):
     stock = getattr(job, "Stock", None)
     radius = getattr(stock, "Radius", None)
     if radius is None:
-        raise ValueError("wrapping needs a round stock along X (Stock & fixture > round bar on the A axis)")
+        raise UserError("wrapping needs a round stock along X (Stock & fixture > round bar on the A axis)")
     return float(radius.getValueAs("mm")) if hasattr(radius, "getValueAs") else float(radius)
 
 
@@ -55,9 +57,9 @@ def flat_engrave_moves(wires, depth, step_down, safe_z, deflection=0.01):
     Chaque fil est suivi à chaque passe ; ``depth`` < 0 ; ``safe_z`` > 0 au-dessus de la surface.
     """
     if depth >= 0:
-        raise ValueError("wrapped engraving: the depth must be below the surface (negative)")
+        raise UserError("wrapped engraving: the depth must be below the surface (negative)")
     if step_down <= 0:
-        raise ValueError("wrapped engraving: the step down must be positive")
+        raise UserError("wrapped engraving: the step down must be positive")
     levels = []
     z = 0.0
     while z > depth + 1e-9:
@@ -87,7 +89,7 @@ def to_machine(x, y, z, radius, center, sign):
 def wrap_moves(moves, radius, center, sign, feed, plunge_feed):
     """Lignes G-code enroulées (avances réelles en mm/min). Les mouvements de coupe sont en G93."""
     if radius <= 0:
-        raise ValueError("wrapping radius must be positive")
+        raise UserError("wrapping radius must be positive")
     cy, _cz = center
     lines = ["G94"]
     prev = None  # (x, y, z) déroulés
@@ -115,7 +117,7 @@ def wrap_moves(moves, radius, center, sign, feed, plunge_feed):
             prev = (x, y, z)
             continue
         if feed <= 0 or plunge_feed <= 0:
-            raise ValueError("wrapping needs positive feeds")
+            raise UserError("wrapping needs positive feeds")
         rate = plunge_feed if kind == "plunge" else feed
         if not inverse:
             lines.append("G93")
@@ -203,11 +205,11 @@ def check_layout(wires, radius):
     """Avertissements : dessin hors de la circonférence déroulée (recouvrement)."""
     warnings = []
     if not wires:
-        raise ValueError("wrapped engraving: no contour in the selected drawing")
+        raise UserError("wrapped engraving: no contour in the selected drawing")
     ymin = min(w.BoundBox.YMin for w in wires)
     ymax = max(w.BoundBox.YMax for w in wires)
     circ = 2 * math.pi * radius
     if ymin < -1e-6 or ymax > circ + 1e-6:
-        warnings.append("drawing Y %.2f..%.2f mm is outside the unrolled circumference 0..%.2f mm: "
-                        "it overlaps itself once wrapped" % (ymin, ymax, circ))
+        warnings.append(Msg("drawing Y {lo:.2f}..{hi:.2f} mm is outside the unrolled circumference 0..{c:.2f} mm: it overlaps itself once wrapped",
+                            lo=ymin, hi=ymax, c=circ))
     return warnings

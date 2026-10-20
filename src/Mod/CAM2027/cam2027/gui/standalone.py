@@ -202,6 +202,39 @@ def fix_menu_titles(titles):
     return fixed
 
 
+# -- panneau Tâches ---------------------------------------------------------------------------------
+
+_task_timer = None
+
+
+def tidy_task_dock():
+    """Masque le panneau « Tâches » quand aucune tâche n'est ouverte (sinon il reste vide à côté de l'arbre).
+    FreeCAD le rouvre de lui-même à l'ouverture d'une tâche (simulateur...). Retourne True s'il a été masqué."""
+    import FreeCADGui
+    from .qt import QtWidgets
+
+    if FreeCADGui.Control.activeDialog():
+        return False
+    dock = FreeCADGui.getMainWindow().findChild(QtWidgets.QDockWidget, "Tasks")
+    if dock is not None and dock.isVisible():
+        dock.hide()
+        return True
+    return False
+
+
+def install_task_dock_tidier(interval_ms=700):
+    """Contrôle léger et périodique (aucun signal Qt ne signale la fin d'une tâche FreeCAD)."""
+    global _task_timer
+    from .qt import QtCore
+
+    if _task_timer is None:
+        _task_timer = QtCore.QTimer()
+        _task_timer.setInterval(interval_ms)
+        _task_timer.timeout.connect(tidy_task_dock)
+        _task_timer.start()
+    return _task_timer
+
+
 # -- mode avancé et disposition par défaut ---------------------------------------------------------
 
 PARAM = "User parameter:BaseApp/Preferences/CAM2027"

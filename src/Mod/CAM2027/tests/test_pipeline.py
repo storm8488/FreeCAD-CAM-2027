@@ -805,7 +805,11 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(d["Work offsets"], ("G54", "ok"))
         self.assertEqual(d["Operation: Contour"], ("Computed", "ok"))
         self.assertEqual(d["Checks"][1], "unverifiable")  # courses inconnues : jamais « ok »
-        self.assertEqual(d["Machine validation"][1], "unverifiable")
+        self.assertEqual(d["Material and collision check"][1], "unverifiable")  # pas lancé : jamais « ok »
+        proj.material_check()
+        rows = exportmod.export_summary(proj, analysis, issues)
+        d = {label: (value, level) for label, value, level, _params in rows}
+        self.assertIn(d["Material and collision check"][1], ("ok", "error"))  # lancé : résultat réel
         proj.update_operation(op, {"StepDown": 2.0})
         rows = exportmod.export_summary(proj, analysis, issues)
         self.assertIn(("Operation: Contour", "To recompute", "warning", {}), rows)

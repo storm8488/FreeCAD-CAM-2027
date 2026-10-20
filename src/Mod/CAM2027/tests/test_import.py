@@ -86,10 +86,20 @@ class TestImport(unittest.TestCase):
         m.addFacets(shape.tessellate(0.1)[1] and [tuple(shape.tessellate(0.1)[0][i] for i in f) for f in shape.tessellate(0.1)[1]])
         m.write(path)
         res = importers.import_file(self.doc, path)
-        self.assertEqual(res.kind, "mesh")
+        # maillage fermé : converti en solide affiné à l'import (le maillage d'origine reste, masqué)
+        self.assertEqual(res.kind, "solid")
         self.assertEqual(len(res.objects), 1)
-        solid = importers.mesh_to_solid(self.doc, res.objects[0])
+        solid = res.objects[0]
         self.assertAlmostEqual(solid.Shape.Volume, 1000.0, places=1)
+        self.assertEqual(len(solid.Shape.Faces), 6)  # triangles coplanaires fusionnés
+        self.assertTrue(any(o.TypeId.startswith("Mesh::") for o in self.doc.Objects))
+        # maillage ouvert : reste un maillage, avec un avertissement
+        tris = [tuple(shape.tessellate(0.1)[0][i] for i in f) for f in shape.tessellate(0.1)[1]]
+        open_path = os.path.join(self.tmp, "open.stl")
+        Mesh.Mesh(tris[:-2]).write(open_path)
+        res2 = importers.import_file(self.doc, open_path)
+        self.assertEqual(res2.kind, "mesh")
+        self.assertTrue(any("open mesh" in w for w in res2.warnings), res2.warnings)
 
     def test_svg(self):
         path = os.path.join(self.tmp, "shapes.svg")

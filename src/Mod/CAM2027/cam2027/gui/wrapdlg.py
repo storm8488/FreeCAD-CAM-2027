@@ -3,7 +3,8 @@
 
 import math
 
-from ..i18n import tr
+from ..i18n import tr, tr_msg
+from .labels import asm_label, preset_label
 from ..project import sheet as sheetmod
 from ..project import wrap as wrapmod
 from . import theme
@@ -42,8 +43,11 @@ class WrapDialog(QtWidgets.QDialog):
         form.addRow(tr("Unrolled drawing"), self.drawing)
         lib = proj.library
         self.asm = QtWidgets.QComboBox()
-        for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
-            self.asm.addItem("T%d - %s" % (a.output.tool_number, a.name), a.id)
+        from ..project.operations import tool_fits, tool_rank
+
+        fitting = [a for a in lib.assemblies.values() if tool_fits("engrave", lib.tool(a.tool_id))]
+        for a in sorted(fitting, key=lambda a: (tool_rank("engrave", lib.tool(a.tool_id)), a.output.tool_number)):
+            self.asm.addItem(asm_label(a), a.id)
         self.preset = QtWidgets.QComboBox()
         self.asm.currentIndexChanged.connect(lambda _i: self._fill_presets())
         if rec:
@@ -71,7 +75,7 @@ class WrapDialog(QtWidgets.QDialog):
             self.layout_info.setText(info)
             ok = self.drawing.count() > 0
         except ValueError as exc:
-            self.layout_info.setText(str(exc))
+            self.layout_info.setText(tr_msg(exc))
             ok = False
         theme.set_role(self.layout_info, "muted")
         form.addRow(self.layout_info)
@@ -96,7 +100,7 @@ class WrapDialog(QtWidgets.QDialog):
         lib = self.proj.library
         tool = lib.tool(lib.assembly(self.asm.currentData()).tool_id)
         for p in tool.presets:
-            self.preset.addItem("%s (%s, %s)" % (p.name, tr(p.usage), p.material or "-"), p.id)
+            self.preset.addItem(preset_label(p), p.id)
 
     def apply(self):
         """Crée ou met à jour l'opération ; retourne l'opération."""

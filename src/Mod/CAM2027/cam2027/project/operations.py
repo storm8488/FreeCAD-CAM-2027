@@ -147,6 +147,73 @@ DEFAULT_THREAD_TYPE = "MetricInternal6H"
 #: cylindriques plus grands que l'outil (``findAllHoles``)
 HOLE_STRATEGIES = ("drilling", "helix", "threadmill")
 
+_MILLS = ("endmill", "bullnose", "ballend")
+#: types d'outil de la bibliothèque proposés pour chaque stratégie (le premier présent est présélectionné)
+TOOLS_FOR = {
+    "profile": _MILLS, "pocket": _MILLS, "pocket2d": _MILLS, "adaptive": ("endmill", "bullnose"),
+    "millface": ("facemill", "endmill", "bullnose"), "slot": _MILLS, "helix": ("endmill", "bullnose"),
+    "rough3d": ("endmill", "bullnose"), "surface3d": ("ballend", "bullnose", "taperedball", "endmill"),
+    "waterline": ("ballend", "bullnose", "endmill"), "drilling": ("drill",), "threadmill": ("threadmill",),
+    "vcarve": ("vbit", "engrave", "chamfer"), "engrave": ("vbit", "engrave", "chamfer", "ballend", "endmill"),
+    "chamfer": ("chamfer", "vbit", "engrave"),
+}
+
+
+def tool_fits(kind, tool):
+    """L'outil convient-il à la stratégie ? (V-carving : outil à pointe en V, etc.)"""
+    allowed = TOOLS_FOR.get(kind)
+    if allowed is None:
+        return True
+    if tool.tool_type not in allowed:
+        return False
+    if kind in ("vcarve", "chamfer") and not tool.geometry.tip_included_angle_deg:
+        return False
+    return True
+
+
+def tool_rank(kind, tool):
+    allowed = TOOLS_FOR.get(kind) or ()
+    return allowed.index(tool.tool_type) if tool.tool_type in allowed else len(allowed)
+
+
+def _horizontal_planes(shape, tol=1e-6):
+    for i, f in enumerate(shape.Faces, 1):
+        if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - f.BoundBox.ZMin) < tol:
+            yield i, f
+
+
+def pocket_floor_faces(obj, tol=1e-6):
+    """Fonds de poche d'un solide : faces planes horizontales strictement entre le dessous et le dessus."""
+    bb = obj.Shape.BoundBox
+    return ["Face%d" % i for i, f in _horizontal_planes(obj.Shape, tol)
+            if bb.ZMin + 1e-3 < f.BoundBox.ZMin < bb.ZMax - 1e-3]
+
+
+def top_faces(obj, tol=1e-6):
+    """Faces planes horizontales au sommet du solide (surfaçage)."""
+    top = obj.Shape.BoundBox.ZMax
+    return ["Face%d" % i for i, f in _horizontal_planes(obj.Shape, tol) if abs(f.BoundBox.ZMax - top) < 1e-3]
+
+
+def auto_geometry(kind, models):
+    """Géométrie choisie sans sélection : ``[(objet, sous-éléments)]``, ``[]`` si rien de pertinent, ``None``
+    quand la stratégie travaille sur la pièce entière."""
+    if kind in ("pocket", "adaptive"):
+        finder = pocket_floor_faces
+    elif kind == "millface":
+        finder = top_faces
+    else:
+        return None
+    out = []
+    for obj in models:
+        shape = getattr(obj, "Shape", None)
+        if shape is None or not shape.Solids:
+            continue
+        subs = finder(obj)
+        if subs:
+            out.append((obj, subs))
+    return out
+
 
 def thread_table(thread_type):
     """Lignes (dict) de la table FreeCAD des filets standard ``Mod/CAM/Data/Threads``."""

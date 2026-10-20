@@ -7,7 +7,8 @@ import FreeCAD
 import FreeCADGui
 
 from .qt import QtCore, QtGui, QtWidgets, exec_dialog
-from ..i18n import tr
+from ..i18n import tr, tr_msg
+from .labels import asm_label, preset_label
 from ..tools.model import (
     ToolDefinition, ToolGeometry, CuttingPreset, Holder, ToolAssembly, TOOL_TYPES, geometry_fields_for,
     FLUTE_STYLES, ROTATIONS, COOLANTS, PRESET_USAGES, TAPER_TIPS, THREAD_TIP_TYPES,
@@ -493,7 +494,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             })
             new = ToolDefinition.from_dict(data)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.lib.tools[new.id] = new
         self.current = new
@@ -523,7 +524,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             for tid in ids:
                 self.lib.remove_tool(tid)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
         self.current = None
         self.refresh_list()
 
@@ -569,7 +570,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             self.lib.bulk_edit(ids, **fields)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
         self.refresh_list()
 
     # -- préréglages --------------------------------------------------------
@@ -614,7 +615,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
                 % (r["spindle_rpm"], r["surface_speed_m_min"], r["feed_mm_min"], r["feed_per_tooth_mm"],
                    r["plunge_feed_mm_min"], tr("derived"), ", ".join(r["derived"]) or "-"))
         except ValueError as exc:
-            self.p_resolved.setText(tr("Incomplete: {error}", error=str(exc)))
+            self.p_resolved.setText(tr("Incomplete: {error}", error=tr_msg(exc)))
 
     def _preset_from_form(self, preset_id=None):
         kwargs = {"id": preset_id, "usage": self.p_usage.currentData(), "material": self.p_material.text().strip(),
@@ -631,7 +632,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             new = self._preset_from_form(p.id)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         row = self.current.presets.index(p)
         self.current.presets[row] = new
@@ -669,7 +670,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.asm_list.clear()
         self._assemblies = self.lib.assemblies_for_tool(tool.id)
         for a in self._assemblies:
-            self.asm_list.addItem("T%d - %s" % (a.output.tool_number, a.name))
+            self.asm_list.addItem(asm_label(a))
         if self._assemblies:
             self.asm_list.setCurrentRow(0)
 
@@ -708,7 +709,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             new = ToolAssembly.from_dict(d)
             self.lib.resolve_assembly_obj(new)
         except (ValueError, KeyError) as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.lib.assemblies[new.id] = new
         self.load_assemblies(self.current)
@@ -724,7 +725,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             self.lib.add_assembly(asm)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.load_assemblies(self.current)
         self.asm_list.setCurrentRow(len(self._assemblies) - 1)
@@ -764,7 +765,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             holder = Holder(name.text().strip() or "Holder", segments, bore_diameter=bore.value() or None)
             self.lib.add_holder(holder)
         except ValueError as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         if self.current is not None:
             self.load_assemblies(self.current)
@@ -794,7 +795,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             path = self.lib.save()
         except (ValueError, OSError) as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.refresh_list()
         self.status.setText(tr("Library saved: {path} (revision {rev})", path=path, rev=self.lib.revision))
@@ -817,7 +818,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             report = import_fusion_library(path, self.lib)
         except (ValueError, OSError) as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.refresh_list()
         box = QtWidgets.QMessageBox(self)
@@ -843,7 +844,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         try:
             lib = ToolLibrary.load(path)
         except (ValueError, OSError, KeyError) as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         state.set_library(lib)
         self.lib = lib
@@ -1000,8 +1001,9 @@ class ProjectPanel(QtWidgets.QWidget):
         if proj.has_job:
             models = [m.Label for m in proj.job.Model.Group]
         else:
-            models = [o.Label for o in proj.doc.Objects
-                      if getattr(o, "Shape", None) and o.Shape.Solids and o.Name != "Stock"]
+            from ..project import sheet as sheetmod
+
+            models = [o.Label for o in proj.model_candidates()] + [v.Label for v in sheetmod.vector_objects(proj.doc)]
         self._set_step("model", bool(models), ", ".join(models) if models else tr("import STEP, STL, SVG or DXF"))
         if proj.has_job:
             sb = proj.stock_bounds()
@@ -1188,7 +1190,7 @@ class ProjectPanel(QtWidgets.QWidget):
             new, _rec = proj.duplicate_operation(op)
             proj.compute()
         except Exception as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
             return
         self.refresh()
         self._reselect(new.Name)
@@ -1204,7 +1206,7 @@ class ProjectPanel(QtWidgets.QWidget):
             proj.remove_operation(op)
             proj.compute()
         except Exception as exc:
-            _warn(str(exc))
+            _warn(tr_msg(exc))
         self.refresh()
 
 

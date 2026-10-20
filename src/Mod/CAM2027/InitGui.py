@@ -54,6 +54,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             from cam2027.gui import welcome
 
             welcome.install()
+            standalone.install_task_dock_tidier()
             FreeCAD.Console.PrintLog("CAM2027: standalone, %d workbenches removed\n" % len(removed))
 
         done = None
