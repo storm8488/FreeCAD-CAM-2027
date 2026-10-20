@@ -100,41 +100,83 @@ class OperationEditor(QtWidgets.QDialog):
         w = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(w)
         lib = self.proj.library
-        tool = lib.tools.get(self.rec.get("tool_id"))
-        asm = lib.assemblies.get(self.rec.get("assembly_id"))
-        values = self.rec.get("values", {})
-        form.addRow(tr("Tool assembly"), QtWidgets.QLabel(
-            "T%d - %s" % (asm.output.tool_number, asm.name) if asm else tr("(unknown)")))
-        if tool:
-            form.addRow(tr("Cutter"), QtWidgets.QLabel("%s - %s, D %.3g mm, %d %s" % (
-                tool.name, tr(tool.type_label()), tool.geometry.diameter, tool.flute_count, tr("flutes"))))
-        form.addRow(tr("Cutting preset"), QtWidgets.QLabel(values.get("preset_name", tr("(unknown)"))))
-        if values:
-            grid = QtWidgets.QGridLayout()
-            rows = (
-                (tr("Spindle speed"), "%.0f rpm" % values["spindle_rpm"]),
-                (tr("Surface speed"), "%.1f m/min" % values["surface_speed_m_min"]),
-                (tr("Cutting feed"), "%.0f mm/min" % values["feed_mm_min"]),
-                (tr("Feed per tooth"), "%.4f mm" % values["feed_per_tooth_mm"]),
-                (tr("Plunge feed"), "%.0f mm/min" % values["plunge_feed_mm_min"]),
-                (tr("Axial / radial engagement"), "%.2f / %.2f mm" % (values["axial_engagement_mm"], values["radial_engagement_mm"])),
-            )
-            for i, (k, v) in enumerate(rows):
-                grid.addWidget(QtWidgets.QLabel(k), i, 0)
-                grid.addWidget(QtWidgets.QLabel("<b>%s</b>" % v), i, 1)
-            box = QtWidgets.QGroupBox(tr("Values used by this operation (copied from the preset)"))
-            box.setLayout(grid)
-            form.addRow(box)
+        self.asm_combo = QtWidgets.QComboBox()
+        for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
+            self.asm_combo.addItem("T%d - %s" % (a.output.tool_number, a.name), a.id)
+        idx = self.asm_combo.findData(self.rec.get("assembly_id"))
+        if idx >= 0:
+            self.asm_combo.setCurrentIndex(idx)
+        form.addRow(tr("Tool assembly"), self.asm_combo)
+        self.cutter_label = QtWidgets.QLabel()
+        self.cutter_label.setWordWrap(True)
+        form.addRow(tr("Cutter"), self.cutter_label)
+        self.preset_combo = QtWidgets.QComboBox()
+        form.addRow(tr("Cutting preset"), self.preset_combo)
+        self.values_grid = QtWidgets.QGridLayout()
+        box = QtWidgets.QGroupBox(tr("Values used by this operation (copied from the preset)"))
+        box.setLayout(self.values_grid)
+        form.addRow(box)
         tc = getattr(self.op, "ToolController", None)
         if tc is not None:
             v = bridge.tool_controller_values(tc)
             form.addRow(tr("Tool controller"), QtWidgets.QLabel("%s (T%d, F%.0f, S%.0f)" % (
                 tc.Label, v["tool_number"], v["feed_mm_min"], v["spindle_rpm"])))
-        note = QtWidgets.QLabel(tr("To use another tool or preset, create a new operation: the values above are frozen at creation time so that library changes never alter an existing operation."))
+        note = QtWidgets.QLabel(tr("Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept)."))
         note.setWordWrap(True)
         note.setStyleSheet("color: #9aa7b8;")
         form.addRow(note)
+        self.asm_combo.currentIndexChanged.connect(lambda _i: self._fill_presets())
+        self.preset_combo.currentIndexChanged.connect(lambda _i: self._show_values())
+        self._fill_presets(select=self.rec.get("preset_id"))
         return w
+
+    def _fill_presets(self, select=None):
+        lib = self.proj.library
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        asm_id = self.asm_combo.currentData()
+        tool = lib.tool(lib.assembly(asm_id).tool_id) if asm_id else None
+        if tool is not None:
+            self.cutter_label.setText("%s - %s, D %.3g mm, %d %s" % (
+                tool.name, tr(tool.type_label()), tool.geometry.diameter, tool.flute_count, tr("flutes")))
+            for p in tool.presets:
+                self.preset_combo.addItem("%s (%s, %s)" % (p.name, tr(p.usage), p.material or "-"), p.id)
+            idx = self.preset_combo.findData(select) if select else -1
+            self.preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.preset_combo.blockSignals(False)
+        self._show_values()
+
+    def _show_values(self):
+        while self.values_grid.count():
+            item = self.values_grid.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        lib = self.proj.library
+        asm_id, preset_id = self.asm_combo.currentData(), self.preset_combo.currentData()
+        if not asm_id or not preset_id:
+            return
+        tool = lib.tool(lib.assembly(asm_id).tool_id)
+        try:
+            values = tool.preset(preset_id).resolve(tool)
+        except (KeyError, ValueError) as exc:
+            self.values_grid.addWidget(QtWidgets.QLabel(str(exc)), 0, 0)
+            return
+        rows = (
+            (tr("Spindle speed"), "%.0f rpm" % values["spindle_rpm"]),
+            (tr("Surface speed"), "%.1f m/min" % values["surface_speed_m_min"]),
+            (tr("Cutting feed"), "%.0f mm/min" % values["feed_mm_min"]),
+            (tr("Feed per tooth"), "%.4f mm" % values["feed_per_tooth_mm"]),
+            (tr("Plunge feed"), "%.0f mm/min" % values["plunge_feed_mm_min"]),
+            (tr("Axial / radial engagement"), "%.2f / %.2f mm" % (values["axial_engagement_mm"], values["radial_engagement_mm"])),
+        )
+        for i, (k, v) in enumerate(rows):
+            self.values_grid.addWidget(QtWidgets.QLabel(k), i, 0)
+            self.values_grid.addWidget(QtWidgets.QLabel("<b>%s</b>" % v), i, 1)
+
+    def _apply_tool(self):
+        asm_id, preset_id = self.asm_combo.currentData(), self.preset_combo.currentData()
+        if asm_id and preset_id and (asm_id, preset_id) != (self.rec.get("assembly_id"), self.rec.get("preset_id")):
+            self.rec = self.proj.change_operation_tool(self.op, asm_id, preset_id)
 
     def _geometry_tab(self):
         w = QtWidgets.QWidget()
@@ -333,6 +375,7 @@ class OperationEditor(QtWidgets.QDialog):
             if label:
                 self.op.Label = label
             self.proj.set_operation_base(self.op, self._base)
+            self._apply_tool()
             ignored = self.proj.update_operation(self.op, self.params())
             self._apply_dressups()
             self.proj.compute()

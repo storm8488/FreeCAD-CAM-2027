@@ -111,7 +111,11 @@ def run():
     box, widgets = editor.dressup_boxes["tags"]
     box.setChecked(True)
     widgets["Count"][1].setValue(3)
+    # changement de préréglage depuis l'onglet Outil (même outil : le contrôleur est mis à jour)
+    editor.preset_combo.setCurrentIndex(1)
     log("editor apply: %s" % editor.apply())
+    from cam2027.tools import bridge as bridgemod
+    log("TC feed after preset change: %.0f" % bridgemod.tool_controller_values(op.ToolController)["feed_mm_min"])
     log("editor status: %s" % editor.status.text())
     log("StepDown after apply: %s" % op.StepDown)
     dress = proj.dressups(op)

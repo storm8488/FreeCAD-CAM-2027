@@ -186,6 +186,15 @@ def create_tool_controller(doc, assembly, tool, resolved_preset, toolbit=None, l
     return tc, warnings
 
 
+def apply_preset_to_controller(tc, tool, resolved_preset):
+    """Recopie les valeurs d'un préréglage résolu dans un ToolController existant (changement de préréglage)."""
+    tc.HorizFeed = "%.3f mm/min" % resolved_preset["feed_mm_min"]
+    tc.VertFeed = "%.3f mm/min" % resolved_preset["plunge_feed_mm_min"]
+    tc.SpindleSpeed = float(resolved_preset["spindle_rpm"])
+    tc.SpindleDir = "Forward" if tool.rotation == "cw" else "Reverse"
+    return tc
+
+
 def tool_controller_values(tc):
     """Valeurs effectivement portées par un ToolController (pour la fiche et les tests)."""
     return {

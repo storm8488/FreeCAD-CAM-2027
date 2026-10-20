@@ -556,6 +556,46 @@ class TestPipeline(unittest.TestCase):
         self.assertAlmostEqual(r2["bbox"]["Y"][1], 60.0, places=3)
         proj.close()
 
+    def test_change_operation_tool(self):
+        """Changer le préréglage met à jour le ToolController ; changer l'outil le remplace et recalcule le parcours."""
+        proj, lib, clone = self._project_with_job("Tool change test")
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        rough, finish = endmill.presets[0], endmill.presets[1]
+        op, rec = proj.add_operation("profile", "Contour", asm.id, rough.id, base=[(clone, [])],
+                                     params={"FinalDepth": 0.0, "StepDown": 5.0})
+        r0 = proj.compute()[0]
+        self.assertAlmostEqual(r0["bbox"]["X"][0], -3.0, places=2)
+        tc_name = rec["tool_controller"]
+        # même outil, autre préréglage : valeurs du contrôleur mises à jour, même contrôleur
+        rec2 = proj.change_operation_tool(op, asm.id, finish.id)
+        self.assertEqual(rec2["tool_controller"], tc_name)
+        self.assertAlmostEqual(rec2["values"]["feed_mm_min"], 600.0)
+        tc = proj.doc.getObject(tc_name)
+        self.assertAlmostEqual(bridge.tool_controller_values(tc)["feed_mm_min"], 600.0)
+        self.assertAlmostEqual(bridge.tool_controller_values(tc)["spindle_rpm"], 16000.0)
+        self.assertIn(600.0, proj.compute()[0]["feeds"])
+        # autre outil (3 mm) : nouveau contrôleur, ancien supprimé, contour décalé d'un rayon plus petit
+        small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        sasm = lib.assemblies_for_tool(small.id)[0]
+        rec3 = proj.change_operation_tool(op, sasm.id, small.presets[0].id)
+        self.assertNotEqual(rec3["tool_controller"], tc_name)
+        self.assertIsNone(proj.doc.getObject(tc_name))
+        self.assertEqual(op.ToolController.Name, rec3["tool_controller"])
+        self.assertAlmostEqual(bridge.tool_controller_values(op.ToolController)["diameter_mm"], 3.0)
+        self.assertEqual([t.Name for t in proj.job.Tools.Group], [rec3["tool_controller"]])
+        r3 = proj.compute()[0]
+        self.assertAlmostEqual(r3["bbox"]["X"][0], -1.5, places=2)
+        self.assertAlmostEqual(float(op.StepDown.getValueAs("mm")), 5.0)  # réglages conservés
+        # filetage : un outil non fileteur est refusé
+        tm = lib.search("thread mill")[0]
+        tasm = lib.assemblies_for_tool(tm.id)[0]
+        top, _t = proj.add_operation("threadmill", "Thread", tasm.id, tm.presets[0].id, base=[(clone, [hole_face(clone)])],
+                                     params={"ThreadName": "M8 x 1.25", "StartDepth": 10.0, "FinalDepth": 0.0})
+        with self.assertRaises(ValueError):
+            proj.change_operation_tool(top, asm.id, rough.id)
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

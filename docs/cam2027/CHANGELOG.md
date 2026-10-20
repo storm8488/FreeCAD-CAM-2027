@@ -25,6 +25,9 @@
   remplace l'opération dans le job. Test `test_dressups` (33 tests sur 1.1.4 et 1.0.2).
 - Perçage, hélice, filetage sans géométrie sélectionnée : tous les trous détectés par FreeCAD
   (plus grands que l'outil). Tests `test_drilling_all_holes`, `test_helix_and_engrave` (35 tests).
+- Changement d'assemblage / de préréglage sur une opération existante (onglet Outil de
+  l'éditeur, `Project.change_operation_tool`) : même coupant = contrôleur mis à jour, autre
+  coupant = ToolBit + ToolController remplacés. Test `test_change_operation_tool` (36 tests).
 
 ## 0.1.3 — 2026-10-20
 

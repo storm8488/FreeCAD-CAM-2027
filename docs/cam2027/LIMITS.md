@@ -72,8 +72,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   profondeurs / Passes / Stratégie / Filetage), non modal, généré depuis
   `project/paramspec.py` et les propriétés de l'objet FreeCAD ; il sert aussi à modifier une
   opération existante (double-clic dans le panneau projet). Annuler à la création supprime
-  l'opération. L'outil et le préréglage d'une opération existante ne se changent pas (valeurs
-  figées à la création) : créer une nouvelle opération. Les propriétés non listées dans
+  l'opération. Onglet Outil : changer de préréglage met à jour le ToolController, changer de
+  coupant le remplace (ToolBit + ToolController) en conservant les réglages de stratégie ;
+  rien ne change tant que l'utilisateur ne l'a pas demandé. Les propriétés non listées dans
   `STRATEGIES[...]["params"]` restent accessibles dans l'éditeur de propriétés FreeCAD.
   L'éditeur est exercé par `gui_smoke` (onglets, application d'une passe axiale) ; la
   sélection 3D dans l'onglet Géométrie n'est vérifiée que visuellement.

@@ -560,5 +560,8 @@
   "Custom": "Personnalisée",
 
   "_section_extra": "ajouts",
-  "Open a project...": "Ouvrir un projet..."
+  "Open a project...": "Ouvrir un projet...",
+
+  "_section_tooltab": "ajouts",
+  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre assemblage ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés)."
 }

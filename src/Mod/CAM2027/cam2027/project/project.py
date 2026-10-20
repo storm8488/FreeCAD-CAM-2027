@@ -224,6 +224,45 @@ class Project(object):
             self._save_registry(reg)
         return ignored
 
+    def change_operation_tool(self, op, assembly_id, preset_id):
+        """Change l'assemblage et/ou le préréglage d'une opération existante.
+
+        Même outil : le ToolController reçoit les nouvelles valeurs. Autre outil : un nouveau
+        ToolBit + ToolController remplacent les anciens (supprimés). Les réglages de stratégie
+        sont conservés ; pour un filetage, le pas est revérifié contre le nouvel outil.
+        """
+        op = dressupmod.base_operation(op)
+        reg = self.registry
+        rec = reg.get(op.Name)
+        if rec is None:
+            raise ValueError("opération %s absente du registre" % op.Label)
+        asm, tool, holder = self.library.resolve_assembly(assembly_id)
+        preset = tool.preset(preset_id)
+        values = preset.resolve(tool)
+        if rec["kind"] == "threadmill":
+            opsmod.resolve_params("threadmill", tool, rec.get("params", {}))
+        warnings = list(rec.get("warnings", []))
+        if tool.id != rec["tool_id"]:
+            old_tc = self.doc.getObject(rec.get("tool_controller") or "")
+            old_bit = self.doc.getObject(rec.get("toolbit") or "")
+            toolbit, warnings = bridge.create_toolbit(self.doc, tool, label="%s (T%d)" % (tool.name, asm.output.tool_number))
+            tc, _ = bridge.create_tool_controller(self.doc, asm, tool, values, toolbit=toolbit, label="TC: %s" % op.Label)
+            self.job.Proxy.addToolController(tc)
+            op.ToolController = tc
+            if old_tc is not None:
+                self.job.Tools.Group = [t for t in self.job.Tools.Group if t.Name != old_tc.Name]
+                self.doc.removeObject(old_tc.Name)
+            if old_bit is not None:
+                self.doc.removeObject(old_bit.Name)
+            rec["tool_controller"], rec["toolbit"] = tc.Name, toolbit.Name
+        else:
+            tc = self.doc.getObject(rec["tool_controller"])
+            bridge.apply_preset_to_controller(tc, tool, values)
+        rec.update({"assembly_id": asm.id, "tool_id": tool.id, "holder_id": holder.id if holder else None,
+                    "preset_id": preset.id, "values": values, "warnings": warnings})
+        self._save_registry(reg)
+        return rec
+
     def set_operation_base(self, op, base):
         """Géométrie de l'opération : liste de ``(objet, [sous-éléments])`` ; vide = tout le modèle."""
         op.Base = [(opsmod.model_clone(self.job, obj), list(subs)) for obj, subs in (base or [])]
