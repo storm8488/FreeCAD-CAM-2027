@@ -31,6 +31,8 @@
 - Éditeur d'opération au clavier : focus sur le nom à l'ouverture, Ctrl+Entrée = OK, Échap /
   Annuler demande confirmation s'il reste des modifications non appliquées (vérifié par
   gui_smoke sur 1.1.4 et 1.0.2).
+- Éditeur d'opération : onglets défilants et hauteur limitée à 85 % de l'écran (vérifié à 100 %,
+  150 % et 200 % de mise à l'échelle Qt).
 - Profil « FAO seule » appliqué au profil du lanceur (`gui/prefs.py`) : thème sombre FreeCAD,
   icônes 32 px, atelier CAM2027 au démarrage, autres ateliers masqués (opt-out `CamOnly`).
 - Une icône SVG par commande (`Resources/icons/cam2027-*.svg`).

@@ -43,6 +43,15 @@ _DRESSUP_LABELS = {
 }
 
 
+def _scrolled(widget):
+    """Onglet dans une zone défilante : la boîte reste à la taille de l'écran (150 %, 200 %)."""
+    area = QtWidgets.QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QtWidgets.QFrame.NoFrame)
+    area.setWidget(widget)
+    return area
+
+
 class _VectorWidget(QtWidgets.QWidget):
     """Trois champs X / Y / Z en mm pour une propriété vecteur."""
 
@@ -89,6 +98,13 @@ class OperationEditor(QtWidgets.QDialog):
             self._shortcuts.append(sc)
         self.name.setFocus()
         self.name.selectAll()
+        # jamais plus haut que 85 % de l'écran disponible (mise à l'échelle 150 / 200 %)
+        screen = self.screen() if hasattr(self, "screen") else None
+        if screen is None:
+            screen = QtWidgets.QApplication.primaryScreen()
+        if screen is not None:
+            limit = int(screen.availableGeometry().height() * 0.85)
+            self.resize(max(self.minimumWidth(), self.sizeHint().width()), min(self.sizeHint().height(), limit))
 
     # -- construction ----------------------------------------------------------
 
@@ -108,8 +124,8 @@ class OperationEditor(QtWidgets.QDialog):
         lay.addLayout(head)
 
         self.tabs = QtWidgets.QTabWidget()
-        self.tabs.addTab(self._tool_tab(), tr("Tool"))
-        self.tabs.addTab(self._geometry_tab(), tr("Geometry"))
+        self.tabs.addTab(_scrolled(self._tool_tab()), tr("Tool"))
+        self.tabs.addTab(_scrolled(self._geometry_tab()), tr("Geometry"))
         names = list(meta.get("params", ()))
         by_group = {}
         for n in names:
@@ -119,10 +135,10 @@ class OperationEditor(QtWidgets.QDialog):
             by_group.setdefault(group, []).append(n)
         for key, label in paramspec.GROUPS:
             if by_group.get(key):
-                self.tabs.addTab(self._params_tab(by_group[key]), tr(label))
+                self.tabs.addTab(_scrolled(self._params_tab(by_group[key])), tr(label))
         self.dressup_boxes = {}
         if self.kind in _DRESSUP_KINDS:
-            self.tabs.addTab(self._dressup_tab(), tr("Entry, exit & tabs"))
+            self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit & tabs"))
         lay.addWidget(self.tabs)
 
         self.status = QtWidgets.QLabel()

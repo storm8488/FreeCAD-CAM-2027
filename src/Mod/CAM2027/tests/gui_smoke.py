@@ -110,6 +110,8 @@ def run():
     editor = opeditor.open_editor(proj, op)
     QtWidgets.QApplication.processEvents()
     tabs = [editor.tabs.tabText(i) for i in range(editor.tabs.count())]
+    avail = QtWidgets.QApplication.primaryScreen().availableGeometry().height()
+    log("editor height %d / screen %d (fits: %s)" % (editor.height(), avail, editor.height() <= avail))
     log("editor tabs: %s" % tabs)
     for i in range(editor.tabs.count()):
         editor.tabs.setCurrentIndex(i)

@@ -34,4 +34,7 @@ FreeCAD et son atelier CAM.
   fenêtre FreeCAD.
 - Vérifié visuellement : thème sombre et clair sur 1.1.4 (captures `tests/screenshots`).
   Vérifié aussi : fenêtre 1280 × 800 (capture `main_window_1280x800.png`, bibliothèque et flux
-  lisibles). Non vérifié : 150 % / 200 % DPI, navigation au clavier complète.
+  lisibles). Vérifié aussi : mise à l'échelle Qt 150 % et 200 % (`QT_SCALE_FACTOR`, captures
+  `*_scale15.png` / `*_scale2.png`) : textes non coupés, éditeur limité à 85 % de la hauteur
+  d'écran avec onglets défilants. Non vérifié : mise à l'échelle native de Windows (paramètre
+  d'affichage), navigation clavier complète hors éditeur d'opération.
