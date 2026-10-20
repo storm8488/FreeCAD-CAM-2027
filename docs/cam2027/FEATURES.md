@@ -32,7 +32,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Contour 2D | disponible | `Path.Op.Profile` | auto | entrées/sorties inline, attaches (habillage) |
 | Poche | disponible | `Path.Op.Pocket` | auto | — |
 | Ébauche adaptative / trochoïdale | partiel | `Path.Op.Adaptive` (2D, monothread) | impl. | tests, perf, reprise 3D |
-| Rainure | disponible | `Path.Op.Slot` (arêtes/sommets ou points personnalisés) | auto (`test_vcarve_and_slot`) | points personnalisés dans l'éditeur (actuellement éditeur de propriétés FreeCAD) |
+| Rainure | disponible | `Path.Op.Slot` (arêtes/sommets ou points personnalisés) | auto (`test_vcarve_and_slot`) | — |
 | Gravure | disponible | `Path.Op.Engrave` | auto (`test_helix_and_engrave`) | — |
 | Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |

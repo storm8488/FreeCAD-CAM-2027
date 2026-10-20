@@ -949,8 +949,10 @@ class ProjectPanel(QtWidgets.QWidget):
         ops = proj.operations() if proj.has_job else []
         reg = proj.registry if proj.has_job else {}
         bad = 0
+        total_seconds = 0
         for op in ops:
             s = toolpath_summary(op)
+            total_seconds += _seconds(s["cycle_time"])
             base = proj.base_operation(op)
             rec = reg.get(base.Name, {})
             kind = rec.get("kind", "?")
@@ -985,6 +987,8 @@ class ProjectPanel(QtWidgets.QWidget):
             self.tree.resizeColumnToContents(col)
         if ops:
             detail = "%d %s" % (len(ops), tr("operations")) + ((", %d %s" % (bad, tr("invalid"))) if bad else "")
+            if total_seconds:
+                detail += ", %s %s" % (tr("total time"), _hms(total_seconds))
             self._set_step("ops", bad == 0, detail)
         else:
             self._set_step("ops", False, tr("select geometry, then add an operation"))
@@ -1078,6 +1082,21 @@ class ProjectPanel(QtWidgets.QWidget):
         except Exception as exc:
             _warn(str(exc))
         self.refresh()
+
+
+def _seconds(cycle_time):
+    """Durée FreeCAD « HH:MM:SS » (ou vide) en secondes."""
+    try:
+        parts = [int(p) for p in str(cycle_time or "").split(":")]
+    except ValueError:
+        return 0
+    if len(parts) != 3:
+        return 0
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def _hms(seconds):
+    return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
 
 
 _docks = {}

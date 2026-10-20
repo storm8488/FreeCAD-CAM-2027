@@ -648,8 +648,11 @@ class TestPipeline(unittest.TestCase):
         asm = lib.assemblies_for_tool(endmill.id)[0]
         op2, rec2 = proj.add_operation("slot", "Slot", asm.id, endmill.presets[0].id, base=None,
                                        params={"StepDown": 2.0, "StartDepth": 10.0, "FinalDepth": 8.0})
-        op2.CustomPoint1 = FreeCAD.Vector(10, 50, 10)
-        op2.CustomPoint2 = FreeCAD.Vector(70, 50, 10)
+        from cam2027.project import operations as opsmod
+
+        self.assertEqual(opsmod.param_kind(op2, "CustomPoint1")[0], "vector")
+        self.assertEqual(proj.update_operation(op2, {"CustomPoint1": (10, 50, 10), "CustomPoint2": [70, 50, 10]}), [])
+        self.assertEqual(opsmod.read_params(op2, ["CustomPoint2"])["CustomPoint2"], (70.0, 50.0, 10.0))
         results = {r["name"]: r for r in proj.compute()}
         r2 = results["Slot"]
         self.assertTrue(r2["valid"] and r2["commands"] > 5, r2)

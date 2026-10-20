@@ -81,9 +81,10 @@ STRATEGIES = {
     "slot": {
         "module": "Path.Op.Slot",
         "label": "Slot",
-        "params": ("CutPattern", "ExtendPathStart", "ExtendPathEnd", "LayerMode", "PathOrientation",
-                   "ReverseDirection", "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
-        "limits": "",
+        "params": ("CustomPoint1", "CustomPoint2", "Reference1", "Reference2", "ExtendRadius", "CutPattern",
+                   "ExtendPathStart", "ExtendPathEnd", "LayerMode", "PathOrientation", "ReverseDirection",
+                   "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Without selected geometry the slot runs between the two custom points (XY at the start depth).",
     },
     "threadmill": {
         "module": "Path.Op.ThreadMilling",
@@ -252,9 +253,14 @@ def set_params(op, params):
         if key not in op.PropertiesList:
             ignored.append(key)
             continue
-        if op.getTypeIdOfProperty(key) in _QUANTITY_TYPES:
+        type_id = op.getTypeIdOfProperty(key)
+        if type_id in _QUANTITY_TYPES:
             # couper l'expression héritée de la feuille de réglage avant d'imposer une valeur
             op.setExpression(key, None)
+        if _KINDS.get(type_id) == "vector" and isinstance(value, (tuple, list)):
+            import FreeCAD
+
+            value = FreeCAD.Vector(*[float(v) for v in value])
         setattr(op, key, value)
     return ignored
 
@@ -277,6 +283,9 @@ _KINDS = {
     "App::PropertyQuantity": "float",
     "App::PropertyTime": "float",
     "App::PropertyString": "string",
+    "App::PropertyVector": "vector",
+    "App::PropertyVectorDistance": "vector",
+    "App::PropertyPosition": "vector",
 }
 
 
@@ -300,6 +309,8 @@ def read_params(op, names):
             value = float(value.getValueAs("mm" if kind == "length" else "deg")) if hasattr(value, "getValueAs") else float(value)
         elif kind == "float" and hasattr(value, "Value"):
             value = float(value.Value)
+        elif kind == "vector":
+            value = (float(value.x), float(value.y), float(value.z))
         elif kind == "other":
             continue
         values[name] = value

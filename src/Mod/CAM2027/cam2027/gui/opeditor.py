@@ -43,6 +43,27 @@ _DRESSUP_LABELS = {
 }
 
 
+class _VectorWidget(QtWidgets.QWidget):
+    """Trois champs X / Y / Z en mm pour une propriété vecteur."""
+
+    def __init__(self, value=None, parent=None):
+        super(_VectorWidget, self).__init__(parent)
+        lay = QtWidgets.QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.boxes = []
+        for i, axis in enumerate(("X", "Y", "Z")):
+            lay.addWidget(QtWidgets.QLabel(axis))
+            box = QtWidgets.QDoubleSpinBox()
+            box.setRange(-100000, 100000)
+            box.setDecimals(3)
+            box.setValue(float(value[i]) if value else 0.0)
+            lay.addWidget(box)
+            self.boxes.append(box)
+
+    def value(self):
+        return tuple(b.value() for b in self.boxes)
+
+
 class OperationEditor(QtWidgets.QDialog):
     """Dialogue non modal ; ``on_close(accepted)`` est appelé à la fermeture."""
 
@@ -289,6 +310,8 @@ class OperationEditor(QtWidgets.QDialog):
             return w
         if kind == "string":
             return QtWidgets.QLineEdit(value or "")
+        if kind == "vector":
+            return _VectorWidget(value)
         return None
 
     def _dressup_tab(self):
@@ -367,7 +390,9 @@ class OperationEditor(QtWidgets.QDialog):
     def _widget_values(widgets):
         out = {}
         for n, (kind, w) in widgets.items():
-            if isinstance(w, QtWidgets.QComboBox):
+            if isinstance(w, _VectorWidget):
+                out[n] = w.value()
+            elif isinstance(w, QtWidgets.QComboBox):
                 data = w.currentData()
                 out[n] = data if data is not None else w.currentText()
             elif isinstance(w, QtWidgets.QCheckBox):

@@ -585,5 +585,26 @@
   "_section_lib": "ajouts",
   "Add missing starter tools": "Ajouter les outils de démarrage manquants",
   "Added starter tools: {names} (not saved yet)": "Outils de démarrage ajoutés : {names} (non enregistrés)",
-  "No starter tool missing.": "Aucun outil de démarrage ne manque."
+  "No starter tool missing.": "Aucun outil de démarrage ne manque.",
+
+  "_section_slot": "ajouts",
+  "Without selected geometry the slot runs between the two custom points (XY at the start depth).": "Sans géométrie sélectionnée, la rainure va d'un point personnalisé à l'autre (XY à la profondeur de départ).",
+  "Start point (custom)": "Point de départ (personnalisé)",
+  "First end of the slot when no geometry is selected (X, Y, Z).": "Première extrémité de la rainure sans géométrie sélectionnée (X, Y, Z).",
+  "End point (custom)": "Point d'arrivée (personnalisé)",
+  "Second end of the slot when no geometry is selected (X, Y, Z).": "Seconde extrémité de la rainure sans géométrie sélectionnée (X, Y, Z).",
+  "Start reference": "Référence de départ",
+  "Which point of the first selected feature starts the slot.": "Point de la première entité sélectionnée qui commence la rainure.",
+  "End reference": "Référence d'arrivée",
+  "Which point of the second selected feature ends the slot.": "Point de la seconde entité sélectionnée qui termine la rainure.",
+  "Extend radius": "Rayon de prolongement",
+  "Extra radius added around the slot ends.": "Rayon supplémentaire ajouté aux extrémités de la rainure.",
+  "Center of Mass": "Centre de masse",
+  "Center of BoundBox": "Centre de la boîte englobante",
+  "Lowest Point": "Point le plus bas",
+  "Highest Point": "Point le plus haut",
+  "Long Edge": "Grand côté",
+  "Short Edge": "Petit côté",
+  "Vertex": "Sommet",
+  "total time": "temps total"
 }

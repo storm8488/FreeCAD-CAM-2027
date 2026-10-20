@@ -37,6 +37,8 @@
 - Raccourcis clavier Ctrl+Maj+lettre pour les commandes principales.
 - Tests V-carve (fond de poche, profondeur bornée) et rainure (points personnalisés) :
   `test_vcarve_and_slot` (39 tests).
+- Rainure : points personnalisés, références et rayon de prolongement dans l'éditeur (champ
+  vecteur X/Y/Z) ; panneau de flux de travail : temps d'usinage total.
 
 ## 0.1.3 — 2026-10-20
 
