@@ -28,16 +28,16 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 
 | Fonction cible | Statut | Composant | Validation | Travail restant |
 |---|---|---|---|---|
-| Surfaçage | disponible | `Path.Op.MillFace` | impl. | test auto |
+| Surfaçage | disponible | `Path.Op.MillFace` | auto (`test_facing`) | — |
 | Contour 2D | disponible | `Path.Op.Profile` | auto | entrées/sorties inline, attaches (habillage) |
 | Poche | disponible | `Path.Op.Pocket` | auto | — |
 | Ébauche adaptative / trochoïdale | partiel | `Path.Op.Adaptive` (2D, monothread) | impl. | tests, perf, reprise 3D |
 | Rainure | disponible | `Path.Op.Slot` | impl. | test auto |
 | Gravure | disponible | `Path.Op.Engrave` | impl. | test auto |
-| Chanfreinage | absent | (Deburr FreeCAD non exposé) | — | exposer `Path.Op.Deburr` + chanfrein 2D |
+| Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` | impl. | reconnaissance automatique des trous |
 | Alésage hélicoïdal | disponible | `Path.Op.Helix` | impl. | test auto |
-| Fraisage de filets | absent | `Path.Op.ThreadMilling` existe | — | exposer + lier aux champs filetage de l'outil |
+| Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
 | Attaches, rampes, dogbones | absent | habillages FreeCAD | — | intégrer dans le dialogue d'opération |
 
 ## Opérations 3D

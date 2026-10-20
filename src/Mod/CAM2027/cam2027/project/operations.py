@@ -13,7 +13,9 @@ adaptative est l'opération ``adaptive`` (algorithme de Kalman/Adaptive de
 FreeCAD, engagement contrôlé en 2D).
 """
 
+import csv
 import importlib
+import os
 
 STRATEGIES = {
     "profile": {
@@ -54,7 +56,7 @@ STRATEGIES = {
         "params": ("BoundaryShape", "StepOver", "CutMode", "ZigZagAngle", "OffsetPattern", "StepDown",
                    "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight", "ExcludeRaisedAreas",
                    "ClearEdges"),
-        "limits": "",
+        "limits": "Flat faces only; with 'ClearEdges' the tool centre passes just beyond the face edges.",
     },
     "engrave": {
         "module": "Path.Op.Engrave",
@@ -83,7 +85,89 @@ STRATEGIES = {
                    "ReverseDirection", "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "",
     },
+    "threadmill": {
+        "module": "Path.Op.ThreadMilling",
+        "label": "Thread milling (helical, internal / external)",
+        "params": ("ThreadOrientation", "ThreadType", "ThreadName", "ThreadFit", "MajorDiameter", "MinorDiameter",
+                   "Pitch", "TPI", "Passes", "Direction", "LeadInOut", "StartDepth", "FinalDepth",
+                   "ClearanceHeight", "SafeHeight"),
+        "limits": "Needs a thread mill; the helix always runs over the whole thread length (tool teeth count "
+                  "unused), tool crest taken as 0; the thread must be pre-drilled (no clearing op linked).",
+    },
+    "chamfer": {
+        "module": "Path.Op.Deburr",
+        "label": "Chamfer / deburr (edges)",
+        "params": ("Width", "ExtraDepth", "Direction", "EntryPoint", "StepDown", "ClearanceHeight", "SafeHeight"),
+        "limits": "Selected edges or a flat face outline; depth derives from the tool angle (chamfer / V-bit); "
+                  "no collision check with adjacent walls.",
+    },
 }
+
+#: valeurs par défaut de FreeCAD pour un filet sans type explicite
+DEFAULT_THREAD_TYPE = "MetricInternal6H"
+
+
+def thread_table(thread_type):
+    """Lignes (dict) de la table FreeCAD des filets standard ``Mod/CAM/Data/Threads``."""
+    import FreeCAD
+
+    mod = strategy_module("threadmill")
+    filename = mod.ThreadTypeData.get(thread_type)
+    if filename is None:
+        raise ValueError("type de filet sans table standard : %r" % (thread_type,))
+    path = os.path.join(FreeCAD.getHomePath(), "Mod", "CAM", "Data", "Threads", filename)
+    with open(path, "r", newline="", encoding="utf-8") as fp:
+        return list(csv.DictReader(fp))
+
+
+def thread_names(thread_type=DEFAULT_THREAD_TYPE):
+    return [row["name"] for row in thread_table(thread_type)]
+
+
+def thread_spec(thread_type, name, fit=50):
+    """Propriétés ThreadMilling d'un filet standard (comme le panneau FreeCAD).
+
+    ``fit`` (0-100) interpole entre les tolérances min et max des diamètres.
+    """
+    rows = [r for r in thread_table(thread_type) if r["name"] == name]
+    if not rows:
+        raise ValueError("filet %r inconnu dans la table %s" % (name, thread_type))
+    row = rows[0]
+    f = float(fit) / 100.0
+    major = float(row["dMajorMin"]) + (float(row["dMajorMax"]) - float(row["dMajorMin"])) * f
+    minor = float(row["dMinorMin"]) + (float(row["dMinorMax"]) - float(row["dMinorMin"])) * f
+    spec = {"ThreadType": thread_type, "ThreadName": name, "ThreadFit": int(fit)}
+    if thread_type in strategy_module("threadmill").ThreadTypesImperial:
+        tpi = int(row["tpi"])
+        spec.update({"TPI": tpi, "Pitch": 25.4 / tpi, "MajorDiameter": major * 25.4, "MinorDiameter": minor * 25.4})
+    else:
+        spec.update({"TPI": 0, "Pitch": float(row["pitch"]), "MajorDiameter": major, "MinorDiameter": minor})
+    return spec
+
+
+def resolve_params(kind, tool, params):
+    """Complète les paramètres d'une stratégie à partir de l'outil de la bibliothèque.
+
+    Fraisage de filets : un ``ThreadName`` est résolu en diamètres/pas via la
+    table FreeCAD ; sans pas ni TPI, le pas (maximal) de l'outil est utilisé ;
+    le pas demandé doit rester dans la plage ``pitch_min``..``pitch`` de l'outil.
+    """
+    params = dict(params or {})
+    if kind != "threadmill":
+        return params
+    if tool.tool_type != "threadmill":
+        raise ValueError("le fraisage de filets exige un outil « threadmill » (outil : %s)" % tool.tool_type)
+    g = tool.geometry
+    if "ThreadName" in params and "MajorDiameter" not in params:
+        params.setdefault("ThreadType", DEFAULT_THREAD_TYPE)
+        params.update(thread_spec(params["ThreadType"], params["ThreadName"], params.get("ThreadFit", 50)))
+    if not params.get("TPI") and "Pitch" not in params:
+        params["Pitch"] = g.pitch
+    pitch = 25.4 / params["TPI"] if params.get("TPI") else float(params["Pitch"])
+    if pitch < (g.pitch_min or 0.0) - 1e-6 or pitch > g.pitch + 1e-6:
+        raise ValueError("pas de filet %.3f mm hors de la plage de l'outil %s (%.3f-%.3f mm)"
+                         % (pitch, tool.name, g.pitch_min or 0.0, g.pitch))
+    return params
 
 
 def strategy_module(kind):
@@ -113,11 +197,24 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
     # contrôleurs). On impose le nôtre le temps de la création.
     saved_input = PathUtils.UserInput
     PathUtils.UserInput = _ForcedToolController(tool_controller)
+    # FreeCAD 1.0 : Create() des opérations sur trous (perçage, hélice, filetage) cherche
+    # les trous avant que le modèle du job soit résolu (self.model = None) ; on le fournit.
+    import Path.Op.CircularHoleBase as CircularHoleBase
+
+    saved_find = CircularHoleBase.ObjectOp.findAllHoles
+
+    def _find_all_holes(proxy, obj):
+        if proxy.model is None:
+            proxy.model = job.Model.Group
+        return saved_find(proxy, obj)
+
+    CircularHoleBase.ObjectOp.findAllHoles = _find_all_holes
     try:
         mod = strategy_module(kind)
         op = mod.Create(name, parentJob=job)
     finally:
         PathUtils.UserInput = saved_input
+        CircularHoleBase.ObjectOp.findAllHoles = saved_find
         if previous is not None and previous.Name != doc.Name:
             try:
                 FreeCAD.setActiveDocument(previous.Name)

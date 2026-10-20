@@ -65,7 +65,8 @@ def shape_parameters(tool):
             "Length": _mm(g.overall_length),
             "ShankDiameter": _mm(g.shank_diameter),
             "Crest": _mm(0.0),
-            "NeckDiameter": _mm(g.shank_diameter),
+            # l'esquisse FreeCAD exige un col plus étroit que le diamètre de coupe
+            "NeckDiameter": _mm(min(g.shank_diameter, 0.8 * g.diameter)),
             "NeckLength": _mm(max((g.shoulder_length or g.flute_length) - g.flute_length, 0.0)),
         }
     if tool.tool_type == "dovetail":

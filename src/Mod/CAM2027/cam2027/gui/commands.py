@@ -11,7 +11,7 @@ from ..i18n import tr
 from .. import compat
 from ..version import __version__, FREECAD_PINNED_TAG
 from ..project.project import Project, ExportBlocked
-from ..project.operations import STRATEGIES
+from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
 from ..project import export as exportmod
 from ..project.machine import MachineProfile
@@ -231,6 +231,14 @@ class AddOperation(_Base):
         form.addRow(tr("Step down (mm)"), stepdown)
         side = QtWidgets.QComboBox(); side.addItems(["Outside", "Inside"])
         form.addRow(tr("Side (profile / adaptive)"), side)
+        width = QtWidgets.QDoubleSpinBox(); width.setRange(0.01, 100); width.setDecimals(2); width.setValue(1.0)
+        form.addRow(tr("Chamfer width (mm)"), width)
+        thread = QtWidgets.QComboBox()
+        try:
+            thread.addItems(thread_names(DEFAULT_THREAD_TYPE))
+        except Exception as exc:
+            thread.addItem(tr("(thread table unavailable: {error})", error=str(exc)))
+        form.addRow(tr("Thread (metric internal 6H)"), thread)
         bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
@@ -253,6 +261,13 @@ class AddOperation(_Base):
             params["StepOver"] = max(1, min(100, int(round(100.0 * values["radial_engagement_mm"] / tool.geometry.diameter))))
         if k == "adaptive":
             params["StepOver"] = max(1, min(100, int(round(100.0 * values["radial_engagement_mm"] / tool.geometry.diameter))))
+        if k == "millface":
+            params["ClearEdges"] = True
+        if k == "chamfer":
+            params["Width"] = width.value()
+        if k == "threadmill":
+            params["ThreadType"] = DEFAULT_THREAD_TYPE
+            params["ThreadName"] = thread.currentText()
         try:
             op, rec = proj.add_operation(k, name.text().strip() or "Operation", a.id, preset.currentData(),
                                          base=base or [(proj.job.Model.Group[0], [])], params=params)

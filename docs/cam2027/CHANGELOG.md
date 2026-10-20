@@ -1,5 +1,14 @@
 # CAM2027 — Historique
 
+## Non publié
+
+- Stratégies `threadmill` (`Path.Op.ThreadMilling`, nom de filet résolu depuis les tables
+  FreeCAD, pas vérifié contre la plage de l'outil) et `chamfer` (`Path.Op.Deburr`) ; limites
+  honnêtes de `millface`. Fraise à fileter 4 mm dans la bibliothèque de démarrage (col du
+  ToolBit forcé < D). Dialogue « Ajouter une opération » : largeur de chanfrein, nom de
+  filet, `ClearEdges` pour le surfaçage. Tests `test_facing`, `test_thread_milling`,
+  `test_chamfer`, `test_strategy_translations` (30 tests sur 1.1.4 et 1.0.2).
+
 ## 0.1.2 — 2026-10-20
 
 - Import Fusion validé sur un export réel (Fusion 2.16, version 37) : angle inclus = 2 × `TA`,

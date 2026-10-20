@@ -44,14 +44,33 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 ## Opérations
 
 - Stratégies exposées : contour, poche, adaptative 2D, perçage, surfaçage, gravure,
-  V-carving, alésage hélicoïdal, rainure. Pas de 3D (Surface/Waterline d'OCL), pas de
-  reprise, pas de 4e axe, pas d'attaches/dogbones/rampes inline (les habillages FreeCAD
-  restent utilisables dans l'atelier CAM standard sur le même document).
+  V-carving, alésage hélicoïdal, rainure, fraisage de filets, chanfreinage. Pas de 3D
+  (Surface/Waterline d'OCL), pas de reprise, pas de 4e axe, pas d'attaches/dogbones/rampes
+  inline (les habillages FreeCAD restent utilisables dans l'atelier CAM standard sur le
+  même document).
 - La poche FreeCAD (décalage/zigzag) **n'est pas** adaptative ; « adaptative » est
   l'opération Adaptive de FreeCAD (engagement contrôlé 2D, monothread).
-- Le dialogue « Ajouter une opération » expose profondeur finale, passe axiale, côté et
-  dérive le recouvrement du préréglage ; les autres propriétés se règlent dans l'éditeur
-  de propriétés FreeCAD de l'opération.
+- Surfaçage : faces planes ; avec `ClearEdges` (activé par le dialogue) le centre de
+  l'outil dépasse juste les bords de la face (la fraise déborde d'un rayon + 0,1 mm).
+- Fraisage de filets (`Path.Op.ThreadMilling`) : un nom de filet (`ThreadName`) est résolu
+  en diamètres/pas depuis les tables CSV de FreeCAD (`Mod/CAM/Data/Threads`) comme le fait
+  le panneau FreeCAD ; le pas demandé doit rester dans la plage `pitch_min`..`pitch` de
+  l'outil, sinon refus. **Approximations** : le nombre de dents de l'outil (`thread_teeth`)
+  n'est pas exploité par le générateur FreeCAD (l'hélice parcourt toute la longueur du
+  filet) ; la crête de l'outil est prise à 0 ; le col du ToolBit est forcé à
+  min(queue, 0,8 × D) pour que l'esquisse FreeCAD se résolve ; sur 1.0.2 l'esquisse du
+  ToolBit à fileter signale une arête nulle (crête 0) : forme 3D de l'outil dégradée,
+  parcours inchangé (il n'utilise que les propriétés Diameter/Crest) ; le trou doit être
+  pré-percé (aucune opération de dégagement liée). Testé automatiquement : filet intérieur
+  métrique 6H ; filets extérieurs et impériaux **non vérifiés**.
+- Chanfreinage (`Path.Op.Deburr`) : arêtes sélectionnées (ou contour d'une face plane) avec
+  une fraise à chanfreiner ou un V-bit ; la profondeur découle de l'angle de l'outil
+  (largeur / tan(angle/2) + surprofondeur). Pas de contrôle de collision avec les parois
+  voisines, pas de chanfrein « 2D » à largeur constante avec une fraise cylindrique.
+- Le dialogue « Ajouter une opération » expose profondeur finale, passe axiale, côté,
+  largeur de chanfrein et nom de filet (métrique intérieur 6H seulement) et dérive le
+  recouvrement du préréglage ; les autres propriétés se règlent dans l'éditeur de
+  propriétés FreeCAD de l'opération.
 - Les paramètres non pris en charge par une stratégie sont listés (`ignored_params`) et
   affichés dans le panneau projet.
 

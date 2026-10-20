@@ -302,6 +302,10 @@ def starter_library():
          [("Wood V-carve", "engraving", "wood", 18000, 1200, 3.0, 1.0)]),
         ("3 mm drill", "drill", dict(diameter=3, shank_diameter=3, overall_length=60, flute_length=30, tip_included_angle_deg=118), 2,
          [("Wood drilling", "drilling", "wood", 12000, 300, 3.0, 3.0)]),
+        ("4 mm thread mill (M5-M8, pitch 0.5-1.25)", "threadmill",
+         dict(diameter=4, shank_diameter=6, overall_length=60, flute_length=10, shoulder_length=22,
+              pitch=1.25, pitch_min=0.5, thread_teeth=6), 3,
+         [("Aluminium threading", "general", "aluminium", 12000, 400, 1.25, 0.3)]),
     ]
     number = 1
     for name, ttype, geom, flutes, presets in specs:
