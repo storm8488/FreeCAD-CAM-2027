@@ -163,5 +163,93 @@ class TestInlay(_SheetCase):
         proj.close()
 
 
+class TestNesting(unittest.TestCase):
+    def _no_overlap(self, rects, spacing):
+        for a in range(len(rects)):
+            for b in range(a + 1, len(rects)):
+                ax0, ay0, ax1, ay1 = rects[a]
+                bx0, by0, bx1, by1 = rects[b]
+                gap = max(bx0 - ax1, ax0 - bx1, by0 - ay1, ay0 - by1)
+                self.assertGreaterEqual(gap, spacing - 1e-6, (rects[a], rects[b]))
+
+    def test_skyline_pack(self):
+        from cam2027.project import nesting
+
+        items = [("a", 100, 50), ("b", 60, 60), ("c", 200, 30), ("d", 100, 50), ("e", 100, 50), ("f", 30, 120)]
+        placed, unplaced = nesting.skyline_pack(items, 280, 180, spacing=5)
+        self.assertEqual(unplaced, [])
+        rects = []
+        for key, w, h in items:
+            x, y, rot = placed[key]
+            pw, ph = (h, w) if rot else (w, h)
+            self.assertGreaterEqual(x, -1e-9)
+            self.assertGreaterEqual(y, -1e-9)
+            self.assertLessEqual(x + pw, 280 + 1e-9)
+            self.assertLessEqual(y + ph, 180 + 1e-9)
+            rects.append((x, y, x + pw, y + ph))
+        self._no_overlap(rects, 5)
+        # bande plus longue que le panneau n'est large : posée tournée
+        placed, unplaced = nesting.skyline_pack([("strip", 250, 20)], 200, 300)
+        self.assertEqual((unplaced, placed["strip"][2]), ([], True))
+        placed, unplaced = nesting.skyline_pack([("big", 400, 400), ("ok", 50, 50)], 200, 300)
+        self.assertEqual(unplaced, ["big"])
+        self.assertIn("ok", placed)
+
+    def test_nest_drawings_project(self):
+        import Part
+        from cam2027.project import sheet as sheetmod
+
+        V = FreeCAD.Vector
+        lib = starter_library()
+        proj = Project.create("Nesting", lib, MachineProfile("test", controller="grbl", post_processor="grbl",
+                                                              post_processor_args="--no-show-editor --precision=3"))
+
+        def drawing(name, wire):
+            obj = proj.doc.addObject("Part::Feature", name)
+            obj.Shape = wire
+            return obj
+
+        rect = drawing("Rect", Part.makePolygon([V(500, 500, 0), V(600, 500, 0), V(600, 550, 0), V(500, 550, 0), V(500, 500, 0)]))
+        disc = drawing("Disc", Part.Wire(Part.makeCircle(30, V(-200, 40, 0))))
+        tri = drawing("Tri", Part.makePolygon([V(0, 0, 0), V(150, 0, 0), V(0, 40, 0), V(0, 0, 0)]))
+        proj.doc.recompute()
+        rep = proj.nest_drawings([rect, disc, tri], 300, 200, spacing=5, margin=10, copies={rect: 3})
+        self.assertEqual(rep["unplaced"], [])
+        self.assertEqual(len(rep["placed"]), 5)  # 3 rectangles, disque, triangle
+        boxes = []
+        for obj in rep["objects"]:
+            bb = obj.Shape.BoundBox
+            self.assertGreaterEqual(bb.XMin, 10 - 1e-6)
+            self.assertGreaterEqual(bb.YMin, 10 - 1e-6)
+            self.assertLessEqual(bb.XMax, 290 + 1e-6)
+            self.assertLessEqual(bb.YMax, 190 + 1e-6)
+            boxes.append((bb.XMin, bb.YMin, bb.XMax, bb.YMax))
+        self._no_overlap(boxes, 5)
+        faces = [Part.makeFace(sheetmod.closed_wires(o), "Part::FaceMakerBullseye") for o in rep["objects"]]
+        for a in range(len(faces)):
+            for b in range(a + 1, len(faces)):
+                self.assertLess(faces[a].common(faces[b]).Area, 1e-6)
+        expected = (3 * 100 * 50 + math.pi * 30 ** 2 + 150 * 40 / 2.0) / (300 * 200)
+        self.assertAlmostEqual(rep["utilization"], expected, places=3)
+        # panneau imposé : le brut est exactement le panneau
+        proj.create_sheet_job(rep["objects"], thickness=18.0, sheet_rect=(0, 0, 300, 200))
+        sb = proj.stock_bounds()
+        self.assertEqual([round(sb[k], 6) for k in ("xmin", "xmax", "ymin", "ymax", "zmin", "zmax")],
+                         [0.0, 300.0, 0.0, 200.0, -18.0, 0.0])
+        with self.assertRaises(ValueError):  # après le job : refus
+            proj.nest_drawings([rect], 300, 200)
+        proj.close()
+        # panneau trop petit pour tout : les pièces restantes sont rapportées, pas posées dehors
+        proj2 = Project.create("Nesting small", lib)
+        objs = []
+        for k in range(6):  # 6 × 100 × 80 dans 210 × 180 utiles : la surface n'en permet que 4
+            o = proj2.doc.addObject("Part::Feature", "R%d" % k)
+            o.Shape = Part.makePolygon([V(0, 0, 0), V(100, 0, 0), V(100, 80, 0), V(0, 80, 0), V(0, 0, 0)])
+            objs.append(o)
+        rep2 = proj2.nest_drawings(objs, 230, 200, spacing=5, margin=10)
+        self.assertEqual((len(rep2["placed"]), len(rep2["unplaced"])), (4, 2))
+        proj2.close()
+
+
 if __name__ == "__main__":
     unittest.main()

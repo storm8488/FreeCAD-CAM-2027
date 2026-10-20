@@ -160,13 +160,13 @@ class Project(object):
         self.doc.recompute()
         return job
 
-    def create_sheet_job(self, vectors=None, thickness=18.0, margin=10.0, fixtures=("G54",)):
+    def create_sheet_job(self, vectors=None, thickness=18.0, margin=10.0, fixtures=("G54",), sheet_rect=None):
         """Job « dessin 2D dans un panneau » : panneau sous le dessin (dessus à Z = 0), une face par
         vecteur fermé, brut = panneau. ``vectors`` par défaut : tous les vecteurs du document."""
         vectors = list(vectors) if vectors else sheetmod.vector_objects(self.doc)
         if not vectors:
             raise ValueError("aucun dessin 2D dans le projet (importer un SVG ou un DXF)")
-        sheet = sheetmod.make_sheet(self.doc, vectors, float(thickness), float(margin))
+        sheet = sheetmod.make_sheet(self.doc, vectors, float(thickness), float(margin), rect=sheet_rect)
         faces = sheetmod.make_faces(self.doc, vectors)
         self.doc.recompute()
         return self.create_job([sheet] + vectors + faces,
@@ -481,6 +481,43 @@ class Project(object):
             notes.append("male: %s" % exc)
         return {"female_ops": female, "male_project": male, "male_ops": male_ops, "mirror_x": mirror_x,
                 "notes": notes, **gaps}
+
+    def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None):
+        """Imbrication des dessins 2D sur un panneau ``sheet_width × sheet_length`` (origine 0, 0), avant
+        « Brut et montage > panneau ». ``copies`` : ``{objet: nombre}`` (copies créées). Les dessins placés
+        sont déplacés ; ceux qui ne tiennent pas restent où ils sont et sont rapportés.
+
+        Retourne un dict : placés ``[(libellé, x, y, tourné)]``, non placés, taux d'utilisation."""
+        from . import nesting
+
+        if self.has_job:
+            raise ValueError("nesting must be done before the sheet job is created")
+        objs = []
+        for obj in drawings:
+            objs.append(obj)
+            for k in range(2, int((copies or {}).get(obj, 1)) + 1):
+                dup = self.doc.addObject("Part::Feature", obj.Name + "_Copy")
+                dup.Shape = obj.Shape.copy()
+                dup.Label = "%s (%d)" % (obj.Label, k)
+                objs.append(dup)
+        self.doc.recompute()
+        items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
+        placed, unplaced = nesting.skyline_pack(items, sheet_width - 2 * margin, sheet_length - 2 * margin,
+                                                spacing, rotate)
+        report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length)}
+        used = 0.0
+        for o in objs:
+            if o.Name in placed:
+                x, y, rot = placed[o.Name]
+                nesting.move_to(o, margin + x, margin + y, rot)
+                report["placed"].append((o.Label, margin + x, margin + y, rot))
+                used += nesting.outline_area(o)
+            else:
+                report["unplaced"].append(o.Label)
+        self.doc.recompute()
+        report["utilization"] = used / (sheet_width * sheet_length)
+        report["objects"] = [o for o in objs if o.Name in placed]
+        return report
 
     def material_check(self, resolution=None, tolerance=0.02):
         """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.

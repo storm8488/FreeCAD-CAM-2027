@@ -104,8 +104,10 @@ def expand_drawing_base(doc, kind, base):
     return out
 
 
-def make_sheet(doc, vectors, thickness, margin=10.0):
-    """Panneau rectangulaire sous le dessin : englobe les vecteurs + ``margin``, dessus à Z = 0."""
+def make_sheet(doc, vectors, thickness, margin=10.0, rect=None):
+    """Panneau rectangulaire sous le dessin : englobe les vecteurs + ``margin``, dessus à Z = 0.
+
+    ``rect`` = ``(x, y, largeur, longueur)`` : panneau de taille imposée (imbrication)."""
     if thickness <= 0:
         raise ValueError("épaisseur du panneau <= 0")
     bb = None
@@ -120,8 +122,14 @@ def make_sheet(doc, vectors, thickness, margin=10.0):
             o.Placement.move(FreeCAD.Vector(0, 0, -bb.ZMin))
     sheet = doc.addObject("Part::Feature", SHEET_NAME)
     sheet.Label = "Sheet %.3g mm" % thickness
-    sheet.Shape = Part.makeBox(bb.XLength + 2 * margin, bb.YLength + 2 * margin, thickness,
-                               FreeCAD.Vector(bb.XMin - margin, bb.YMin - margin, -thickness))
+    if rect is not None:
+        x, y, w, h = (float(v) for v in rect)
+        if bb.XMin < x - 1e-6 or bb.YMin < y - 1e-6 or bb.XMax > x + w + 1e-6 or bb.YMax > y + h + 1e-6:
+            raise ValueError("the drawing does not fit in the %.0f x %.0f mm sheet" % (w, h))
+        sheet.Shape = Part.makeBox(w, h, thickness, FreeCAD.Vector(x, y, -thickness))
+    else:
+        sheet.Shape = Part.makeBox(bb.XLength + 2 * margin, bb.YLength + 2 * margin, thickness,
+                                   FreeCAD.Vector(bb.XMin - margin, bb.YMin - margin, -thickness))
     if FreeCAD.GuiUp and sheet.ViewObject is not None:
         # parcours sous Z 0 visibles à travers le panneau
         sheet.ViewObject.Transparency = 70
