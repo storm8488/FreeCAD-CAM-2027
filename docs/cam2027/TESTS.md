@@ -42,7 +42,7 @@ temporaire : 19 ateliers masqués, thème sombre « FreeCAD Dark.qss »).
 ## Démonstration guidée
 
 ```bat
-scripts\cam2027.cmd src\Mod\CAM2027	ests\gui_demo.py
+scripts\cam2027.cmd src\Mod\CAM2027\tests\gui_demo.py
 ```
 
 Dix étapes commentées (bibliothèque, projet, brut, surfaçage, poche et contour, chanfrein,
