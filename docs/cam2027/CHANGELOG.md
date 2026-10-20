@@ -1,5 +1,13 @@
 # CAM2027 — Historique
 
+## 0.1.1 — 2026-10-20
+
+- FreeCAD 1.1.4 portable installé à part (`%LOCALAPPDATA%\CAM2027\FreeCAD-1.1.4`, SHA256
+  vérifié) ; suite de tests et vérification graphique passées sur 1.1.4 (API outils
+  « assets », PySide6) et sur 1.0.2.
+- Compatibilité Qt6 : `exec_dialog`, `QtGui.QFontDatabase` ; STEP/IGES via le module
+  `Import` (Part.insert déprécié en 1.1). Lanceurs : priorité `FREECAD_BIN` > 1.1.4 > 1.0.2.
+
 ## 0.1.0 — 2026-10-20 (jalon A + première tranche du jalon B)
 
 - Fork `storm8488/FreeCAD-CAM-2027` créé ; branche `cam2027` depuis le tag amont `1.1.4`

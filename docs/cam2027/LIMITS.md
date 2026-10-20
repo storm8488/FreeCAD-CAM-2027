@@ -5,8 +5,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Base et exécution
 
-- L'atelier tourne sur FreeCAD **1.0.2** (distribution officielle). La branche d'API 1.1.x
-  (`tool_api() == "assets"`) est écrite mais **non exécutée** : 1.1.4 n'est pas installé.
+- L'atelier tourne sur les distributions officielles FreeCAD **1.0.2** et **1.1.4**
+  (tests console et vérification graphique passés sur les deux). 26.3rc2 non testée.
 - Pas de compilation du fork (ni MSVC, ni CMake, ni LibPack). Aucun exécutable « CAM2027 »
   compilé : le lanceur démarre le FreeCAD installé avec l'atelier.
 - Les postprocesseurs, le simulateur et toutes les stratégies sont ceux de FreeCAD CAM.

@@ -10,4 +10,12 @@ except ImportError:  # pragma: no cover
 
     QT_VERSION = 5
 
-__all__ = ["QtCore", "QtGui", "QtWidgets", "QT_VERSION"]
+
+
+def exec_dialog(dialog):
+    """``QDialog.exec()`` sur PySide6, ``exec_()`` sur PySide2 ; retourne le code de résultat."""
+    runner = getattr(dialog, "exec", None) or getattr(dialog, "exec_")
+    return runner()
+
+
+__all__ = ["QtCore", "QtGui", "QtWidgets", "QT_VERSION", "exec_dialog"]

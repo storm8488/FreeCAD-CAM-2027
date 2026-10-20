@@ -16,7 +16,9 @@ détaillé dans `src/Mod/CAM2027/tests/last-run.txt`.
 | `test_pipeline.py` | 4 | **chaîne complète** : bibliothèque → projet → STEP (plaque 80×60×10 avec poche et îlot) → brut à marges (84×64, Z max 11) → G54 + bride → poche (face du fond) + contour extérieur → recalcul (commandes > 10, XYZ seulement, Z min 4 / 0, avance 1800 copiée dans le ToolController, modification du préréglage sans effet) → export GRBL (G21, G54, enveloppe, F1800, S18000, statut « non vérifiable » pour les courses inconnues, fiche avec tableau d'outils) → sauvegarde → réouverture (instantané, machine, 2 opérations, registre, mêmes commandes, même enveloppe) ; export **bloqué** si la course X est dépassée ; rejet des mots A/B/C sans axe, des pouces (G20) et des codes non GRBL ; ToolBit FreeCAD pour chaque outil de la bibliothèque de démarrage (diamètre, angle inclus, angle de pointe foret) |
 | `test_import.py` | 5 | STEP (volume), STL (maillage puis solide), SVG (3 contours fermés), DXF (ligne + cercle, lecteur C++ en console), extensions inconnues / fichier absent |
 
-**Dernier résultat (2026-10-20, FreeCAD 1.0.2) : 25 tests, 0 échec.**
+**Dernier résultat (2026-10-20) : 25 tests, 0 échec, sur FreeCAD 1.1.4 portable (API
+outils « assets », PySide6) et sur FreeCAD 1.0.2 (API « legacy », PySide2).** Le lanceur
+de tests choisit la 1.1.4 si elle est installée ; `FREECAD_BIN` force une version.
 
 ## Vérification graphique
 
@@ -26,15 +28,17 @@ détaillé dans `src/Mod/CAM2027/tests/last-run.txt`.
 
 Active l'atelier, déroule la chaîne par l'API, ouvre les panneaux, capture
 `tests/screenshots/*.png` et `gui_smoke.txt` (doit finir par `OK`), puis quitte.
-Dernier résultat (2026-10-20) : atelier activé, 9 commandes enregistrées, barre d'outils
-présente, panneaux bibliothèque (3 onglets) et projet rendus, G-code prévisualisé (42
-lignes, 5 contrôles « non vérifiable »), projet sauvegardé.
+Dernier résultat (2026-10-20, sur 1.1.4 puis 1.0.2) : atelier activé, 9 commandes
+enregistrées, barre d'outils présente, interface en français, panneaux bibliothèque (3
+onglets, aperçu coté) et projet rendus, parcours visible dans la vue 3D, G-code
+prévisualisé (42 lignes, 5 contrôles « non vérifiable »), projet sauvegardé, FreeCAD
+fermé sans erreur.
 
 ## Non couvert
 
 - Interface : dialogues (brut, opération, export, machine) non exercés automatiquement ;
   vérifiés visuellement seulement via les captures.
-- FreeCAD 1.1.4 : branche `assets` du pont outils non exécutée.
+- FreeCAD 26.3rc2 (candidate) non testée.
 - Aucune validation sur machine.
 
 ## Benchmarks

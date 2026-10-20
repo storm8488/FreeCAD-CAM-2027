@@ -6,7 +6,7 @@ import os
 import FreeCAD
 import FreeCADGui
 
-from .qt import QtCore, QtGui, QtWidgets
+from .qt import QtCore, QtGui, QtWidgets, exec_dialog
 from ..i18n import tr
 from ..tools.model import (
     ToolDefinition, ToolGeometry, CuttingPreset, Holder, ToolAssembly, TOOL_TYPES, geometry_fields_for,
@@ -513,7 +513,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         fields = {}
         if material.text().strip():
@@ -710,7 +710,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         try:
             segments = []
@@ -773,7 +773,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         box.setText(tr("Imported {n} tool(s). This importer is not yet validated on a real Fusion export.",
                        n=len(report.imported)))
         box.setDetailedText(report.to_text())
-        box.exec_()
+        exec_dialog(box)
 
     def export_library(self):
         path, _f = QtWidgets.QFileDialog.getSaveFileName(self, tr("Export the library"), "library.cam2027tools",

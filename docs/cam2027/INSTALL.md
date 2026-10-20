@@ -9,10 +9,23 @@
   Démarrer, désinstallation par utilisateur (les projets sont conservés).
 - `scripts/cam2027-tests.cmd` : tests automatiques en mode console.
 
-**État actuel :** l'atelier s'exécute sur la **distribution officielle FreeCAD 1.0.2**
-installée dans `C:\Program Files\FreeCAD 1.0`. Ce n'est **pas** un exécutable compilé
-depuis ce fork (aucun compilateur C++ ni CMake n'est présent sur la machine). La base
-épinglée du fork est le tag `1.1.4` (commit `4fd3bf32`), voir [ARCHITECTURE.md](ARCHITECTURE.md).
+**État actuel :** l'atelier s'exécute sur une **distribution officielle FreeCAD** :
+la 1.1.4 portable (archive `FreeCAD_1.1.4-Windows-x86_64-py311.7z`, SHA256 vérifié,
+extraite dans `%LOCALAPPDATA%\CAM2027\FreeCAD-1.1.4`) ou la 1.0.2 installée dans
+`C:\Program Files\FreeCAD 1.0`. Ce n'est **pas** un exécutable compilé depuis ce fork
+(aucun compilateur C++ ni CMake n'est présent sur la machine). La base épinglée du fork
+est le tag `1.1.4` (commit `4fd3bf32`), voir [ARCHITECTURE.md](ARCHITECTURE.md).
+
+Ordre de recherche des lanceurs : variable `FREECAD_BIN`, puis la 1.1.4 portable, puis la 1.0.2.
+Pour (ré)installer la 1.1.4 portable sans 7-Zip (bsdtar de Windows 11 lit le 7z) :
+
+```bat
+gh release download 1.1.4 -R FreeCAD/FreeCAD -p "FreeCAD_1.1.4-Windows-x86_64-py311.7z*" -D %LOCALAPPDATA%\CAM2027\downloads
+```
+
+```bat
+tar -xf %LOCALAPPDATA%\CAM2027\downloads\FreeCAD_1.1.4-Windows-x86_64-py311.7z -C %LOCALAPPDATA%\CAM2027\FreeCAD-1.1.4
+```
 
 ## Prérequis
 

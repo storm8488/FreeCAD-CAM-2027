@@ -41,7 +41,14 @@ def import_file(doc, path, label=None):
     previous = FreeCAD.ActiveDocument
     FreeCAD.setActiveDocument(doc.Name)
     try:
-        if ext in (".step", ".stp", ".brep", ".brp", ".iges", ".igs"):
+        if ext in (".step", ".stp", ".iges", ".igs"):
+            # module Import (sans interface) : lecteur STEP/IGES commun aux deux versions,
+            # Part.insert est déprécié pour STEP depuis 1.1
+            import Import
+
+            Import.insert(path, doc.Name)
+            kind = "solid"
+        elif ext in (".brep", ".brp"):
             import Part
 
             Part.insert(path, doc.Name)

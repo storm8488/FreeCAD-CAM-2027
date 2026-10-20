@@ -6,7 +6,7 @@ import os
 import FreeCAD
 import FreeCADGui
 
-from .qt import QtCore, QtWidgets
+from .qt import QtCore, QtGui, QtWidgets, exec_dialog
 from ..i18n import tr
 from .. import compat
 from ..version import __version__, FREECAD_PINNED_TAG
@@ -141,7 +141,7 @@ class StockFixture(_Base):
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         k = kind.currentData()
         if k == "box_margins":
@@ -235,7 +235,7 @@ class AddOperation(_Base):
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         if asm.currentData() is None or preset.currentData() is None:
             _warn(tr("The library snapshot has no assembly or preset for this tool."))
@@ -322,7 +322,7 @@ class Export(_Base):
         lay.addLayout(form)
         tabs = QtWidgets.QTabWidget()
         preview = QtWidgets.QPlainTextEdit(); preview.setReadOnly(True)
-        preview.setFont(QtWidgets.QFontDatabase.systemFont(QtWidgets.QFontDatabase.FixedFont))
+        preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
         checks = QtWidgets.QPlainTextEdit(); checks.setReadOnly(True)
         sheet = QtWidgets.QPlainTextEdit(); sheet.setReadOnly(True)
         tabs.addTab(preview, tr("G-code preview"))
@@ -368,7 +368,7 @@ class Export(_Base):
         b_exp.clicked.connect(do_export)
         b_close.clicked.connect(dlg.accept)
         do_preview()
-        dlg.exec_()
+        exec_dialog(dlg)
 
 
 def _format_checks(analysis, issues):
@@ -414,7 +414,7 @@ class Machine(_Base):
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         d = m.to_dict()
         numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min",

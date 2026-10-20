@@ -3,6 +3,9 @@ rem Lanceur CAM2027 : FreeCAD avec l'atelier CAM2027 et une configuration separe
 rem de l'installation FreeCAD habituelle (profil utilisateur dans %LOCALAPPDATA%\CAM2027).
 setlocal
 set "ROOT=%~dp0.."
+rem Priorite : FREECAD_BIN, puis la 1.1.4 portable installee a part, puis l'installation 1.0.
+set "FC114=%LOCALAPPDATA%\CAM2027\FreeCAD-1.1.4\FreeCAD_1.1.4-Windows-x86_64-py311\bin"
+if "%FREECAD_BIN%"=="" if exist "%FC114%\FreeCAD.exe" set "FREECAD_BIN=%FC114%"
 if "%FREECAD_BIN%"=="" set "FREECAD_BIN=C:\Program Files\FreeCAD 1.0\bin"
 if not exist "%FREECAD_BIN%\FreeCAD.exe" (
   echo FreeCAD.exe introuvable dans "%FREECAD_BIN%". Definir la variable FREECAD_BIN.

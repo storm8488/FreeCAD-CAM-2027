@@ -58,6 +58,7 @@ def set_stock(job, spec):
             raise ValueError("type de brut inconnu : %r" % (kind,))
         job.Stock = stock
         if old is not None and old.Name != stock.Name:
+            old.Label = "StockRemoved"  # libère l'étiquette avant la suppression (différée sur 1.1)
             doc.removeObject(old.Name)
         stock.Label = "Stock"
         if stock.ViewObject:

@@ -78,8 +78,8 @@ et `tools/library.py` n'importent pas FreeCAD (testables hors FreeCAD).
 
 `compat.tool_api()` renvoie `legacy` (1.0, `Path.Tool.Bit.Factory`) ou `assets` (1.1,
 `Path.Tool.toolbit.ToolBit.from_dict` + `attach_to_doc`). Seul `bridge.create_toolbit`
-en dépend. La branche `assets` est écrite d'après le code 1.1.4 du fork mais **n'a pas été
-exécutée** (1.1.4 n'est pas installé).
+en dépend. Les deux branches sont exécutées par la suite de tests (1.0.2 installée et
+1.1.4 portable). Qt : PySide2 sur 1.0, PySide6 sur 1.1 (`gui/qt.py`, `exec_dialog`).
 
 ## Intégration amont
 
