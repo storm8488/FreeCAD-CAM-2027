@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Plantage à la création du brut corrigé** : un fichier importé deux fois donnait, une fois les corps
+  fusionnés, une forme vide (0 solide, boîte invalide) ; le brut de FreeCAD (`Stock.execute` /
+  `onChanged`) bouclait alors jusqu'au débordement de pile (vidages Windows : violation d'accès dans
+  VCRUNTIME140, pile de 1 Mo pleine). Corps en double ignorés, fusion refusée si elle ne donne pas un
+  solide plausible, forme vide refusée avant le brut, avertissement à la réimportation d'un fichier.
+  Journal de plantage Python permanent (`%APPDATA%\\CAM2027\\v1-1\\crash-python.log`). 74 tests.
 - **Fiabilisation de l'interface** (bugs trouvés en test par l'utilisateur) : STL fermé converti en
   solide affiné à l'import (fonds de poche plans retrouvés) ; pièce détectée pour STL et SVG (étape 1,
   Brut et montage) ; import sans projet = projet créé ; assemblage de plusieurs corps fusionné en une

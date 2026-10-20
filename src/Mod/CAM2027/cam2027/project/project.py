@@ -140,7 +140,19 @@ class Project(object):
         return out
 
     def import_model(self, path, label=None):
-        return importers.import_file(self.doc, path, label)
+        key = os.path.normcase(os.path.abspath(path))
+        done = json.loads(getattr(self.info, "ImportedFiles", "") or "[]")
+        res = importers.import_file(self.doc, path, label)
+        if key in done:
+            res.warnings.insert(0, Msg("{file} was already imported: the project now contains it twice",
+                                       file=os.path.basename(path)))
+        else:
+            done.append(key)
+            if "ImportedFiles" not in self.info.PropertiesList:
+                self.info.addProperty("App::PropertyString", "ImportedFiles", "CAM2027", "Imported files (JSON)")
+                self.info.setEditorMode("ImportedFiles", 1)
+            self.info.ImportedFiles = json.dumps(done)
+        return res
 
     def import_relief(self, path, width, relief_height, **options):
         """Relief 3D depuis une image (carte de hauteur), voir ``relief.make_relief``."""
@@ -154,6 +166,12 @@ class Project(object):
     def create_job(self, models, stock=None, fixtures=("G54",), post_processor=None, post_args=None):
         if self.info.Job is not None:
             raise ValueError("le projet a déjà un job")
+        for m in models:  # une boîte invalide fait boucler le brut de FreeCAD (Stock.execute) jusqu'au plantage
+            geom = getattr(m, "Mesh", None) if m.TypeId.startswith("Mesh::") else getattr(m, "Shape", None)
+            bb = geom.BoundBox if geom is not None else None
+            if geom is None or (hasattr(geom, "isNull") and geom.isNull()) or bb is None or not bb.isValid() \
+                    or (bb.XLength <= 0 and bb.YLength <= 0):
+                raise UserError("{name}: empty shape, it cannot be machined", name=m.Label)
         previous = FreeCAD.ActiveDocument
         FreeCAD.setActiveDocument(self.doc.Name)
         try:
@@ -673,19 +691,46 @@ class Project(object):
         raw = getattr(self.info, "MaterialCheck", "")
         return json.loads(raw) if raw else None
 
+    @staticmethod
+    def unique_bodies(objects):
+        """Corps sans doublon (même volume, même boîte, même centre : fichier importé deux fois)."""
+        out = []
+        for o in objects:
+            s = o.Shape
+            key = (s.Volume, s.BoundBox, s.CenterOfMass if s.Solids else None)
+            dup = False
+            for u in out:
+                t = u.Shape
+                if abs(t.Volume - key[0]) <= 1e-6 * max(1.0, abs(key[0])) and t.BoundBox.isValid() and \
+                        key[1].isValid() and (t.BoundBox.Center - key[1].Center).Length < 1e-6 and \
+                        abs(t.BoundBox.DiagonalLength - key[1].DiagonalLength) < 1e-6 and \
+                        (key[2] is None or (t.CenterOfMass - key[2]).Length < 1e-6):
+                    dup = True
+                    break
+            if not dup:
+                out.append(o)
+        return out
+
     def merge_models(self, objects, label=None):
         """Fusionne plusieurs corps en une seule pièce à usiner (assemblage empilé : sans cela, chaque corps
-        est contourné jusqu'au fond du modèle, à travers les autres). Les corps d'origine sont masqués."""
-        import Part
+        est contourné jusqu'au fond du modèle, à travers les autres). Les corps d'origine sont masqués.
 
+        Retourne None si la fusion ne donne pas un solide plausible (forme vide, volume perdu) : les corps
+        restent alors séparés (une forme vide fait boucler le brut de FreeCAD jusqu'au plantage)."""
         shapes = [o.Shape for o in objects]
-        fused = shapes[0].fuse(shapes[1:])
+        try:
+            fused = shapes[0].fuse(shapes[1:])
+        except Exception:
+            return None
         try:
             refined = fused.removeSplitter()
             if refined.isValid():
                 fused = refined
         except Exception:
             pass
+        biggest = max(s.Volume for s in shapes)
+        if fused.isNull() or not fused.Solids or not fused.BoundBox.isValid() or fused.Volume < 0.5 * biggest:
+            return None
         obj = self.doc.addObject("Part::Feature", "MergedPart")
         obj.Shape = fused
         obj.Label = label or Msg("{n} bodies merged", n=len(objects))

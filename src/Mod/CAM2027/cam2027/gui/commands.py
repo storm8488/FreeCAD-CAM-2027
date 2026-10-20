@@ -153,7 +153,8 @@ class ImportModel(_Base):
             return
         FreeCADGui.SendMsgToActiveView("ViewFit")
         _after_change()
-        lines = [tr("Imported: {objects}", objects=", ".join(o.Label for o in res.objects) or "-")]
+        shown = [o.Label for o in res.objects if o.TypeId.startswith(("Part::", "Mesh::"))]  # pas les repères du STEP
+        lines = [tr("Imported: {objects}", objects=", ".join(shown) or "-")]
         if res.kind == "vector":
             lines.append(tr("2D drawing: next, Stock & fixture > Sheet under the 2D drawing."))
         lines += [tr_msg(w) for w in res.warnings]
@@ -320,11 +321,20 @@ class StockFixture(_Base):
                 sel = [o for o in FreeCADGui.Selection.getSelection() if o in candidates]
                 if not sel:
                     sel = candidates
+                    if len(sel) > 1 and all(o.TypeId.startswith("Part::") for o in sel):
+                        unique = proj.unique_bodies(sel)
+                        if len(unique) < len(sel):
+                            _info(tr("{n} duplicate bodies ignored (file imported twice?).", n=len(sel) - len(unique)))
+                        sel = unique
                     faces = sum(len(o.Shape.Faces) for o in sel if hasattr(o, "Shape"))
                     if len(sel) > 1 and all(o.TypeId.startswith("Part::") for o in sel):
                         if faces <= MERGE_MAX_FACES:
                             with busy(tr("Merging the {n} bodies into one part...", n=len(sel))):
-                                sel = [proj.merge_models(sel, proj.doc.Label)]
+                                merged = proj.merge_models(sel, proj.doc.Label)
+                            if merged is not None:
+                                sel = [merged]
+                            else:
+                                _info(tr("The {n} bodies could not be merged into one solid: they are machined as separate parts.", n=len(sel)))
                         else:
                             _info(tr("{n} bodies ({f} faces): too large to merge, they are machined as separate parts. To machine only some of them, select them before Stock & fixture.",
                                      n=len(sel), f=faces))

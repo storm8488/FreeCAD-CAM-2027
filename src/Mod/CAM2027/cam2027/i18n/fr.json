@@ -962,5 +962,9 @@
   "brass": "laiton",
   "MDF": "MDF",
   "acrylic": "acrylique",
-  "any": "tous"
+  "any": "tous",
+  "{name}: empty shape, it cannot be machined": "{name} : forme vide, elle ne peut pas être usinée",
+  "{file} was already imported: the project now contains it twice": "{file} était déjà importé : le projet le contient maintenant deux fois",
+  "{n} duplicate bodies ignored (file imported twice?).": "{n} corps en double ignorés (fichier importé deux fois ?).",
+  "The {n} bodies could not be merged into one solid: they are machined as separate parts.": "Les {n} corps n'ont pas pu être fusionnés en un seul solide : ils sont usinés comme des pièces séparées."
 }

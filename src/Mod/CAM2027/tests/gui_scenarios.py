@@ -679,6 +679,22 @@ def scenario_inlay(scenario, files):
     pump(0.3)
 
 
+def scenario_import_twice(scenario, path):
+    """Le plantage signalé : le même fichier importé deux fois, puis « Brut et montage »."""
+    proj = new_project(scenario, "Twice")
+    for _i in range(2):
+        driver.open_files.append(path)
+        run_command(scenario, "CAM2027_ImportModel")
+    run_command(scenario, "CAM2027_StockFixture")
+    proj = project()
+    if not proj.has_job:
+        problem(scenario, "no job after importing the same file twice")
+    else:
+        log("  stock %s" % {k: round(v, 2) for k, v in proj.stock_bounds().items() if k in ("length", "width", "height")})
+    FreeCAD.closeDocument(proj.doc.Name)
+    pump(0.3)
+
+
 def scenario_ui_commands(scenario):
     """Commandes sans projet et commandes d'interface : aucune exception, messages compréhensibles."""
     for name in ("CAM2027_StockFixture", "CAM2027_AddOperation", "CAM2027_Compute", "CAM2027_Export",
@@ -720,6 +736,8 @@ def main():
             ("editor", lambda: scenario_editor("editor", files)),
             ("machine-wrap", lambda: scenario_machine_and_wrap("machine-wrap", files)),
             ("inlay", lambda: scenario_inlay("inlay", files)),
+            ("import-twice", lambda: scenario_import_twice("import-twice", next(
+                (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
     ) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),

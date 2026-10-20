@@ -144,6 +144,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - STL / OBJ fermé de 200 000 triangles au plus : converti en solide affiné à l'import (triangles
   coplanaires fusionnés) ; au-delà ou ouvert : reste un maillage, utilisable par les opérations 3D de
   surface seulement (message à l'import).
+- Un fichier importé deux fois est signalé ; ses corps en double sont ignorés par « Brut et montage ».
+  Une fusion qui ne donne pas un solide plausible est refusée (corps laissés séparés) : une forme vide
+  fait boucler le brut de FreeCAD jusqu'au plantage.
 - Plusieurs corps importés (assemblage STEP) : « Brut et montage » sans sélection les **fusionne** en une
   seule pièce jusqu'à 20 000 faces (environ 1 s pour 300 faces, 1 min pour 37 000) ; au-delà, ils restent
   séparés et le message le dit. Sélectionner les corps voulus avant « Brut et montage » pour n'en usiner

@@ -99,6 +99,54 @@ class TestUiLogic(unittest.TestCase):
         self.assertLess(rep["gouge_max"], 0.05, rep)
         proj.close()
 
+    def test_duplicate_import_does_not_crash_the_stock(self):
+        """Le plantage du 2026-10-20 : fichier importé deux fois -> fusion des doublons = forme vide ->
+        Stock.execute de FreeCAD bouclait jusqu'au débordement de pile."""
+        from cam2027.i18n import UserError
+
+        proj = self._project("Dup")
+        step = os.path.join(self.tmp, "stack.step")
+        Part.makeCompound([Part.makeBox(80, 60, 10), Part.makeBox(40, 30, 5, FreeCAD.Vector(10, 10, 10))]).exportStep(step)
+        proj.import_model(step)
+        res2 = proj.import_model(step)
+        self.assertTrue(any("already imported" in str(w) for w in res2.warnings), res2.warnings)
+        cands = proj.model_candidates()
+        unique = proj.unique_bodies(cands)
+        self.assertLess(len(unique), len(cands))  # les doublons sont reconnus
+        twice = proj.merge_models(cands[:1] * 2)  # doublon exact : jamais de forme vide en retour
+        self.assertTrue(twice is None or (twice.Shape.Solids and twice.Shape.BoundBox.isValid()))
+        merged = proj.merge_models(unique)
+        if merged is not None:
+            self.assertTrue(merged.Shape.Solids and merged.Shape.BoundBox.isValid())
+        empty = proj.doc.addObject("Part::Feature", "Empty")
+        empty.Shape = Part.Shape()
+        with self.assertRaises(UserError):  # refus explicite au lieu de la récursion du brut
+            proj.create_job([empty])
+        proj.create_job([merged] if merged is not None else unique,
+                        stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        self.assertTrue(proj.stock_bounds()["height"] > 0)
+        proj.close()
+
+    @unittest.skipUnless(os.path.isfile(os.path.join(os.path.expanduser("~"), "Downloads",
+                                                     "Vz330 Concept Chamber Heater v1 (1).step")),
+                         "fichier de l'utilisateur absent")
+    def test_user_heater_imported_twice(self):
+        """Le cas réel : ce STEP importé deux fois, fusionné tel quel, donnait 0 solide (boîte invalide)."""
+        proj = self._project("Heater")
+        path = os.path.join(os.path.expanduser("~"), "Downloads", "Vz330 Concept Chamber Heater v1 (1).step")
+        proj.import_model(path)
+        proj.import_model(path)
+        cands = proj.model_candidates()
+        self.assertEqual(len(cands), 4)
+        self.assertIsNone(proj.merge_models(cands))  # la fusion brute est refusée au lieu de rendre une forme vide
+        unique = proj.unique_bodies(cands)
+        self.assertEqual(len(unique), 2)
+        merged = proj.merge_models(unique)
+        self.assertIsNotNone(merged)
+        proj.create_job([merged], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        self.assertAlmostEqual(proj.stock_bounds()["height"], 47.0, places=3)
+        proj.close()
+
     def test_check_survives_reloading_the_project(self):
         """Le bug : le contrôle était gardé dans l'objet Python, perdu quand l'export relit le projet."""
         proj = self._project("Persist")

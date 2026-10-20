@@ -202,6 +202,33 @@ def fix_menu_titles(titles):
     return fixed
 
 
+# -- rapport de plantage -----------------------------------------------------------------------------
+
+_crash_log = None
+
+
+def enable_crash_log():
+    """Écrit la pile Python de chaque thread dans ``<réglages>/crash-python.log`` en cas de plantage
+    (violation d'accès, débordement de pile) : sans cela, un plantage ne laisse qu'un vidage Windows."""
+    import datetime
+    import faulthandler
+    import os
+
+    global _crash_log
+    if _crash_log is not None:
+        return _crash_log.name
+    path = os.path.join(FreeCAD.getUserAppDataDir(), "crash-python.log")
+    try:
+        _crash_log = open(path, "a", encoding="utf-8")
+        _crash_log.write("\n=== CAM2027 started %s ===\n" % datetime.datetime.now().isoformat(timespec="seconds"))
+        _crash_log.flush()
+        faulthandler.enable(_crash_log, all_threads=True)
+    except OSError:
+        _crash_log = None
+        return None
+    return path
+
+
 # -- panneau Tâches ---------------------------------------------------------------------------------
 
 _task_timer = None
