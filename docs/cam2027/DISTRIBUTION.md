@@ -63,6 +63,16 @@ individuelles, sélecteur d'atelier. La barre CAM2027 est groupée par étape (s
 Les menus Préparer / Usiner / Simuler / Exporter existent aussi en atelier dans FreeCAD complet ;
 FreeCAD relisant leur titre en Latin-1, `standalone.fix_menu_titles()` rétablit les accents.
 
+- **Page d'accueil** (`cam2027/gui/welcome.py`) : posée sur la zone centrale tant qu'aucun document
+  n'est ouvert (Nouveau projet, Ouvrir, Démo guidée, projets récents `.FCStd` qui existent encore) ;
+  elle disparaît dès qu'un document s'ouvre et revient quand le dernier se ferme.
+- **Mode avancé** (Affichage > Mode avancé) : l'éditeur de propriétés FreeCAD est caché par défaut,
+  l'arbre du modèle reste visible ; le choix est mémorisé (`BaseApp/Preferences/CAM2027/AdvancedMode`).
+  Le panneau Tâches de FreeCAD reste disponible : le simulateur y affiche ses commandes.
+- **Disposition** : FreeCAD mémorise la fenêtre à la fermeture ; le panneau Projet reprend sa
+  position mémorisée (`restoreDockWidget`). Affichage > Disposition par défaut remet modèle à gauche,
+  projet à droite, bibliothèque en bas, masque rapport / console / sélection et quitte le mode avancé.
+
 ## Modules : supprimés / gardés (preuve par les tests)
 
 Supprimés (dossier `Mod\` absent, binaires `lib\*.pyd` retirés) : AddonManager, Assembly, BIM,
@@ -93,7 +103,7 @@ CAM2027, titre CAM2027, 3D, 4e axe, simulateur enregistré) ; lancement réel : 
 - L'icône du fichier `CAM2027.exe` dans l'Explorateur reste celle de FreeCAD (ressource compilée
   dans l'exécutable) ; la fenêtre, la barre des tâches et les raccourcis utilisent l'icône CAM2027.
   Corrigé seulement par la compilation (étape 3) ou un éditeur de ressources (outil à télécharger).
-- Les panneaux ancrés (arborescence, propriétés, rapport, console Python) restent ceux de FreeCAD,
-  accessibles par Affichage > Panneaux ; pas encore de page d'accueil propre à CAM2027.
+- L'arbre du modèle reste celui de FreeCAD (le panneau Projet liste les opérations) : son
+  remplacement complet par un arbre CAM2027 n'est pas fait.
 - Distribution fabriquée sur FreeCAD 1.1.4 seulement (1.0.2 reste testé en atelier).
 - Logo : logo typographique de secours ; le logo définitif reste à choisir.

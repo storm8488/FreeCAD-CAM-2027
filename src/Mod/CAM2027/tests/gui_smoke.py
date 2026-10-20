@@ -49,7 +49,16 @@ def run():
     log("application: %s, window title: %s" % (FreeCAD.ConfigGet("ExeName"), FreeCADGui.getMainWindow().windowTitle()))
     log("workbenches available: %s" % sorted(FreeCADGui.listWorkbenches()))
     log("user data dir: %s" % FreeCAD.getUserAppDataDir())
-    from cam2027.gui import state, panels, commands
+    from cam2027.gui import state, panels, commands, standalone, welcome
+    QtWidgets.QApplication.processEvents()
+    log("menus: %s" % [a.text() for a in FreeCADGui.getMainWindow().menuBar().actions()])
+    if standalone.is_standalone():
+        page = welcome.install()
+        assert page is not None and page.isVisible(), "welcome page not shown without a document"
+        views = standalone._property_views()
+        assert views and not any(v.isVisible() for v in views), "property editor visible outside advanced mode"
+        grab(FreeCADGui.getMainWindow(), "standalone_welcome.png")
+        log("standalone: welcome page shown, property editor hidden")
     from cam2027.project.project import Project
     from tests.test_pipeline import make_part
 
@@ -303,6 +312,21 @@ def run():
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)
+    if standalone.is_standalone():
+        QtWidgets.QApplication.processEvents()
+        assert not page.isVisible(), "welcome page shown over an open document"
+        standalone.apply_advanced_mode(True)
+        assert all(v.isVisible() for v in standalone._property_views()), "advanced mode did not show the property editor"
+        standalone.reset_layout()  # remet aussi le mode avancé à faux
+        assert not any(v.isVisible() for v in standalone._property_views()), "default layout kept the property editor"
+        real = welcome.recent_projects
+        welcome.recent_projects = lambda: [fcstd]
+        try:
+            page.refresh()
+            assert page.recent.count() == 1, "recent project not listed"
+        finally:
+            welcome.recent_projects = real
+        log("standalone: welcome hidden with a document, advanced mode, default layout, recent list OK")
     log("OK")
 
 

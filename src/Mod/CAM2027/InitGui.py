@@ -35,6 +35,10 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         # menus par étape du métier : Préparer / Usiner / Simuler / Exporter
         for title, names in commands.STAGE_MENUS:
             self.appendMenu(tr(title), names)
+        from cam2027.gui import standalone
+
+        if not standalone.is_standalone():
+            self.appendMenu("CAM2027", commands.WORKBENCH_MENU)
         FreeCAD.Console.PrintLog("CAM2027 workbench initialised\n")
 
     def Activated(self):
@@ -47,6 +51,9 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             self.__class__._stripped = True
             standalone.apply_title()
             standalone.hide_workbench_selector()
+            from cam2027.gui import welcome
+
+            welcome.install()
             FreeCAD.Console.PrintLog("CAM2027: standalone, %d workbenches removed\n" % len(removed))
 
         done = None
@@ -65,6 +72,8 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             FreeCAD.Console.PrintWarning("CAM2027: scene colours not applied: %s\n" % exc)
         panels.ensure_project_panel()
         self._fix_menu_titles()
+        if standalone.is_standalone():
+            standalone.apply_advanced_mode()
 
     @staticmethod
     def _fix_menu_titles():

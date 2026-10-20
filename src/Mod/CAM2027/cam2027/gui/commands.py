@@ -15,7 +15,7 @@ from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
 from ..project import export as exportmod
 from ..project.machine import MachineProfile
-from . import state, panels, theme
+from . import state, panels, standalone, theme, welcome
 
 _ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Resources", "icons")
 
@@ -571,6 +571,7 @@ class Theme(_Base):
         nxt = order[(order.index(theme.preference()) + 1) % len(order)]
         theme.set_preference(nxt)
         panels.restyle_all()
+        welcome.restyle()
         from . import prefs
 
         prefs.apply_scene_colors(nxt, force=prefs.launched_by_cam2027())  # nouveaux parcours
@@ -691,6 +692,30 @@ class About(_Base):
         _info(text)
 
 
+class AdvancedMode(_Base):
+    atelier = "settings"
+    text = "Advanced mode (property editor)"
+    tooltip = "Show the FreeCAD property editor under the model tree"
+
+    def GetResources(self):
+        res = _Base.GetResources(self)
+        res["Checkable"] = standalone.advanced_mode()
+        return res
+
+    def Activated(self, checked=None):
+        on = not standalone.advanced_mode() if checked is None else bool(checked)
+        standalone.apply_advanced_mode(on)
+
+
+class ResetLayout(_Base):
+    atelier = "origin"
+    text = "Default layout"
+    tooltip = "Put the CAM2027 panels and toolbars back in their default places"
+
+    def Activated(self):
+        standalone.reset_layout()
+
+
 COMMANDS = [
     ("CAM2027_NewProject", NewProject),
     ("CAM2027_ImportModel", ImportModel),
@@ -702,6 +727,8 @@ COMMANDS = [
     ("CAM2027_Simulate", Simulate),
     ("CAM2027_Machine", Machine),
     ("CAM2027_Theme", Theme),
+    ("CAM2027_AdvancedMode", AdvancedMode),
+    ("CAM2027_ResetLayout", ResetLayout),
     ("CAM2027_About", About),
 ]
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
@@ -709,6 +736,8 @@ TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ToolLibrary", "
            "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "Separator", "CAM2027_Export",
            "Separator", "CAM2027_Machine"]
 MENU = [name for name, _cls in COMMANDS]
+#: menu « CAM2027 » en atelier dans FreeCAD complet (dans le logiciel, ces commandes vont dans Affichage / Aide)
+WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",

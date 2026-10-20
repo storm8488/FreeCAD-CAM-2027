@@ -156,6 +156,8 @@ class CamOnlyManipulator(object):
             {"insert": "CAM2027_NewProject", "menuItem": "Std_Open"},
             {"insert": "CAM2027_ImportModel", "menuItem": "Std_RecentFiles", "after": ""},
             {"append": "CAM2027_Theme", "menuItem": "Std_DrawStyle"},
+            {"append": "CAM2027_AdvancedMode", "menuItem": "Std_DrawStyle"},
+            {"append": "CAM2027_ResetLayout", "menuItem": "Std_DrawStyle"},
             {"append": "CAM2027_About", "menuItem": "Std_WhatsThis"},
         ]
         changes += [{"remove": name} for name in REMOVED_MENU_ITEMS]
@@ -198,3 +200,63 @@ def fix_menu_titles(titles):
             action.setText(wanted[action.text()])
             fixed += 1
     return fixed
+
+
+# -- mode avancé et disposition par défaut ---------------------------------------------------------
+
+PARAM = "User parameter:BaseApp/Preferences/CAM2027"
+
+
+def advanced_mode():
+    """Mode avancé : éditeur de propriétés FreeCAD visible (préférence, faux par défaut)."""
+    import FreeCAD
+
+    return FreeCAD.ParamGet(PARAM).GetBool("AdvancedMode", False)
+
+
+def _property_views():
+    import FreeCADGui
+    from .qt import QtWidgets
+
+    return [w for w in FreeCADGui.getMainWindow().findChildren(QtWidgets.QWidget)
+            if w.metaObject().className() == "Gui::PropertyView"]
+
+
+def apply_advanced_mode(on=None):
+    """Montre / cache l'éditeur de propriétés (l'arbre du modèle reste visible) ; retourne le nombre touché."""
+    import FreeCAD
+
+    if on is None:
+        on = advanced_mode()
+    else:
+        FreeCAD.ParamGet(PARAM).SetBool("AdvancedMode", bool(on))
+    views = _property_views()
+    for view in views:
+        view.setVisible(bool(on))
+    return len(views)
+
+
+#: panneaux FreeCAD masqués par la disposition par défaut
+HIDDEN_DOCKS = ("Report view", "Python console", "Selection view")
+
+
+def reset_layout():
+    """Disposition par défaut : modèle à gauche, projet à droite, bibliothèque en bas, barres visibles."""
+    import FreeCADGui
+    from .qt import QtCore, QtWidgets
+
+    mw = FreeCADGui.getMainWindow()
+    areas = {"Model": QtCore.Qt.LeftDockWidgetArea, "CAM2027_Project": QtCore.Qt.RightDockWidgetArea,
+             "CAM2027_ToolLibrary": QtCore.Qt.BottomDockWidgetArea}
+    for dock in mw.findChildren(QtWidgets.QDockWidget):
+        name = dock.objectName()
+        if name in areas:
+            dock.setFloating(False)
+            mw.addDockWidget(areas[name], dock)
+            dock.show()
+        elif name in HIDDEN_DOCKS:
+            dock.hide()
+    for tb in mw.findChildren(QtWidgets.QToolBar):
+        if tb.objectName() in ("File", "Edit", "View", "CAM2027"):
+            tb.show()
+    apply_advanced_mode(False)

@@ -740,5 +740,14 @@
   "A axis positionings are managed automatically: edit, move or delete the operations instead.": "Les positionnements de l'axe A sont gérés automatiquement : modifiez, déplacez ou supprimez plutôt les opérations.",
   "Index A (deg)": "Index A (deg)",
   "Prepare": "Préparer",
-  "Machining": "Usiner"
+  "Machining": "Usiner",
+  "CAM software: prepare, machine, simulate, export.": "Logiciel de FAO : préparer, usiner, simuler, exporter.",
+  "Guided demo": "Démo guidée",
+  "Builds a demo project step by step, with an explanation at each step": "Construit un projet de démonstration pas à pas, avec une explication à chaque étape",
+  "Recent projects": "Projets récents",
+  "No recent project.": "Aucun projet récent.",
+  "Advanced mode (property editor)": "Mode avancé (éditeur de propriétés)",
+  "Show the FreeCAD property editor under the model tree": "Affiche l'éditeur de propriétés FreeCAD sous l'arbre du modèle",
+  "Default layout": "Disposition par défaut",
+  "Put the CAM2027 panels and toolbars back in their default places": "Remet les panneaux et barres d'outils de CAM2027 à leur place par défaut"
 }

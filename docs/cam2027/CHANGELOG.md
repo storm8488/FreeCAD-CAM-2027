@@ -7,6 +7,9 @@
   Fenêtres, commandes de modélisation et liens FreeCAD retirés ; barres Presse-papiers, Macro,
   Structure, Aide, Vues individuelles retirées ; barre CAM2027 groupée par étape. Manipulateur
   d'ateliers FreeCAD, aucun fichier FreeCAD modifié. Menus d'étape aussi en atelier.
+- **Page d'accueil CAM2027** (nouveau projet, ouvrir, démo guidée, projets récents) sur la zone
+  centrale sans document ; **mode avancé** (éditeur de propriétés caché par défaut) ; commande
+  **Disposition par défaut** ; position du panneau Projet mémorisée. Vérifié par le test graphique.
 - **Logiciel autonome CAM2027 (étape 1)** : `scripts/build-distribution.ps1` fabrique
   `%USERPROFILE%\CAM2027` depuis FreeCAD 1.1.4 portable sans les modules inutiles (20 modules et
   leurs binaires supprimés), `branding.xml` (nom, titre, version, icône, écran de démarrage, dossier

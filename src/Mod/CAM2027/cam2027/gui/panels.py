@@ -1226,6 +1226,7 @@ def _dock(key, title, factory, area=QtCore.Qt.RightDockWidgetArea):
         theme.apply(widget)
         dock.setWidget(widget)
         mw.addDockWidget(area, dock)
+        mw.restoreDockWidget(dock)  # position mémorisée par FreeCAD à la fermeture (état de la fenêtre)
         _docks[key] = dock
     dock.show()
     dock.raise_()
