@@ -67,11 +67,11 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 
 | Fonction cible | Statut | Composant | Travail restant |
 |---|---|---|---|
-| Profil machine avec axe A (orientation, sens, centre, limites, mandrin, contre-pointe) | partiel | `RotaryAxis` (champs présents, valeurs à renseigner) | interface dédiée |
-| Indexation 3+1 | absent | — | jalon D |
+| Profil machine avec axe A (orientation, sens, centre, limites, mandrin, contre-pointe) | disponible | `RotaryAxis` + bloc « Axe A » du dialogue Profil machine (sens positif, centre Y/Z, min/max) | mandrin et contre-pointe non utilisés par les calculs |
+| Indexation 3+1 | disponible | `project/indexing.py` : copie exacte de la pièce tournée par angle, opérations 3 axes, positionnements `G0 A` automatiques ; brut rond d'axe X ; champ « Index A » à l'ajout et dans l'éditeur | auto (`test_indexed_4th_axis`) + visuel | collisions mandrin / contre-pointe, vue des parcours dans le repère de l'index |
 | Enroulement cylindrique | absent | — | jalon E |
 | Rotatif continu, XYZA simultané | absent | `Path.Op.RotarySurface` (main amont, non stable) | jalon E |
-| Contrôles G93/G94, 0/360, tours multiples | partiel | `export.verify` rejette A/B/C sans axe | jalon D/E |
+| Contrôles G93/G94, 0/360, tours multiples | partiel | `export.verify` : A sans axe déclaré, A pendant une coupe (simultané refusé), plage A, GRBL 1.1 sans axe A, ordre des positionnements | G93 et enroulement (jalon E) |
 
 ## Simulation, export, intégration
 

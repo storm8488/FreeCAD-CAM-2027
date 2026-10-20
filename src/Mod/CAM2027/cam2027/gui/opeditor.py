@@ -116,6 +116,18 @@ class OperationEditor(QtWidgets.QDialog):
         meta = STRATEGIES.get(self.kind, {"label": self.kind, "limits": ""})
         strategy = QtWidgets.QLabel("<b>%s</b>" % tr(meta["label"]))
         head.addRow(tr("Strategy"), strategy)
+        self.index = QtWidgets.QDoubleSpinBox()
+        self.index.setRange(-361.0, 360.0)
+        self.index.setDecimals(3)
+        self.index.setSuffix(" °")
+        self.index.setSpecialValueText(tr("(none: 3 axes)"))
+        current = self.rec.get("index_deg")
+        self.index.setValue(self.index.minimum() if current is None else float(current))
+        self.index.setToolTip(tr("Indexed 4th axis: the part is turned to this A angle, then machined in 3 axes. Select the faces or edges on the part as it is shown."))
+        if self.proj.machine.rotary.present or current is not None:
+            head.addRow(tr("A index (deg)"), self.index)
+        else:
+            self.index.setVisible(False)
         if meta.get("limits"):
             limits = QtWidgets.QLabel(tr(meta["limits"]))
             limits.setWordWrap(True)
@@ -437,6 +449,12 @@ class OperationEditor(QtWidgets.QDialog):
                 self.op.Label = label
             self.proj.set_operation_base(self.op, self._base)
             self._apply_tool()
+            wanted = self.index.value() if self.index.value() > self.index.minimum() else None
+            if wanted != self.rec.get("index_deg"):
+                self.proj.set_operation_index(self.op, wanted)
+                self.rec = self.proj.registry.get(self.op.Name, self.rec)
+                self._base = [(o, list(subs)) for o, subs in (self.op.Base or [])]
+                self._refresh_base_list()
             ignored = self.proj.update_operation(self.op, self.params())
             self._apply_dressups()
             self.proj.compute()
@@ -467,7 +485,7 @@ class OperationEditor(QtWidgets.QDialog):
         dressups = {}
         for key, (box, widgets) in getattr(self, "dressup_boxes", {}).items():
             dressups[key] = (box.isChecked(), tuple(sorted(self._widget_values(widgets).items())))
-        return (self.name.text(), self.asm_combo.currentData(), self.preset_combo.currentData(),
+        return (self.name.text(), self.index.value(), self.asm_combo.currentData(), self.preset_combo.currentData(),
                 tuple((o.Name, tuple(subs)) for o, subs in self._base),
                 tuple(sorted((k, repr(v)) for k, v in self.params().items())), tuple(sorted(dressups.items())))
 

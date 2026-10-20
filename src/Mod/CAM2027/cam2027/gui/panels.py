@@ -1033,15 +1033,27 @@ class ProjectPanel(QtWidgets.QWidget):
             if op_state in ("todo", "stale"):
                 pending += 1
             state_label, state_level = COMPUTE_STATES[op_state]
+            from ..project import indexing
+
+            if indexing.is_index_op(op):
+                strategy_text = tr("A axis positioning (automatic)")
+            else:
+                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", kind))
+                if rec.get("index_deg") is not None:
+                    strategy_text += "  @A%g" % rec["index_deg"]
             item = QtWidgets.QTreeWidgetItem([
-                op.Label, tr(state_label), tr(STRATEGIES.get(kind, {}).get("label", kind)), tool_text,
+                op.Label, tr(state_label), strategy_text, tool_text,
                 str(s["commands"]) if base.Active else tr("(inactive)"),
                 "%.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0) if s["commands"] else "",
                 str(s["cycle_time"] or ""),
             ])
             item.setData(0, QtCore.Qt.UserRole, op.Name)
-            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
-            item.setCheckState(0, QtCore.Qt.Checked if base.Active else QtCore.Qt.Unchecked)
+            if indexing.is_index_op(op):
+                item.setIcon(0, theme.icon("axis-a"))
+                item.setToolTip(0, tr("Rebuilt automatically in front of each change of A angle."))
+            else:
+                item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+                item.setCheckState(0, QtCore.Qt.Checked if base.Active else QtCore.Qt.Unchecked)
             tips = list(rec.get("warnings", []))
             if rec.get("ignored_params"):
                 tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
@@ -1096,16 +1108,23 @@ class ProjectPanel(QtWidgets.QWidget):
 
     # -- actions ---------------------------------------------------------------
 
-    def _selected(self):
+    def _selected(self, quiet=False):
         proj = state.active_project()
         items = self.tree.selectedItems()
         if proj is None or not items:
             return None, None
         op = proj.doc.getObject(items[0].data(0, QtCore.Qt.UserRole))
+        from ..project import indexing
+
+        if op is not None and indexing.is_index_op(op):
+            if quiet:
+                return proj, None
+            _info(tr("A axis positionings are managed automatically: edit, move or delete the operations instead."))
+            return None, None
         return proj, op
 
     def _select_in_3d(self):
-        proj, op = self._selected()
+        proj, op = self._selected(quiet=True)
         if op is not None:
             FreeCADGui.Selection.clearSelection()
             FreeCADGui.Selection.addSelection(op)

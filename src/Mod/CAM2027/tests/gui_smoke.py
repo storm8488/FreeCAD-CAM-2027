@@ -247,6 +247,55 @@ def run():
     QtWidgets.QApplication.processEvents()
     grab(ed3, "op_editor_surface3d.png")
     ed3.reject()
+    # projet 4e axe indexé : barreau sur l'axe A, poche du dessus à A0 et du flanc +Y à A90
+    from cam2027.project.machine import MachineProfile, RotaryAxis
+    bar_step = os.path.join(tmp, "bar.step")
+    bar = Part.makeBox(80, 30, 30, FreeCAD.Vector(0, -15, -15))
+    bar = bar.cut(Part.makeBox(30, 10, 5, FreeCAD.Vector(25, -5, 10))).cut(Part.makeBox(30, 5, 10, FreeCAD.Vector(25, 10, -5)))
+    bar.exportStep(bar_step)
+    m4 = MachineProfile("4 axes", controller="grbl", post_processor="grbl", post_processor_args="--no-show-editor --precision=3")
+    m4.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0), positive_direction="right_hand",
+                           min_deg=-360.0, max_deg=360.0)
+    proj4 = Project.create("GUI 4 axes", lib, m4)
+    FreeCADGui.ActiveDocument = FreeCADGui.getDocument(proj4.doc.Name)
+    bar_part = proj4.import_model(bar_step, label="Barreau").objects[0]
+    proj4.create_job([bar_part], stock={"kind": "cylinder_x", "radius": 22.0, "length": 84.0, "x_start": -2.0,
+                                        "center": (0.0, 0.0)})
+    bclone = proj4.job.Model.Group[0]
+    floors = {}
+    for i, f in enumerate(bclone.Shape.Faces, 1):
+        bb = f.BoundBox
+        if f.Surface.__class__.__name__ == "Plane" and abs(f.Area - 300.0) < 1e-3:
+            if abs(bb.ZMin - 10) < 1e-6 and abs(bb.ZMax - 10) < 1e-6:
+                floors["top"] = "Face%d" % i
+            if abs(bb.YMin - 10) < 1e-6 and abs(bb.YMax - 10) < 1e-6:
+                floors["side"] = "Face%d" % i
+    small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+    sasm4 = lib.assemblies_for_tool(small.id)[0]
+    proj4.add_operation("pocket2d", "Poche dessus", sasm4.id, small.presets[0].id, base=[(bclone, [floors["top"]])],
+                        params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=0)
+    side4, _r = proj4.add_operation("pocket2d", "Poche flanc", sasm4.id, small.presets[0].id,
+                                    base=[(bclone, [floors["side"]])],
+                                    params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=90)
+    r4 = proj4.compute()
+    log("4th axis ops: %s" % [(r["name"], r["commands"]) for r in r4])
+    panels.refresh_project_panel()
+    QtWidgets.QApplication.processEvents()
+    pp = panels._docks["Project"].widget()
+    log("4th axis rows: %s" % [(pp.tree.topLevelItem(i).text(0), pp.tree.topLevelItem(i).text(2)) for i in range(pp.tree.topLevelItemCount())])
+    grab(pp, "project_panel_4axes.png")
+    ed4 = opeditor.open_editor(proj4, side4)
+    log("4th axis editor index: %s" % ed4.index.text())
+    grab(ed4, "op_editor_4axes.png")
+    ed4.reject()
+    text4, analysis4, issues4 = proj4.preview_gcode()
+    log("4th axis gcode A moves: %s, issues: %s" % ([l for l in text4.splitlines() if l.startswith("G0") and " A" in l],
+                                                   [lvl for lvl, _m in issues4]))
+    view4 = FreeCADGui.getDocument(proj4.doc.Name).activeView()
+    view4.viewIsometric()
+    view4.fitAll()
+    QtWidgets.QApplication.processEvents()
+    view4.saveImage(os.path.join(OUT, "view3d_4axes.png"), 1000, 700, "White")
     fcstd = os.path.join(tmp, "gui.FCStd")
     proj.save(fcstd)
     log("saved %s" % fcstd)

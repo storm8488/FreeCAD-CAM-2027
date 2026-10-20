@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **4e axe indexé (3+1)** : profil machine A (sens positif, centre Y/Z, plage), brut rond d'axe X,
+  champ « Index A » à l'ajout d'une opération et dans l'éditeur, copie exacte de la pièce tournée
+  par angle, positionnements `G0 A` recréés automatiquement, contrôles d'export (A pendant une
+  coupe, plage, GRBL 1.1, ordre). L'aperçu G-code recalcule désormais avant de postprocesser.
+  Test `test_indexed_4th_axis` (50 tests) ; captures `project_panel_4axes.png`, `view3d_4axes.png`.
 - **Finition 3D** : stratégies `surface3d` (`Path.Op.Surface`, zigzag / parallèle / décalage…) et
   `waterline` (`Path.Op.Waterline`, Z constant multi-passes), OpenCamLib, sur 1.1.4 et 1.0.2.
   Test `test_3d_finishing` (dôme : la pointe ne pénètre jamais la surface, sommet suivi, au moins

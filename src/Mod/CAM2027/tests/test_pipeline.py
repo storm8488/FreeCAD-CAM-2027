@@ -976,6 +976,14 @@ class TestPipeline(unittest.TestCase):
         # même géométrie que la pièce : réordonner recrée les positionnements
         proj.move_operation(side, -1)
         self.assertEqual([o.Label for o in proj.operations()], ["Index A90", "Side pocket", "Index A0", "Top pocket"])
+        # réindexer : la géométrie suit (copie A90 -> pièce réelle à A0), les positionnements sont recréés
+        proj.set_operation_index(side, 0)
+        self.assertIs(side.Base[0][0], clone)  # A0 : clone de la pièce réelle dans le job
+        self.assertEqual(proj.registry[side.Name]["index_deg"], 0.0)
+        self.assertEqual([o.Label for o in proj.operations()], ["Index A0", "Side pocket", "Top pocket"])
+        proj.set_operation_index(side, 90)
+        self.assertEqual(side.Base[0][0].Name, part.Name + "_A90")
+        self.assertEqual([o.Label for o in proj.operations()], ["Index A90", "Side pocket", "Index A0", "Top pocket"])
         # positionnement manquant -> erreur de cohérence
         proj.job.Operations.Group = [o for o in proj.job.Operations.Group if o.Label != "Index A90"]
         self.assertTrue(any("expects A90" in m for _l, m in indexing.order_issues(proj)))

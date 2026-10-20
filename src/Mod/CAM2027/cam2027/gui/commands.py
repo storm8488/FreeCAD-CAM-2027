@@ -154,6 +154,7 @@ class StockFixture(_Base):
         kind.addItem(tr("Explicit box"), "box")
         kind.addItem(tr("Cylinder (rotary / round stock)"), "cylinder")
         kind.addItem(tr("Sheet under the 2D drawing (top at Z 0)"), "sheet")
+        kind.addItem(tr("Round bar along X on the A axis (4th axis)"), "cylinder_x")
         from ..project import sheet as sheetmod
 
         if not proj.has_job and sheetmod.vector_objects(proj.doc) and not any(
@@ -201,7 +202,24 @@ class StockFixture(_Base):
             FreeCADGui.SendMsgToActiveView("ViewFit")
             _after_change()
             return
-        if k == "box_margins":
+        if k == "cylinder_x":
+            centre = proj.machine.rotary.center_offset_mm
+            if centre is None:
+                _warn(tr("Fill in the A axis centre in the machine profile first."))
+                return
+            models = [o for o in FreeCADGui.Selection.getSelection() if getattr(o, "Shape", None)] or \
+                [o for o in proj.doc.Objects if getattr(o, "Shape", None) and o.Shape.Solids and o.TypeId.startswith("Part::")]
+            if proj.has_job:
+                models = [c for c in proj.job.Model.Group]
+            if not models:
+                _warn(tr("Select or import a solid model first."))
+                return
+            box = models[0].Shape.BoundBox
+            for o in models[1:]:
+                box.add(o.Shape.BoundBox)
+            spec = {"kind": k, "radius": radius.value(), "length": box.XLength + 2 * xy.value(),
+                    "x_start": box.XMin - xy.value(), "center": tuple(centre)}
+        elif k == "box_margins":
             spec = {"kind": k, "xy": xy.value(), "z_top": ztop.value(), "z_bottom": zbot.value()}
         elif k == "box":
             spec = {"kind": k, "length": length.value(), "width": width.value(), "height": height.value()}
@@ -284,6 +302,15 @@ class AddOperation(_Base):
                                      or tr("(nothing selected: the whole model is used)"))
         sel_label.setWordWrap(True)
         form.addRow(tr("Geometry (selection)"), sel_label)
+        index = QtWidgets.QDoubleSpinBox()
+        index.setRange(-361.0, 360.0)
+        index.setDecimals(3)
+        index.setSuffix(" °")
+        index.setSpecialValueText(tr("(none: 3 axes)"))
+        index.setValue(index.minimum())
+        index.setToolTip(tr("Indexed 4th axis: the part is turned to this A angle, then machined in 3 axes. Select the faces or edges on the part as it is shown."))
+        index.setEnabled(bool(proj.machine.rotary.present))
+        form.addRow(tr("A index (deg)"), index)
         hint = QtWidgets.QLabel(tr("Depths, passes and strategy settings are edited in the next window (tabs), with values prefilled from the cutting preset."))
         hint.setWordWrap(True)
         theme.set_role(hint, "muted")
@@ -302,8 +329,10 @@ class AddOperation(_Base):
         k = kind.currentData()
         params = default_params(k, tool, values)
         try:
+            index_deg = index.value() if index.isEnabled() and index.value() > index.minimum() else None
             op, rec = proj.add_operation(k, name.text().strip() or "Operation", a.id, preset.currentData(),
-                                         base=base or [(proj.job.Model.Group[0], [])], params=params)
+                                         base=base or [(proj.job.Model.Group[0], [])], params=params,
+                                         index_deg=index_deg)
             proj.compute()
         except Exception as exc:
             _warn(tr("Operation failed: {error}", error=str(exc)))
@@ -573,6 +602,29 @@ class Machine(_Base):
         rot = QtWidgets.QCheckBox(tr("Rotary axis A present (about X)"))
         rot.setChecked(bool(m.rotary.present))
         form.addRow(rot)
+        abox = QtWidgets.QGroupBox(tr("A axis (indexed 3+1)"))
+        aform = QtWidgets.QFormLayout(abox)
+        direction = QtWidgets.QComboBox()
+        direction.addItem(tr("to fill in"), None)
+        direction.addItem(tr("Right hand: A+ counter-clockwise seen from +X"), "right_hand")
+        direction.addItem(tr("Left hand: A+ clockwise seen from +X"), "left_hand")
+        direction.setCurrentIndex(max(0, direction.findData(m.rotary.positive_direction)))
+        aform.addRow(tr("A axis positive direction"), direction)
+        centre = m.rotary.center_offset_mm or (None, None)
+        a_fields = {}
+        for key, label, value in (("cy", "A axis centre Y (mm)", centre[0]), ("cz", "A axis centre Z (mm)", centre[1]),
+                                  ("min", "A axis min (deg)", m.rotary.min_deg), ("max", "A axis max (deg)", m.rotary.max_deg)):
+            w = QtWidgets.QLineEdit("" if value is None else str(value))
+            w.setPlaceholderText(tr("to fill in"))
+            aform.addRow(tr(label), w)
+            a_fields[key] = w
+        note = QtWidgets.QLabel(tr("The centre is the position of the rotation axis in the work coordinate system. Nothing is assumed: indexed operations are refused until the centre and the positive direction are filled in."))
+        note.setWordWrap(True)
+        theme.set_role(note, "muted")
+        aform.addRow(note)
+        abox.setEnabled(rot.isChecked())
+        rot.toggled.connect(abox.setEnabled)
+        form.addRow(abox)
         bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
@@ -590,6 +642,16 @@ class Machine(_Base):
                 else:
                     d[key] = text or (None if key in ("post_processor", "collet") else "")
             d["rotary"]["present"] = rot.isChecked()
+
+            def num(w):
+                text = w.text().strip().replace(",", ".")
+                return float(text) if text else None
+
+            cy, cz = num(a_fields["cy"]), num(a_fields["cz"])
+            d["rotary"]["center_offset_mm"] = (cy, cz) if cy is not None and cz is not None else None
+            d["rotary"]["min_deg"] = num(a_fields["min"])
+            d["rotary"]["max_deg"] = num(a_fields["max"])
+            d["rotary"]["positive_direction"] = direction.currentData()
             new = MachineProfile.from_dict(d)
         except ValueError as exc:
             _warn(str(exc))

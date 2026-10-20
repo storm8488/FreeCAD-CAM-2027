@@ -127,6 +127,25 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## 4e axe
 
-- Seuls le profil machine (champs `RotaryAxis`, tous à renseigner) et les contrôles
-  d'export (rejet des mots A/B/C sans axe déclaré) existent. Aucune stratégie rotative,
-  aucun enroulement, aucune indexation.
+- **Indexé 3+1 seulement** : pour chaque angle A, la pièce est copiée et tournée exactement autour
+  de l'axe A (droite parallèle à X passant par le centre renseigné), les opérations sont calculées en
+  3 axes sur cette copie, et une opération « Index A… » (`G0 Z` dégagement puis `G0 A…`) est recréée
+  automatiquement devant chaque changement d'angle. A ne bouge jamais pendant une coupe (contrôlé :
+  erreur à l'export sinon). Pas d'usinage simultané XYZA, pas d'enroulement, pas de G93.
+- Rien n'est supposé : sans centre de l'axe A ni sens positif dans le profil machine, les opérations
+  indexées sont refusées. Sens « main droite » = A positif antihoraire vu depuis +X (RS274) ;
+  « main gauche » inverse le signe écrit.
+- Une opération indexée exige une géométrie sélectionnée (faces / arêtes choisies sur la pièce
+  affichée, reportées sur la copie tournée), sauf perçage / hélice / filetage (trous détectés sur la
+  copie) et ébauche 3D (faces en relief). Les copies tournées sont figées : réindexer (éditeur,
+  champ « Index A ») si la pièce change. Elles restent hors du modèle du job : les opérations
+  « toute la pièce » ne voient que la pièce réelle.
+- Vue 3D : les parcours sont tracés en coordonnées machine ; ceux d'un index s'affichent donc sur la
+  pièce telle qu'elle est à A0 (masquer les autres opérations pour les examiner).
+- GRBL 1.1 standard n'a pas d'axe A : l'export le signale (firmware 4 axes nécessaire, ex. grblHAL).
+  Le postprocesseur `grbl` de FreeCAD écrit bien les mots A.
+- Poche 3D (`pocket`) sur une copie tournée : le dernier niveau peut manquer si la profondeur finale
+  est exactement celle du fond (cause FreeCAD non identifiée) ; utiliser la poche 2D ou une
+  profondeur finale 0,001 mm plus basse.
+- Pas de contrôle de collision avec le mandrin, les mors ou la contre-pointe (champs du profil non
+  exploités).

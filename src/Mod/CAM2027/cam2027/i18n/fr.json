@@ -721,5 +721,22 @@
 
   "_section_rough": "ajouts",
   "3D roughing (adaptive, stock to model)": "Ébauche 3D (adaptative, du brut vers la pièce)",
-  "Clears the stock around the selected raised faces level by level (adaptive, flat end mill), leaving 'stock to leave' for a 3D finishing pass; steps remain between levels.": "Dégage le brut autour des faces en relief sélectionnées, niveau par niveau (adaptatif, fraise deux tailles), en laissant la surépaisseur pour une finition 3D ; des marches restent entre les niveaux."
+  "Clears the stock around the selected raised faces level by level (adaptive, flat end mill), leaving 'stock to leave' for a 3D finishing pass; steps remain between levels.": "Dégage le brut autour des faces en relief sélectionnées, niveau par niveau (adaptatif, fraise deux tailles), en laissant la surépaisseur pour une finition 3D ; des marches restent entre les niveaux.",
+
+  "_section_4th": "ajouts",
+  "A axis (indexed 3+1)": "Axe A (indexé 3+1)",
+  "Right hand: A+ counter-clockwise seen from +X": "Main droite : A+ antihoraire vu depuis +X",
+  "Left hand: A+ clockwise seen from +X": "Main gauche : A+ horaire vu depuis +X",
+  "A axis centre Y (mm)": "Centre de l'axe A, Y (mm)",
+  "A axis centre Z (mm)": "Centre de l'axe A, Z (mm)",
+  "The centre is the position of the rotation axis in the work coordinate system. Nothing is assumed: indexed operations are refused until the centre and the positive direction are filled in.": "Le centre est la position de l'axe de rotation dans le repère pièce. Rien n'est supposé : les opérations indexées sont refusées tant que le centre et le sens positif ne sont pas renseignés.",
+  "Round bar along X on the A axis (4th axis)": "Barreau rond d'axe X sur l'axe A (4e axe)",
+  "Fill in the A axis centre in the machine profile first.": "Renseignez d'abord le centre de l'axe A dans le profil machine.",
+  "(none: 3 axes)": "(aucun : 3 axes)",
+  "Indexed 4th axis: the part is turned to this A angle, then machined in 3 axes. Select the faces or edges on the part as it is shown.": "4e axe indexé : la pièce est tournée à cet angle A puis usinée en 3 axes. Sélectionnez les faces ou arêtes sur la pièce telle qu'elle est affichée.",
+  "A index (deg)": "Index A (deg)",
+  "A axis positioning (automatic)": "Positionnement de l'axe A (automatique)",
+  "Rebuilt automatically in front of each change of A angle.": "Recréé automatiquement avant chaque changement d'angle A.",
+  "A axis positionings are managed automatically: edit, move or delete the operations instead.": "Les positionnements de l'axe A sont gérés automatiquement : modifiez, déplacez ou supprimez plutôt les opérations.",
+  "Index A (deg)": "Index A (deg)"
 }
