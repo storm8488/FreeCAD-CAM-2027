@@ -37,7 +37,7 @@ tar -xf %LOCALAPPDATA%\CAM2027\downloads\FreeCAD_1.1.4-Windows-x86_64-py311.7z -
 ## Logiciel autonome CAM2027 (recommandé)
 
 ```bat
-powershell -ExecutionPolicy Bypass -File scriptsuild-distribution.ps1
+powershell -ExecutionPolicy Bypass -File scripts\build-distribution.ps1
 powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
 ```
 
