@@ -1,6 +1,6 @@
 # CAM2027 — Historique
 
-## Non publié
+## 0.1.3 — 2026-10-20
 
 - Stratégies `threadmill` (`Path.Op.ThreadMilling`, nom de filet résolu depuis les tables
   FreeCAD, pas vérifié contre la plage de l'outil) et `chamfer` (`Path.Op.Deburr`) ; limites

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Version de l'atelier CAM2027 et des formats de données."""
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # Version du schéma JSON (bibliothèque d'outils, instantané de projet, profil machine).
 # Toute modification incompatible incrémente ce nombre et ajoute une migration
