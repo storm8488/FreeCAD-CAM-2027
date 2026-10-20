@@ -34,8 +34,9 @@ défini) : atelier activé, profil « FAO seule » appliqué (thème sombre, 20 
 bibliothèque (3 onglets, aperçu coté) et flux de travail rendus (4 étapes, liste des
 opérations, duplication et déplacement d'une opération), éditeur d'opération ouvert
 (5 onglets, passe axiale appliquée et relue sur l'objet), parcours visible dans la vue 3D,
-G-code prévisualisé, projet sauvegardé, FreeCAD fermé sans erreur. 1.0.2 : dernier passage
-avant le panneau de flux de travail et l'éditeur (à refaire).
+G-code prévisualisé, projet sauvegardé, FreeCAD fermé sans erreur ; onglet « Entrée, sortie et
+attaches » : 3 attaches ajoutées depuis l'éditeur. Même résultat sur 1.0.2 (PySide2, profil
+temporaire : 19 ateliers masqués, thème sombre « FreeCAD Dark.qss »).
 
 ## Non couvert
 

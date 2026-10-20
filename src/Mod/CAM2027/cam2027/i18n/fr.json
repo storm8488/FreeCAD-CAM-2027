@@ -557,5 +557,8 @@
   "Horizontal Feed Rate": "Avance horizontale",
   "Vertical Feed Rate": "Avance verticale",
   "Ramp Feed Rate": "Avance de rampe",
-  "Custom": "Personnalisée"
+  "Custom": "Personnalisée",
+
+  "_section_extra": "ajouts",
+  "Open a project...": "Ouvrir un projet..."
 }

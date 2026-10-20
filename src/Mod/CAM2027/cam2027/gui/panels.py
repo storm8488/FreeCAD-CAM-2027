@@ -822,6 +822,16 @@ class ProjectPanel(QtWidgets.QWidget):
         self.title = QtWidgets.QLabel()
         self.title.setWordWrap(True)
         lay.addWidget(self.title)
+        self.start_row = QtWidgets.QWidget()
+        row0 = QtWidgets.QHBoxLayout(self.start_row)
+        row0.setContentsMargins(0, 0, 0, 0)
+        b_new = QtWidgets.QPushButton(tr("New project"))
+        b_new.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_NewProject"))
+        b_open = QtWidgets.QPushButton(tr("Open a project..."))
+        b_open.clicked.connect(lambda: FreeCADGui.runCommand("Std_Open"))
+        row0.addWidget(b_new)
+        row0.addWidget(b_open)
+        lay.addWidget(self.start_row)
         self.step_rows = {}
         steps = QtWidgets.QGridLayout()
         steps.setColumnStretch(1, 1)
@@ -894,6 +904,7 @@ class ProjectPanel(QtWidgets.QWidget):
         self.tree.clear()
         proj = state.active_project()
         has_project = proj is not None
+        self.start_row.setVisible(not has_project)
         for key in self.step_rows:
             self.step_rows[key][2].setEnabled(has_project)
         for b in self.buttons.values():

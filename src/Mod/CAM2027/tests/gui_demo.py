@@ -103,7 +103,8 @@ def run():
          "Commande « Nouveau projet » : un document FreeCAD « Démo CAM2027 » avec l'instantané de la bibliothèque.\n\n"
          "Commande « Importer un modèle » : ici une plaque STEP 80 × 60 × 10 mm générée pour la démo "
          "(poche rectangulaire, îlot cylindrique, avant-trou Ø6,8 pour un filet M8). STL, OBJ, SVG et DXF "
-         "sont aussi acceptés.\n\nLe panneau « Projet » à droite résume l'état.\n\nOK : définir le brut et le montage.")
+         "sont aussi acceptés.\n\nLe panneau de flux de travail à droite suit les quatre étapes (pièce, brut et "
+         "montage, opérations, contrôle et export) avec un bouton par étape.\n\nOK : définir le brut et le montage.")
 
     proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
     proj.add_clamp("Bride gauche", 10, 20, 15, (-12, 20, 0))
@@ -128,7 +129,10 @@ def run():
          "outil %s, préréglage « %s ».\n\n"
          "Le parcours (en vert dans la vue 3D) enlève 1 mm sur toute la face : %d commandes, Z de %.1f à %.1f, "
          "avance %s mm/min copiée depuis le préréglage.\n\n"
-         "OK : poche et contour." % (endmill.name, preset.name, r["commands"], r["zmin"], r["zmax"], r["feeds"]))
+         "Dans l'interface, « Ajouter une opération » ouvre ensuite l'éditeur à onglets (Outil, Géométrie, "
+         "Hauteurs, Passes, Stratégie, Entrée / sortie / attaches) ; un double-clic dans la liste des "
+         "opérations le rouvre.\n\nOK : poche et contour."
+         % (endmill.name, preset.name, r["commands"], r["zmin"], r["zmax"], r["feeds"]))
 
     bottom = None
     for i, f in enumerate(clone.Shape.Faces, 1):
