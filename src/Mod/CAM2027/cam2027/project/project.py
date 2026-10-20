@@ -347,6 +347,59 @@ class Project(object):
                 obj.ViewObject.OnTopWhenSelected = "Enabled"
         return obj
 
+    def add_flat_clearing(self, vcarve_op, assembly_id, preset_id, name=None, params=None):
+        """Fond plat d'un V-carving limité en profondeur (« flat depth » d'Aspire), deux opérations placées
+        juste avant le V-carving :
+
+        1. poche 2D à la profondeur finale avec la fraise plate ``assembly_id`` dans la zone plate
+           (face décalée vers l'intérieur de la portée du V-bit) ;
+        2. contour de la zone plate suivi par le V-bit du V-carving à cette profondeur : ses flancs
+           taillent les parois jusqu'au bord (le V-carving limité ne suit que l'axe médian).
+
+        Retourne ``(poche, contour)``."""
+        from . import inlay
+
+        vcarve_op = dressupmod.base_operation(vcarve_op)
+        reg = self.registry
+        vrec = reg.get(vcarve_op.Name)
+        if not vrec or vrec["kind"] != "vcarve":
+            raise ValueError("flat depth clearing applies to a V-carve operation")
+        start = float(vcarve_op.StartDepth.getValueAs("mm"))
+        final = float(vcarve_op.FinalDepth.getValueAs("mm"))
+        depth = start - final
+        if depth <= 1e-6:
+            raise ValueError("the V-carve has no depth limit (final depth = start depth)")
+        reach = inlay.vbit_reach(self.library.tool(vrec["tool_id"]), depth)
+        faces = inlay.flat_area(inlay.operation_faces(vcarve_op), reach)
+        if not faces:
+            raise ValueError("no flat area: the V-bit reaches %.2f mm everywhere in this shape" % depth)
+        import Part
+
+        area = self.doc.getObject(vcarve_op.Name + inlay.FLAT_SUFFIX)             or self.doc.addObject("Part::Feature", vcarve_op.Name + inlay.FLAT_SUFFIX)
+        area.Label = "%s (flat area)" % vcarve_op.Label
+        area.Shape = Part.Compound(faces) if len(faces) > 1 else faces[0]
+        if FreeCAD.GuiUp and area.ViewObject is not None:
+            area.ViewObject.Visibility = False
+        label = name or vcarve_op.Label
+        values = {"StartDepth": start, "FinalDepth": final, "StepOver": 40}
+        values.update(params or {})
+        pocket, _r1 = self.add_operation("pocket2d", "%s - flat" % label, assembly_id, preset_id,
+                                         base=[(area, ["Face%d" % (i + 1) for i in range(len(area.Shape.Faces))])],
+                                         params=values)
+        outline, _r2 = self.add_operation("engrave", "%s - flat outline" % label, vrec["assembly_id"],
+                                          vrec["preset_id"],
+                                          base=[(area, ["Edge%d" % (i + 1) for i in range(len(area.Shape.Edges))])],
+                                          params={"StartDepth": start, "FinalDepth": final, "StepDown": depth})
+        reg = self.registry
+        for op in (pocket, outline):
+            reg[op.Name]["flat_for"] = vcarve_op.Name
+            reg[op.Name]["flat_reach"] = reach
+        self._save_registry(reg)
+        for op in (pocket, outline):  # avant le V-carving, dans cet ordre
+            group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
+            self.move_operation(op, group.index(dressupmod.top_of(self.job, vcarve_op)) - group.index(op))
+        return pocket, outline
+
     def material_check(self, resolution=None, tolerance=0.02):
         """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.
 

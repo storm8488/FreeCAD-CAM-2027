@@ -25,6 +25,8 @@ def vector_objects(doc):
             continue
         if o.Name.endswith(FACE_SUFFIX) or o.Name.startswith("Clone") or o.TypeId != "Part::Feature":
             continue
+        if o.Name.endswith(("_Preview", "_FlatArea")):  # aperçu d'enroulement, zone de fond plat : pas des dessins
+            continue
         out.append(o)
     return out
 
