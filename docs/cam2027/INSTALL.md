@@ -59,6 +59,10 @@ Ateliers (ils restent installés), ou mettre le paramètre `BaseApp/Preferences/
 à faux. Le profil n'est réappliqué que si sa version change (`ProfileVersion`), vos réglages
 ultérieurs sont conservés.
 
+Raccourcis clavier des commandes CAM2027 : Ctrl+Maj+N nouveau projet, Ctrl+Maj+I importer,
+Ctrl+Maj+T bibliothèque d'outils, Ctrl+Maj+B brut et montage, Ctrl+Maj+O ajouter une opération,
+Ctrl+Maj+R recalculer, Ctrl+Maj+E exporter, Ctrl+Maj+S simuler, Ctrl+Maj+M profil machine.
+
 Raccourci Bureau + menu Démarrer (par utilisateur) :
 
 ```powershell

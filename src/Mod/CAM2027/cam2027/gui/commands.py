@@ -50,8 +50,13 @@ class _Base(object):
     text = ""
     tooltip = ""
 
+    accel = ""
+
     def GetResources(self):
-        return {"Pixmap": _icon(self.icon), "MenuText": tr(self.text), "ToolTip": tr(self.tooltip)}
+        res = {"Pixmap": _icon(self.icon), "MenuText": tr(self.text), "ToolTip": tr(self.tooltip)}
+        if self.accel:
+            res["Accel"] = self.accel
+        return res
 
     def IsActive(self):
         return True
@@ -59,6 +64,7 @@ class _Base(object):
 
 class NewProject(_Base):
     icon = "cam2027-new-project.svg"
+    accel = "Ctrl+Shift+N"
     text = "New project"
     tooltip = "Create a CAM2027 project document with a frozen copy of the tool library"
 
@@ -76,6 +82,7 @@ class NewProject(_Base):
 
 class ImportModel(_Base):
     icon = "cam2027-import.svg"
+    accel = "Ctrl+Shift+I"
     text = "Import model / drawing"
     tooltip = "Import STEP, STL, OBJ, SVG or DXF into the project"
 
@@ -100,6 +107,7 @@ class ImportModel(_Base):
 
 class ToolLibrary(_Base):
     icon = "cam2027-tool-library.svg"
+    accel = "Ctrl+Shift+T"
     text = "Tool library"
     tooltip = "Tools, holders, assemblies and cutting presets"
 
@@ -109,6 +117,7 @@ class ToolLibrary(_Base):
 
 class StockFixture(_Base):
     icon = "cam2027-stock.svg"
+    accel = "Ctrl+Shift+B"
     text = "Stock & fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
 
@@ -177,6 +186,7 @@ class StockFixture(_Base):
 
 class AddOperation(_Base):
     icon = "cam2027-add-operation.svg"
+    accel = "Ctrl+Shift+O"
     text = "Add operation"
     tooltip = "Add a machining operation using a tool assembly and a cutting preset"
 
@@ -289,6 +299,7 @@ def default_params(kind, tool, values):
 
 class Compute(_Base):
     icon = "cam2027-compute.svg"
+    accel = "Ctrl+Shift+R"
     text = "Recompute toolpaths"
     tooltip = "Recompute every operation and refresh the summary"
 
@@ -305,6 +316,7 @@ class Compute(_Base):
 
 class Export(_Base):
     icon = "cam2027-export.svg"
+    accel = "Ctrl+Shift+E"
     text = "Export G-code"
     tooltip = "Post-process, check and write the G-code and the setup sheet"
 
@@ -414,6 +426,7 @@ def _format_checks(analysis, issues):
 
 class Simulate(_Base):
     icon = "cam2027-simulate.svg"
+    accel = "Ctrl+Shift+S"
     text = "Simulate"
     tooltip = "Simulate material removal with the FreeCAD CAM simulator"
 
@@ -437,6 +450,7 @@ class Simulate(_Base):
 
 class Machine(_Base):
     icon = "cam2027-machine.svg"
+    accel = "Ctrl+Shift+M"
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
 

@@ -624,6 +624,41 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(proj.compute()[0]["commands"], r0["commands"])
         proj.close()
 
+    def test_vcarve_and_slot(self):
+        """V-carving du fond de poche (profondeur limitée) ; rainure entre deux points personnalisés."""
+        proj, lib, clone = self._project_with_job("Vcarve test")
+        bottom = None
+        for i, f in enumerate(clone.Shape.Faces, 1):
+            if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 4.0) < 1e-6 and abs(f.BoundBox.ZMin - 4.0) < 1e-6:
+                bottom = "Face%d" % i
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 60.0][0]
+        vasm = lib.assemblies_for_tool(vbit.id)[0]
+        op, rec = proj.add_operation("vcarve", "Vcarve floor", vasm.id, vbit.presets[0].id, base=[(clone, [bottom])],
+                                     params={"FinalDepth": 2.0})
+        self.assertEqual(rec["ignored_params"], [])
+        results = {r["name"]: r for r in proj.compute()}
+        r = results["Vcarve floor"]
+        self.assertTrue(r["valid"] and r["commands"] > 10, r)
+        # axe médian de la face 50x30 : reste dans la poche ; profondeur bornée par FinalDepth
+        self.assertGreaterEqual(r["bbox"]["X"][0], 15.0 - 1e-3)
+        self.assertLessEqual(r["bbox"]["X"][1], 65.0 + 1e-3)
+        self.assertAlmostEqual(r["zmin"], 2.0, places=3)
+
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op2, rec2 = proj.add_operation("slot", "Slot", asm.id, endmill.presets[0].id, base=None,
+                                       params={"StepDown": 2.0, "StartDepth": 10.0, "FinalDepth": 8.0})
+        op2.CustomPoint1 = FreeCAD.Vector(10, 50, 10)
+        op2.CustomPoint2 = FreeCAD.Vector(70, 50, 10)
+        results = {r["name"]: r for r in proj.compute()}
+        r2 = results["Slot"]
+        self.assertTrue(r2["valid"] and r2["commands"] > 5, r2)
+        self.assertAlmostEqual(r2["zmin"], 8.0, places=3)
+        self.assertAlmostEqual(r2["bbox"]["X"][0], 10.0, places=3)
+        self.assertAlmostEqual(r2["bbox"]["X"][1], 70.0, places=3)
+        self.assertAlmostEqual(r2["bbox"]["Y"][0], 50.0, places=3)
+        proj.close()
+
     def test_strategy_translations(self):
         """Libellés et limites de chaque stratégie traduits ; aucune chaîne tr() manquante."""
         import json

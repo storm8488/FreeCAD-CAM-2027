@@ -34,6 +34,9 @@
   fusion par nom, numéros d'outil libres ; test `test_merge_starter_tools`, 38 tests).
 - Dialogue d'export : contrôles colorés (erreur rouge, avertissement orange, non vérifiable
   ambre, OK vert).
+- Raccourcis clavier Ctrl+Maj+lettre pour les commandes principales.
+- Tests V-carve (fond de poche, profondeur bornée) et rainure (points personnalisés) :
+  `test_vcarve_and_slot` (39 tests).
 
 ## 0.1.3 — 2026-10-20
 

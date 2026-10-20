@@ -32,7 +32,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Contour 2D | disponible | `Path.Op.Profile` | auto | entrées/sorties inline, attaches (habillage) |
 | Poche | disponible | `Path.Op.Pocket` | auto | — |
 | Ébauche adaptative / trochoïdale | partiel | `Path.Op.Adaptive` (2D, monothread) | impl. | tests, perf, reprise 3D |
-| Rainure | disponible | `Path.Op.Slot` | impl. | test auto |
+| Rainure | disponible | `Path.Op.Slot` (arêtes/sommets ou points personnalisés) | auto (`test_vcarve_and_slot`) | points personnalisés dans l'éditeur (actuellement éditeur de propriétés FreeCAD) |
 | Gravure | disponible | `Path.Op.Engrave` | auto (`test_helix_and_engrave`) | — |
 | Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |
@@ -55,7 +55,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 |---|---|---|---|
 | Import SVG / DXF / STEP / STL / OBJ | disponible | Draft `importSVG`, `Import.readDXF`, Part, Mesh | auto (`test_import`) | — |
 | Édition vectorielle (nœuds, texte, booléens, calques) | absent | Draft / Sketcher FreeCAD | outil dédié dans l'atelier |
-| V-carving profondeur variable | disponible | `Path.Op.Vcarve` | impl. | test auto, fond plat avec 2e outil |
+| V-carving profondeur variable | disponible | `Path.Op.Vcarve` | auto (`test_vcarve_and_slot`) | fond plat avec 2e outil ; FreeCAD démarre la gravure au sommet du modèle, pas à la hauteur de la face |
 | Incrustations mâle/femelle | absent | — | jalon C |
 | Dégagement multi-outils | absent | — | jalon C |
 | Recto-verso, repères de retournement | absent | — | jalon D |
