@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **Une fraise créée dans la bibliothèque est proposée tout de suite** : elle n'apparaissait pas dans
+  « Ajouter une opération » (fraise à surfacer de l'utilisateur), pour deux raisons. Une fraise neuve n'avait
+  ni préréglage de coupe ni assemblage : elle en reçoit un par défaut (12 000 tr/min, 600 mm/min, à ajuster ;
+  numéro libre, premier porte-outil). Et un projet travaille sur une copie de la bibliothèque figée à sa
+  création : les outils ajoutés depuis y sont maintenant **ajoutés** à l'ouverture du dialogue (les outils
+  déjà présents et les opérations existantes ne changent pas ; un outil identique sous un autre identifiant
+  n'est pas dupliqué).
 - **Aperçu d'outil dynamique, comme Fusion** : la silhouette (fraise à surfacer large sur un corps fin, V-bit,
   boule...) se redessine à chaque saisie dans la fiche, à l'échelle, sans enregistrer ; cote du diamètre du
   corps (Ds) ; valeur incohérente signalée sous l'aperçu ; titre traduit. Fraise à surfacer : dépouille de 0°

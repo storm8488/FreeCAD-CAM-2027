@@ -417,6 +417,14 @@ class AddOperation(_Base):
         if not proj.has_job:
             _warn(tr("Define the stock & fixture first (this creates the job)."))
             return
+        # outils créés dans la bibliothèque depuis la création du projet : ajoutés à son instantané
+        user = state.library()
+        if any(user.ensure_usable(tid, tr("New preset")) for tid in list(user.tools)):
+            try:
+                user.save()
+            except (ValueError, OSError):
+                pass
+        proj.merge_library(user)
         lib = proj.library
         sel = FreeCADGui.Selection.getSelectionEx()
         base = []

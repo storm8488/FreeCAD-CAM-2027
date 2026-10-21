@@ -167,6 +167,53 @@ class ToolLibrary(object):
     def assemblies_for_tool(self, tool_id):
         return [a for a in self.assemblies.values() if a.tool_id == tool_id]
 
+    def ensure_usable(self, tool_id, preset_name="Default"):
+        """Rend un outil utilisable par « Ajouter une opération » : un préréglage prudent s'il n'en a aucun
+        (12 000 tr/min, 600 mm/min, à ajuster) et un assemblage par défaut s'il n'en a pas (numéro libre,
+        premier porte-outil, sortie calculée ; sans porte-outil s'il ne convient pas). Une fraise créée dans la
+        bibliothèque n'apparaissait sinon jamais dans la liste. Retourne True si quelque chose a été ajouté."""
+        tool = self.tool(tool_id)
+        changed = False
+        if not tool.presets:
+            tool.add_preset(CuttingPreset(preset_name, spindle_rpm=12000, feed_mm_min=600))
+            changed = True
+        if not self.assemblies_for_tool(tool_id):
+            number = max([x.output.tool_number for x in self.assemblies.values()] + [0]) + 1
+            for holder_id in [next(iter(self.holders), None), None]:
+                asm = ToolAssembly("T%d %s" % (number, tool.name), tool_id, holder_id, output={"tool_number": number})
+                try:
+                    self.add_assembly(asm)
+                except ValueError:
+                    continue
+                changed = True
+                break
+        return changed
+
+    def merge_new_from(self, other):
+        """Ajoute les porte-outils, outils et assemblages de ``other`` absents d'ici (par identifiant), sans
+        toucher à ceux déjà présents. Retourne le nombre d'assemblages ajoutés."""
+        def same(tool):  # même outil sous un autre identifiant (autre bibliothèque de démarrage) : pas de doublon
+            key = (tool.name, tool.tool_type, json.dumps(tool.geometry.to_dict(), sort_keys=True))
+            return any((t.name, t.tool_type, json.dumps(t.geometry.to_dict(), sort_keys=True)) == key
+                       for t in self.tools.values())
+
+        for hid, holder in other.holders.items():
+            if hid not in self.holders:
+                self.holders[hid] = Holder.from_dict(copy.deepcopy(holder.to_dict()))
+        new_tools = set()
+        for tid, tool in other.tools.items():
+            if tid not in self.tools and not same(tool):
+                self.tools[tid] = ToolDefinition.from_dict(copy.deepcopy(tool.to_dict()))
+                new_tools.add(tid)
+        added = 0
+        for aid, asm in other.assemblies.items():
+            if aid not in self.assemblies and (asm.tool_id in new_tools or
+                                               (asm.tool_id in self.tools and not any(
+                                                   a.tool_id == asm.tool_id for a in self.assemblies.values()))):
+                self.assemblies[aid] = ToolAssembly.from_dict(copy.deepcopy(asm.to_dict()))
+                added += 1
+        return added
+
     # -- sérialisation -------------------------------------------------------
 
     def to_dict(self):

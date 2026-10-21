@@ -530,6 +530,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
             _warn(tr_msg(exc))
             return
         self.lib.tools[new.id] = new
+        self.lib.ensure_usable(new.id, tr("New preset"))
         self.current = new
         self.refresh_list()
         self.load_tool(new)
@@ -537,6 +538,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
     def new_tool(self):
         tool = ToolDefinition(tr("New tool"), "endmill", dict(diameter=6, overall_length=50, flute_length=18))
         self.lib.add_tool(tool)
+        self.lib.ensure_usable(tool.id, tr("New preset"))  # préréglage et assemblage : proposé à l'opération
         self.current = tool
         self.refresh_list()
         self.load_tool(tool)
@@ -545,6 +547,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         if self.current is None:
             return
         copy = self.lib.duplicate_tool(self.current.id)
+        self.lib.ensure_usable(copy.id, tr("New preset"))
         self.current = copy
         self.refresh_list()
         self.load_tool(copy)

@@ -86,6 +86,16 @@ class Project(object):
             self._library = ToolLibrary.from_dict(docobjects.ProjectInfo.get_json(self.info, "LibrarySnapshot"))
         return self._library
 
+    def merge_library(self, library):
+        """Ajoute à l'instantané du projet les outils de ``library`` créés depuis (les outils déjà présents et
+        les opérations existantes ne changent pas). Retourne le nombre d'assemblages ajoutés."""
+        snap = self.library
+        added = snap.merge_new_from(library)
+        if added:
+            docobjects.ProjectInfo.set_json(self.info, "LibrarySnapshot", snap.snapshot())
+            self._library = None
+        return added
+
     def update_library_snapshot(self, library):
         """Remplace volontairement l'instantané (action explicite de l'utilisateur)."""
         docobjects.ProjectInfo.set_json(self.info, "LibrarySnapshot", library.snapshot())

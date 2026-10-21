@@ -457,6 +457,44 @@ class TestUiLogic(unittest.TestCase):
         self.assertEqual(names(), ["Op 1", "Op 2", "Op 0"])
         proj.close()
 
+    def test_new_tool_offered_to_an_existing_project(self):
+        """Fraise créée dans la bibliothèque après le projet : rendue utilisable (préréglage, assemblage) et
+        ajoutée à l'instantané du projet, sans toucher aux outils déjà présents ; proposée au surfaçage."""
+        from cam2027.tools.model import ToolDefinition
+
+        from cam2027.tools.library import ToolLibrary
+
+        proj = self._project("NewTool")
+        part = proj.import_model(self.step).objects[0]
+        proj.create_job([part])
+        user = ToolLibrary.from_dict(proj.library.snapshot())  # la bibliothèque dont le projet a été copié
+        self.assertEqual(proj.merge_library(starter_library()), 0)  # mêmes outils, autres identifiants : rien
+        before = {k: v.to_dict() for k, v in proj.library.tools.items()}
+        face = ToolDefinition("Fraise a surfacer 50", "facemill",
+                              dict(diameter=50, shank_diameter=6.35, overall_length=40, flute_length=7,
+                                   taper_half_angle_deg=0.0))
+        user.add_tool(face)
+        self.assertFalse(user.assemblies_for_tool(face.id))
+        self.assertTrue(user.ensure_usable(face.id, "Nouveau"))
+        self.assertEqual(len(face.presets), 1)
+        self.assertEqual(len(user.assemblies_for_tool(face.id)), 1)
+        self.assertFalse(user.ensure_usable(face.id, "Nouveau"))  # déjà utilisable : rien
+        self.assertEqual(proj.merge_library(user), 1)
+        lib = proj.library
+        self.assertIn(face.id, lib.tools)
+        self.assertEqual({k: lib.tools[k].to_dict() for k in before}, before)  # outils déjà là : inchangés
+        offered = [a for a in lib.assemblies.values() if opsmod.tool_fits("millface", lib.tool(a.tool_id))]
+        self.assertIn(face.id, [a.tool_id for a in offered])
+        self.assertEqual(proj.merge_library(user), 0)  # rien de nouveau la deuxième fois
+        asm = lib.assemblies_for_tool(face.id)[0]
+        from tests.test_pipeline import plate_top_face
+        clone = proj.job.Model.Group[0]
+        op, _rec = proj.add_operation("millface", "Surfacage", asm.id, face.presets[0].id,
+                                      base=[(clone, [plate_top_face(clone)])])
+        proj.compute()
+        self.assertIn(proj.operation_state(op), ("computed", "warning"))
+        proj.close()
+
     def test_adaptive_projection_fallback(self):
         """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion
         des projections face par face est gardée (sinon l'ébauche 3D entière échoue sans parcours)."""
