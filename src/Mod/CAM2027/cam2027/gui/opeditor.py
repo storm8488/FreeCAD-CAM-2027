@@ -16,7 +16,7 @@ from ..i18n import tr, tr_msg
 from .labels import preset_label
 from ..tools import bridge
 from ..project.operations import STRATEGIES, param_kind, read_params, thread_names
-from ..project import paramspec
+from ..project import paramspec, undo
 from . import state, panels, theme
 
 
@@ -442,6 +442,10 @@ class OperationEditor(QtWidgets.QDialog):
         return out
 
     def _apply(self):
+        with undo.transaction(self.proj.doc, tr("Edit the operation")):
+            return self._apply_changes()
+
+    def _apply_changes(self):
         try:
             label = self.name.text().strip()
             if label:
@@ -501,7 +505,7 @@ class OperationEditor(QtWidgets.QDialog):
         return ok
 
     def accept(self):
-        if self.apply():
+        if not self.has_unsaved_changes() or self.apply():  # rien à appliquer : pas d'étape d'annulation vide
             super(OperationEditor, self).accept()
             self._finish(True)
 

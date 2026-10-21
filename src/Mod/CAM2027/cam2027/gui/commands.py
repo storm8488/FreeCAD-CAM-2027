@@ -15,6 +15,7 @@ from ..project.project import Project, ExportBlocked
 from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
 from ..project import export as exportmod
+from ..project import undo
 from ..project.machine import MachineProfile
 from . import state, panels, standalone, theme, welcome
 
@@ -123,6 +124,14 @@ STRATEGY_ICONS = {
 }
 
 
+def _undoable(activated):
+    """Commande qui modifie le projet : une étape d'annulation (Ctrl+Z), nommée comme la commande."""
+    def run(self, *args):
+        with undo.transaction(FreeCAD.ActiveDocument, tr(self.text)):
+            return activated(self, *args)
+    return run
+
+
 class _Base(object):
     icon = "CAM2027.svg"
     text = ""
@@ -174,6 +183,7 @@ class ImportModel(_Base):
     text = "Import model / drawing"
     tooltip = "Import STEP, STL, OBJ, SVG or DXF into the project"
 
+    @_undoable
     def Activated(self):
         from ..project import relief
 
@@ -232,6 +242,7 @@ class ImportRelief(_Base):
     text = "Relief from image"
     tooltip = "Build a 3D relief from a grey-level image (PNG, JPG, BMP): light = high"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -261,6 +272,7 @@ class StockFixture(_Base):
     text = "Stock & fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -410,6 +422,7 @@ class AddOperation(_Base):
     text = "Add operation"
     tooltip = "Add a machining operation using a tool assembly and a cutting preset"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -562,10 +575,17 @@ class AddOperation(_Base):
         _after_change()
         from . import opeditor
 
+        added = (proj.doc.UndoCount, tr(self.text))  # étape d'annulation de cet ajout (encore ouverte ici)
+
         def on_close(accepted):
             if not accepted:
                 try:
-                    proj.remove_operation(op)
+                    doc = proj.doc
+                    if (doc.UndoCount, (doc.UndoNames or [None])[0]) == added:
+                        doc.undo()  # rien fait depuis l'ajout : on l'annule, comme s'il n'avait pas eu lieu
+                    else:
+                        with undo.transaction(doc, tr("Delete")):
+                            proj.remove_operation(op)
                 except Exception as exc:
                     _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
                 _after_change()
@@ -578,6 +598,7 @@ class WrapEngrave(_Base):
     text = "Wrapped engraving (A axis)"
     tooltip = "Engrave an unrolled drawing around the round stock: X, Z and A move together (continuous 4th axis, G93)"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -597,8 +618,9 @@ def open_wrap_dialog(proj, op=None):
     if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
         return None
     try:
-        result = dlg.apply()
-        proj.compute()
+        with undo.transaction(proj.doc, dlg.windowTitle()):
+            result = dlg.apply()
+            proj.compute()
     except Exception as exc:
         _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
         _after_change()
@@ -635,6 +657,7 @@ class FlatDepth(_Base):
     text = "Flat depth clearing (V-carve)"
     tooltip = "Clear the wide areas of a limited-depth V-carve with a flat end mill, with V-bit outline and sharp corners"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None or not proj.has_job:
@@ -648,6 +671,7 @@ class Inlay(_Base):
     text = "V inlay (male / female)"
     tooltip = "Female V pocket in this project and mirrored male plug in a new project, with glue gap"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -683,6 +707,7 @@ class Nest(_Base):
     text = "Nest parts on a sheet"
     tooltip = "Place the 2D drawings on a sheet of a given size (bounding rectangles, 90° rotation, copies)"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -1108,6 +1133,7 @@ class Machine(_Base):
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
 
+    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:

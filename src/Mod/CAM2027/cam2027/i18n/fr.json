@@ -532,6 +532,9 @@
   "invalid": "invalides",
   "select geometry, then add an operation": "sélectionner la géométrie, puis ajouter une opération",
   "Delete the operation '{name}'?": "Supprimer l'opération « {name} » ?",
+  "Edit the operation": "Modifier l'opération",
+  "Move the operation": "Déplacer l'opération",
+  "Enable or disable the operation": "Activer ou désactiver l'opération",
   "No simulator command is available in this FreeCAD (expected CAM_SimulatorGL or CAM_Simulator).": "Aucune commande de simulateur n'est disponible dans ce FreeCAD (attendu : CAM_SimulatorGL ou CAM_Simulator).",
   "No operation to simulate.": "Aucune opération à simuler.",
 

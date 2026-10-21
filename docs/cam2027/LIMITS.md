@@ -189,6 +189,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   limite = brut) et finitions 3D (surface, Z constant) seulement, avec `BoundBox = Stock` ; contour, poche, adaptative, ébauche 3D, perçage, gravure... refusés sur une
   surface. Sur FreeCAD 1.0 (pas de conversion sans couture), un tel maillage reste un maillage et ne peut pas
   être usiné (dit à l'import et au brut). Une surface de 215 000 faces pèse dans la vue 3D et dans le fichier.
+- Annuler (Ctrl+Z) : les actions CAM2027 et celles de FreeCAD ; « Calculer » seul et les modifications de la
+  bibliothèque d'outils ne sont pas des étapes. Après Annuler, les parcours ne sont pas
+  recalculés : ceux d'avant l'action sont rétablis. Un ajout annulé reste dans « Rétablir ».
 - Un fichier importé deux fois est signalé ; ses corps en double sont ignorés par « Brut et montage ».
   Une fusion qui ne donne pas un solide plausible est refusée (corps laissés séparés) : une forme vide
   fait boucler le brut de FreeCAD jusqu'au plantage.

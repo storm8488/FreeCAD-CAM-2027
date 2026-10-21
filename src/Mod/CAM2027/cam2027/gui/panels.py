@@ -15,6 +15,7 @@ from ..tools.model import (
 )
 from ..tools.fusion_import import import_fusion_library
 from ..tools import bridge
+from ..project import undo
 from . import state, theme
 from .preview import ToolPreview
 
@@ -1207,8 +1208,9 @@ class ProjectPanel(QtWidgets.QWidget):
         op = proj.doc.getObject(item.data(0, QtCore.Qt.UserRole))
         if op is None:
             return
-        proj.set_operation_active(op, item.checkState(0) == QtCore.Qt.Checked)
-        proj.compute()
+        with undo.transaction(proj.doc, tr("Enable or disable the operation")):
+            proj.set_operation_active(op, item.checkState(0) == QtCore.Qt.Checked)
+            proj.compute()
         self.refresh()
         self._reselect(op.Name)
 
@@ -1237,8 +1239,9 @@ class ProjectPanel(QtWidgets.QWidget):
         if op is None:
             return
         try:
-            proj.move_operation_to(op, index)
-            proj.compute()
+            with undo.transaction(proj.doc, tr("Move the operation")):
+                proj.move_operation_to(op, index)
+                proj.compute()
         except Exception as exc:
             _warn(tr_msg(exc))
         self.refresh()
@@ -1248,8 +1251,9 @@ class ProjectPanel(QtWidgets.QWidget):
         proj, op = self._selected()
         if op is None:
             return
-        proj.move_operation(op, delta)
-        proj.compute()
+        with undo.transaction(proj.doc, tr("Move the operation")):
+            proj.move_operation(op, delta)
+            proj.compute()
         self.refresh()
         self._reselect(op.Name)
 
@@ -1258,8 +1262,9 @@ class ProjectPanel(QtWidgets.QWidget):
         if op is None:
             return
         try:
-            new, _rec = proj.duplicate_operation(op)
-            proj.compute()
+            with undo.transaction(proj.doc, tr("Duplicate")):
+                new, _rec = proj.duplicate_operation(op)
+                proj.compute()
         except Exception as exc:
             _warn(tr_msg(exc))
             return
@@ -1274,8 +1279,9 @@ class ProjectPanel(QtWidgets.QWidget):
                 != QtWidgets.QMessageBox.Yes:
             return
         try:
-            proj.remove_operation(op)
-            proj.compute()
+            with undo.transaction(proj.doc, tr("Delete")):
+                proj.remove_operation(op)
+                proj.compute()
         except Exception as exc:
             _warn(tr_msg(exc))
         self.refresh()
@@ -1336,7 +1342,35 @@ def show_tool_library():
     return _dock("ToolLibrary", tr("CAM2027 tool library"), ToolLibraryPanel, QtCore.Qt.BottomDockWidgetArea)
 
 
+class _UndoObserver(object):
+    """Annuler / Rétablir (Ctrl+Z, Ctrl+Y) : la liste des opérations suit le document. Chaque action CAM2027
+    finit par le calcul des parcours, donc l'état rétabli est un état calculé ; FreeCAD marque pourtant les
+    objets rétablis « modifiés » (« à recalculer » dans la liste) : la marque est retirée."""
+
+    def slotUndoDocument(self, doc):
+        self._restored(doc)
+
+    def slotRedoDocument(self, doc):
+        self._restored(doc)
+
+    def _restored(self, doc):
+        from ..project import docobjects
+
+        if docobjects.find_info(doc) is not None:
+            for obj in doc.Objects:
+                if "Touched" in obj.State:
+                    obj.purgeTouched()
+        QtCore.QTimer.singleShot(0, refresh_project_panel)
+
+
+_undo_observer = None
+
+
 def ensure_project_panel():
+    global _undo_observer
+    if _undo_observer is None:
+        _undo_observer = _UndoObserver()
+        FreeCAD.addDocumentObserver(_undo_observer)
     return _dock("Project", tr("CAM2027 project"), ProjectPanel, QtCore.Qt.RightDockWidgetArea)
 
 

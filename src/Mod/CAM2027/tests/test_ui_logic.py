@@ -596,6 +596,40 @@ class TestUiLogic(unittest.TestCase):
         self.assertIsNotNone(reopened.last_check())
         reopened.close()
 
+    def test_undo_removes_an_added_operation(self):
+        """Ctrl+Z : l'ajout d'une opération est une étape d'annulation entière. Le document temporaire de la forme
+        du ToolBit n'est fermé qu'après la transaction (sinon, dans l'interface, l'opération et son ToolController
+        n'étaient plus enregistrés et restaient après « Annuler »)."""
+        from cam2027.project import undo
+
+        proj = self._project("UndoAdd")
+        doc = proj.doc
+        doc.UndoMode = 1  # FreeCADCmd : annulation désactivée par défaut
+        part = proj.import_model(self.step).objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        doc.clearUndos()
+        before = set(o.Name for o in doc.Objects)
+        lib = proj.library
+        tool = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(tool.id)[0]
+        others = set(FreeCAD.listDocuments())
+        closed_late = []
+        with undo.transaction(doc, "Add operation"):
+            src = FreeCAD.newDocument("UndoSource", hidden=True)
+            doc.copyObject(src.addObject("Part::Box", "Box"), False)
+            FreeCAD.closeDocument(src.Name)  # comme ShapeDocFromBytes
+            closed_late.append(src.Name in FreeCAD.listDocuments())
+            proj.add_operation("profile", "Contour", asm.id, tool.presets[0].id, base=[(proj.job.Model.Group[0], [])])
+        self.assertEqual(closed_late, [True])  # fermeture reportée pendant la transaction...
+        self.assertEqual(set(FreeCAD.listDocuments()), others)  # ... puis faite
+        self.assertEqual(doc.UndoNames, ["Add operation"])
+        doc.undo()
+        self.assertEqual(set(o.Name for o in doc.Objects), before)
+        self.assertEqual(proj.operations(), [])
+        doc.redo()
+        self.assertEqual([o.Label for o in proj.operations()], ["Contour"])
+        FreeCAD.closeDocument(doc.Name)
+
     def test_messages_translated(self):
         i18n.set_language("fr")
         try:

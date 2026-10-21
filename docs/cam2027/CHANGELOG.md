@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **Annuler / Rétablir (Ctrl+Z, Ctrl+Y)** : « Annuler » restait grisé, CAM2027 n'ouvrait aucune transaction
+  FreeCAD. Chaque action est maintenant une étape d'annulation : import, brut et montage, ajout d'une
+  opération, modification dans l'éditeur, activer/désactiver, déplacer, dupliquer, supprimer, fond plat,
+  incrustation, gravure enroulée, imbrication, profil machine. Piège de FreeCAD trouvé au passage : la forme
+  d'un ToolBit est copiée d'un document temporaire aussitôt fermé ; dans l'interface, les objets créés ensuite
+  dans la même transaction n'étaient plus enregistrés (l'opération et son ToolController restaient après
+  « Annuler »). La fermeture de ce document attend la fin de la transaction. Un ajout annulé dans l'éditeur
+  ne laisse pas d'étape ; « OK » sans modification non plus. Après Annuler, les opérations rétablies restent
+  « calculées » (parcours rétablis avec elles) et la liste suit.
 - **Surfaçage avec une fraise à surfacer, y compris sur un STL** : le surfaçage refusait la pièce issue d'un
   maillage (« surface 3D », fichier ER16 de l'utilisateur) et proposait une fraise droite. Il usine maintenant
   le dessus du brut jusqu'au haut de la pièce (limite = brut) quand il n'y a pas de face plane du dessus, et la
