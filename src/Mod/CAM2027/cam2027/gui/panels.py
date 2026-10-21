@@ -260,6 +260,13 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         apply_btn = QtWidgets.QPushButton(tr("Apply changes"))
         apply_btn.clicked.connect(self.apply_tool)
         form.addRow(apply_btn)
+        # aperçu dynamique (comme Fusion) : chaque saisie redessine l'outil à partir des champs, sans l'enregistrer
+        self.f_name.textChanged.connect(self._live_preview)
+        self.f_type.currentIndexChanged.connect(self._live_preview)
+        self.f_flutes.valueChanged.connect(self._live_preview)
+        for wdg in self.geom_widgets.values():
+            signal = wdg.currentIndexChanged if isinstance(wdg, QtWidgets.QComboBox) else wdg.valueChanged
+            signal.connect(self._live_preview)
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(w)
@@ -468,11 +475,35 @@ class ToolLibraryPanel(QtWidgets.QWidget):
                 g[key] = wdg.currentData()
             elif wdg.value() > 0:
                 g[key] = wdg.value()
-            elif key in ("upper_radius", "lower_radius", "tip_offset", "tip_diameter", "corner_radius"):
+            elif key in ("upper_radius", "lower_radius", "tip_offset", "tip_diameter", "corner_radius")                     or (key == "taper_half_angle_deg" and ttype == "facemill"):  # dépouille 0° : fraise à surfacer droite
                 g[key] = 0.0
         if self.current is not None and ttype == "form":
             g["profile"] = [s.to_dict() for s in (self.current.geometry.profile or [])]
         return g
+
+    def _tool_from_form(self):
+        """Outil tel que saisi dans la fiche (non enregistré) ; ``ValueError`` si une valeur est incohérente."""
+        data = self.current.to_dict()
+        data.update({
+            "name": self.f_name.text().strip(),
+            "tool_type": self.f_type.currentData(),
+            "geometry": self._geometry_from_form(),
+            "flute_count": self.f_flutes.value(),
+            "shank_segments": [],
+        })
+        return ToolDefinition.from_dict(data)
+
+    def _live_preview(self, *_args):
+        if self._building or self.current is None:
+            return
+        a = self.current_assembly()
+        holder = self.lib.holders.get(a.holder_id) if a and a.holder_id else None
+        try:
+            tool = self._tool_from_form()
+        except (ValueError, KeyError, TypeError) as exc:
+            self.preview.set_error(tr_msg(exc) if isinstance(exc, ValueError) else str(exc))
+            return
+        self.preview.set_tool(tool, holder, a.stickout if a else None)
 
     def apply_tool(self):
         if self.current is None:

@@ -15,6 +15,7 @@ class ToolPreview(QtWidgets.QWidget):
         self.tool = None
         self.holder = None
         self.stickout = None
+        self.error = None
         self.setMinimumSize(220, 260)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
@@ -22,6 +23,12 @@ class ToolPreview(QtWidgets.QWidget):
         self.tool = tool
         self.holder = holder
         self.stickout = stickout
+        self.error = None
+        self.update()
+
+    def set_error(self, message):
+        """Valeur saisie incohérente : le dernier outil valable reste dessiné, le message s'affiche dessous."""
+        self.error = message
         self.update()
 
     def paintEvent(self, event):
@@ -99,6 +106,13 @@ class ToolPreview(QtWidgets.QWidget):
         painter.drawLine(QtCore.QPointF(x_dim, tip_y), QtCore.QPointF(x_dim, flute_top_y))
         painter.drawText(QtCore.QRectF(x_dim + 3, (tip_y + flute_top_y) / 2 - 7, 60, 14), QtCore.Qt.AlignLeft,
                          "Lc %.3g" % g.flute_length)
+        if self.tool.tool_type not in ("taper", "taperedball", "taperbarrel") and abs(g.shank_diameter - g.diameter) > 1e-6:
+            # diamètre du corps (queue), coté en haut de l'outil
+            ds_y = tool_top_y - 6
+            painter.drawLine(QtCore.QPointF(cx - g.shank_diameter * scale / 2, ds_y),
+                             QtCore.QPointF(cx + g.shank_diameter * scale / 2, ds_y))
+            painter.drawText(QtCore.QRectF(cx - 60, ds_y - 16, 120, 14), QtCore.Qt.AlignCenter,
+                             "Ds %.3g mm" % g.shank_diameter)
         x_dim2 = x_dim + 22
         painter.drawLine(QtCore.QPointF(x_dim2, tip_y), QtCore.QPointF(x_dim2, tool_top_y))
         painter.drawText(QtCore.QRectF(x_dim2 + 3, (tip_y + tool_top_y) / 2 - 7, 60, 14), QtCore.Qt.AlignLeft,
@@ -111,11 +125,15 @@ class ToolPreview(QtWidgets.QWidget):
                              "%s %.3g" % (tr("Stickout"), self.stickout))
             painter.drawLine(QtCore.QPointF(x_dim3 - 4, so_top), QtCore.QPointF(cx + max_d * scale / 2, so_top))
         painter.setPen(text_pen)
-        label = "%s - %s - z=%d" % (self.tool.name, self.tool.type_label(), self.tool.flute_count)
+        label = "%s - %s - z=%d" % (self.tool.name, tr(self.tool.type_label()), self.tool.flute_count)
         painter.drawText(QtCore.QRectF(6, 4, self.width() - 12, 16), QtCore.Qt.AlignLeft, label)
         if g.tip_included_angle_deg is not None and self.tool.tool_type in ("vbit", "engrave", "chamfer", "drill", "dovetail"):
             painter.drawText(QtCore.QRectF(6, 20, self.width() - 12, 16), QtCore.Qt.AlignLeft,
                              "%s %.4g°" % (tr("Included angle"), g.tip_included_angle_deg))
-        if g.taper_half_angle_deg is not None:
+        if g.taper_half_angle_deg is not None and (g.taper_half_angle_deg > 0 or self.tool.tool_type != "facemill"):
             painter.drawText(QtCore.QRectF(6, 36, self.width() - 12, 16), QtCore.Qt.AlignLeft,
                              "%s %.4g°" % (tr("Taper half-angle"), g.taper_half_angle_deg))
+        if self.error:
+            painter.setPen(QtGui.QPen(QtGui.QColor(230, 90, 80)))
+            painter.drawText(QtCore.QRectF(6, self.height() - 34, self.width() - 12, 30),
+                             QtCore.Qt.AlignLeft | QtCore.Qt.TextWordWrap, self.error)

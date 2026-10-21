@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Aperçu d'outil dynamique, comme Fusion** : la silhouette (fraise à surfacer large sur un corps fin, V-bit,
+  boule...) se redessine à chaque saisie dans la fiche, à l'échelle, sans enregistrer ; cote du diamètre du
+  corps (Ds) ; valeur incohérente signalée sous l'aperçu ; titre traduit. Fraise à surfacer : dépouille de 0°
+  acceptée (elle était refusée, « demi-angle de cône requis »).
 - **Toutes les poches vidées par l'ébauche 3D et l'adaptative** : l'hélice d'entrée de FreeCAD (environ 3/4 de
   la fraise) ne tenait pas dans une poche étroite et la région était sautée (36 alvéoles de 14 x 11,2 mm
   laissées pleines sur le plateau, comparé à Fusion qui entre en hélice dans chacune). Hélice comme Fusion :
