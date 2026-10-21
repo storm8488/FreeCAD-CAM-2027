@@ -692,9 +692,9 @@ def default_params(kind, tool, values):
         # à la profondeur de coupe, et l'adaptative en voit parfois une à travers de la matière (G0 dans 3 mm de
         # matière sur le chauffage Vz330)
         params["LiftDistance"] = values["axial_engagement_mm"]
-        # hélice d'entrée d'un tiers du diamètre : celle de FreeCAD (~3/4 de la fraise) ne tient pas dans une
-        # poche étroite et la région est sautée (36 alvéoles de 14 x 11,2 mm laissées pleines sur le plateau)
-        params["HelixDiameterLimit"] = round(tool.geometry.diameter / 3.0, 3)
+        # hélice d'entrée comme Fusion : 0,95 x le diamètre, réduite région par région quand elle ne tient pas
+        # (parallel_adaptive) ; une hélice fixe trop grande laissait 36 alvéoles pleines sur le plateau
+        params["HelixDiameterLimit"] = round(0.95 * tool.geometry.diameter, 3)
     if kind == "millface":
         params["ClearEdges"] = True
     if kind == "surface3d":

@@ -30,15 +30,44 @@ _PARAMS = ("stepOverFactor", "toolDiameter", "helixRampDiameter", "keepToolDownD
            "tolerance", "forceInsideOut", "finishingProfile")
 
 
-def _run_job(area, job, progress=None):
+#: hélice d'entrée la plus petite essayée, en part du diamètre de la fraise
+MIN_HELIX_RATIO = 0.1
+
+
+def _helix_tries(params):
+    """Diamètres d'hélice essayés, comme Fusion (« diamètre de rampe hélicoïdale » puis jusqu'au « diamètre
+    minimal ») : celui demandé, puis deux fois plus petit tant qu'il reste au-dessus du minimum. FreeCAD saute
+    sinon la région où l'hélice ne tient pas (36 alvéoles laissées pleines sur le plateau de l'utilisateur)."""
+    helix = float(params.get("helixRampDiameter", 0.0) or 0.0)
+    smallest = MIN_HELIX_RATIO * float(params.get("toolDiameter", 0.0) or 0.0)
+    tries = [helix]
+    while helix > 0 and helix / 2.0 >= smallest > 0:
+        helix /= 2.0
+        tries.append(helix)
+    return tries
+
+
+def _execute(area, job, helix, progress):
     a2d = area.Adaptive2d()
     for key in _PARAMS:
         if key in job["params"]:
             setattr(a2d, key, job["params"][key])
+    a2d.helixRampDiameter = helix
     a2d.opType = area.AdaptiveOperationType(job["opType"])
     results = a2d.Execute(job["stock"], job["path"], progress or (lambda _paths: False))
     return [{"HelixCenterPoint": r.HelixCenterPoint, "StartPoint": r.StartPoint, "AdaptivePaths": r.AdaptivePaths,
              "ReturnMotionType": r.ReturnMotionType} for r in results]
+
+
+def _run_job(area, job, progress=None):
+    """Une région : hélice demandée, puis plus petite si elle ne donne aucun mouvement de coupe."""
+    cutting = int(area.AdaptiveMotionType.Cutting)
+    results = []
+    for helix in _helix_tries(job["params"]):
+        results = _execute(area, job, helix, progress)
+        if any(m == cutting and len(pts) > 1 for r in results for m, pts in r["AdaptivePaths"]):
+            break
+    return results
 
 
 class _Result(object):

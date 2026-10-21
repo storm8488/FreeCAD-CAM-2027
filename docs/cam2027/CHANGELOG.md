@@ -4,8 +4,11 @@
 
 - **Toutes les poches vidées par l'ébauche 3D et l'adaptative** : l'hélice d'entrée de FreeCAD (environ 3/4 de
   la fraise) ne tenait pas dans une poche étroite et la région était sautée (36 alvéoles de 14 x 11,2 mm
-  laissées pleines sur le plateau, comparé à Fusion qui entre en hélice dans chacune). Hélice d'un tiers du
-  diamètre par défaut (2 mm pour une fraise de 6) : 0 alvéole oubliée, 618 cm³ enlevés au lieu de 512.
+  laissées pleines sur le plateau, comparé à Fusion qui entre en hélice dans chacune). Hélice comme Fusion :
+  0,95 x le diamètre, puis deux fois plus petite région par région tant qu'elle ne tient pas (jusqu'à 10 % du
+  diamètre). Plateau : 0 alvéole oubliée, 618 cm³ enlevés au lieu de 512, 13,6 s, 294 000 commandes (477 000
+  avec une hélice fixe de 2 mm). Référence des stratégies de Fusion : notes de session
+  `fusion-cam-reference.md` (Autodesk ne publie presque aucune valeur par défaut).
 - **Liste des opérations lisible et réordonnable** : quatre colonnes (Opération, État, Outil, Temps) qui
   tiennent dans le dock, stratégie / commandes / Z en infobulle, opération inactive grisée, plus de barre
   bleue devant chaque cellule de la ligne choisie (elles semblaient se chevaucher). Ordre d'usinage par

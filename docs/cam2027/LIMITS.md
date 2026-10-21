@@ -69,6 +69,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   (739,8 ou 739,3 cm³ enlevés au contrôle, liaisons à la profondeur de coupe), sans entaille ; le calcul en
   processus retombe sur ces mêmes parcours. « Arrêter le calcul » n'arrête pas la poche (FreeCAD ne le
   prévoit pas pour elle) ; l'interface reste rafraîchie.
+- Adaptative et ébauche 3D : entrée en hélice seulement (pas de rampe ni de plongée) ; l'hélice démarre à
+  0,95 x le diamètre et se réduit région par région jusqu'à 10 % du diamètre ; une région plus étroite que la
+  fraise reste pleine (trou de 4 mm pour une fraise de 6). Fraise à coupe au centre conseillée.
 - Adaptative et ébauche 3D : liaisons « en zone dégagée » remontées d'une passe (`LiftDistance` = passe ;
   0 dans FreeCAD, l'adaptative en faisait parfois une à travers la matière). Le Z constant (OpenCamLib) ne
   s'arrête pas en cours de calcul : sur une grande pièce l'interface reste occupée (39 s sur le chauffage
