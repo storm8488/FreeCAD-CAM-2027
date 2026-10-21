@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **Liste des opérations lisible et réordonnable** : quatre colonnes (Opération, État, Outil, Temps) qui
+  tiennent dans le dock, stratégie / commandes / Z en infobulle, opération inactive grisée, plus de barre
+  bleue devant chaque cellule de la ligne choisie (elles semblaient se chevaucher). Ordre d'usinage par
+  **glisser-déposer** des lignes ou **Alt+Haut / Alt+Bas**, en plus de Monter / Descendre.
+- **Simulateur** : « Active task dialog found » quand un panneau de tâches était déjà ouvert (simulateur
+  précédent, édition d'une opération FreeCAD). Le simulateur précédent est fermé ; un autre panneau n'est
+  fermé qu'après confirmation.
 - **Poche 3D sur tous les cœurs, interface qui répond** : sur le plateau à 135 alvéoles, la poche passait
   26 s dans les booléens d'OpenCascade, interface figée. La découpe de l'enveloppe des fonds par la pièce et
   les intersections avec les fonds (volume par volume) ainsi que la découpe en niveaux (`Path.Area`, niveau

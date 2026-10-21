@@ -980,5 +980,6 @@
   "{n} triangles, too large to convert to a solid": "{n} triangles, trop gros pour la conversion en solide",
   "{name}: {why}, kept as a mesh: it cannot be machined with this FreeCAD version": "{name} : {why}, gardé en maillage : il ne peut pas être usiné avec cette version de FreeCAD",
   "{name}: {why}, imported as a 3D surface: only 3D surface finishing (surface, waterline) can machine it": "{name} : {why}, importé comme surface 3D : seules les finitions 3D (surface, Z constant) peuvent l'usiner",
-  "{op}: the part is a 3D surface from a mesh (not a solid): only 3D surface finishing (surface, waterline) can machine it": "{op} : la pièce est une surface 3D issue d'un maillage (pas un solide) : seules les finitions 3D (surface, Z constant) peuvent l'usiner"
+  "{op}: the part is a 3D surface from a mesh (not a solid): only 3D surface finishing (surface, waterline) can machine it": "{op} : la pièce est une surface 3D issue d'un maillage (pas un solide) : seules les finitions 3D (surface, Z constant) peuvent l'usiner",
+  "Another task panel is open. Close it (unsaved changes in it are lost) and start the simulation?": "Un autre panneau de tâches est ouvert. Le fermer (ses modifications non validées sont perdues) et lancer la simulation ?"
 }

@@ -436,6 +436,26 @@ class TestUiLogic(unittest.TestCase):
         self.assertLess(rep0["gouge_max"], 0.05, rep0)
         proj.close()
 
+    def test_move_operation_to(self):
+        """Ordre d'usinage : une opération placée à un rang donné (glisser-déposer du panneau Projet)."""
+        proj = self._project("Order")
+        part = proj.import_model(self.step).objects[0]
+        proj.create_job([part])
+        clone = proj.job.Model.Group[0]
+        lib = proj.library
+        e = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(e.id)[0]
+        ops = [proj.add_operation("profile", "Op %d" % k, asm.id, e.presets[0].id, base=[(clone, [])])[0] for k in range(3)]
+        names = lambda: [o.Label for o in proj.operations()]  # noqa: E731
+        self.assertEqual(names(), ["Op 0", "Op 1", "Op 2"])
+        self.assertEqual(proj.move_operation_to(ops[2], 0), 0)
+        self.assertEqual(names(), ["Op 2", "Op 0", "Op 1"])
+        proj.move_operation_to(ops[2], 2)
+        self.assertEqual(names(), ["Op 0", "Op 1", "Op 2"])
+        proj.move_operation_to(ops[0], 99)  # au-delà : dernière
+        self.assertEqual(names(), ["Op 1", "Op 2", "Op 0"])
+        proj.close()
+
     def test_adaptive_projection_fallback(self):
         """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion
         des projections face par face est gardée (sinon l'ébauche 3D entière échoue sans parcours)."""

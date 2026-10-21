@@ -913,9 +913,17 @@ class ProjectPanel(QtWidgets.QWidget):
             self.step_rows[key] = (status, text, btn, label)
         lay.addLayout(steps)
 
-        self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels([tr("Operation"), tr("State"), tr("Strategy"), tr("Tool"), tr("Commands"),
-                                   tr("Z (mm)"), tr("Time (estimate)")])
+        self.tree = _OperationTree(self.move_to)
+        # quatre colonnes lisibles dans un dock étroit (stratégie, commandes et Z : infobulle de la ligne)
+        self.tree.setHeaderLabels([tr("Operation"), tr("State"), tr("Tool"), tr("Time (estimate)")])
+        header = self.tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        for col in (1, 2, 3):
+            header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeToContents)
+        self.tree.setTextElideMode(QtCore.Qt.ElideRight)
+        self.tree.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.tree.setAllColumnsShowFocus(True)
         self.tree.headerItem().setToolTip(1, tr("To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine."))
         self.tree.setRootIsDecorated(False)
         self.tree.setMinimumHeight(160)  # au moins quatre lignes d'opérations visibles
@@ -1045,13 +1053,17 @@ class ProjectPanel(QtWidgets.QWidget):
                 strategy_text = tr(STRATEGIES.get(kind, {}).get("label", extra_labels.get(kind, kind)))
                 if rec.get("index_deg") is not None:
                     strategy_text += "  @A%g" % rec["index_deg"]
-            item = QtWidgets.QTreeWidgetItem([
-                op.Label, tr(state_label), strategy_text, tool_text,
-                str(s["commands"]) if base.Active else tr("(inactive)"),
-                "%.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0) if s["commands"] else "",
-                str(s["cycle_time"] or ""),
-            ])
+            item = QtWidgets.QTreeWidgetItem([op.Label, tr(state_label), tool_text, str(s["cycle_time"] or "")])
             item.setData(0, QtCore.Qt.UserRole, op.Name)
+            row_tip = "%s\n%s : %s" % (strategy_text, tr("Commands"),
+                                       s["commands"] if base.Active else tr("(inactive)"))
+            if s["commands"]:
+                row_tip += "\nZ (mm) : %.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0)
+            for col in range(1, 4):
+                item.setToolTip(col, row_tip)
+            if not base.Active:  # opération décochée : ligne grisée
+                for col in range(4):
+                    item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.color("muted"))))
             if indexing.is_index_op(op):
                 item.setIcon(0, theme.icon("axis-a"))
                 item.setToolTip(0, tr("Rebuilt automatically in front of each change of A angle."))
@@ -1067,11 +1079,10 @@ class ProjectPanel(QtWidgets.QWidget):
                 tips.append(tr("No cutting move: check the geometry, the depths and the tool."))
                 for col in range(item.columnCount()):
                     item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.status_color("error"))))
-            if tips:
-                item.setToolTip(0, "\n".join(tips))
+            item.setToolTip(0, "\n".join([op.Label, row_tip] + tips))
+            if indexing.is_index_op(op):
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsDragEnabled)
             self.tree.addTopLevelItem(item)
-        for col in range(self.tree.columnCount()):
-            self.tree.resizeColumnToContents(col)
         if ops:
             detail = "%d %s" % (len(ops), tr("operations")) + ((", %d %s" % (bad, tr("invalid"))) if bad else "")
             if total_seconds:
@@ -1172,6 +1183,23 @@ class ProjectPanel(QtWidgets.QWidget):
 
         opeditor.open_editor(proj, proj.base_operation(op))
 
+    def move_to(self, name, index):
+        """Glisser-déposer : l'opération ``name`` prend le rang ``index`` parmi les opérations (positionnements A
+        exclus, recréés automatiquement)."""
+        proj = state.active_project()
+        if proj is None:
+            return
+        op = proj.doc.getObject(name)
+        if op is None:
+            return
+        try:
+            proj.move_operation_to(op, index)
+            proj.compute()
+        except Exception as exc:
+            _warn(tr_msg(exc))
+        self.refresh()
+        self._reselect(name)
+
     def move_selected(self, delta):
         proj, op = self._selected()
         if op is None:
@@ -1266,6 +1294,75 @@ def show_tool_library():
 
 def ensure_project_panel():
     return _dock("Project", tr("CAM2027 project"), ProjectPanel, QtCore.Qt.RightDockWidgetArea)
+
+
+class _OperationTree(QtWidgets.QTreeWidget):
+    """Liste des opérations : ordre d'usinage changé par glisser-déposer (ou Alt+Haut / Alt+Bas). Qt ne
+    déplace rien lui-même : le rang visé est transmis au projet, qui réordonne le job puis la liste est
+    reconstruite (positionnements A recréés)."""
+
+    def __init__(self, on_move):
+        super(_OperationTree, self).__init__()
+        self.on_move = on_move
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
+        self.setDefaultDropAction(QtCore.Qt.MoveAction)
+
+    def _op_rank(self, row):
+        """Rang parmi les opérations (lignes de positionnement A non comptées) de la ligne ``row``."""
+        rank = 0
+        for i in range(min(row, self.topLevelItemCount())):
+            if self.topLevelItem(i).flags() & QtCore.Qt.ItemIsDragEnabled:
+                rank += 1
+        return rank
+
+    def drop_rank(self, src_row, target_row, where):
+        """Rang visé (parmi les opérations) quand la ligne ``src_row`` est déposée ``where`` (« above »,
+        « below », « on », « end ») la ligne ``target_row`` (None : sous la dernière)."""
+        if target_row is None or where == "end":
+            row = self.topLevelItemCount()
+        else:
+            row = target_row
+            if where == "below" or (where == "on" and target_row > src_row):  # sur une ligne : prend sa place
+                row += 1
+        rank = self._op_rank(row)
+        if row > src_row:
+            rank -= 1  # la ligne déplacée libère sa place
+        return max(0, rank)
+
+    def dropEvent(self, event):
+        source = self.currentItem()
+        if source is None:
+            event.ignore()
+            return
+        target = self.itemAt(_event_pos(event))
+        pos = self.dropIndicatorPosition()
+        where = {QtWidgets.QAbstractItemView.AboveItem: "above", QtWidgets.QAbstractItemView.BelowItem: "below",
+                 QtWidgets.QAbstractItemView.OnItem: "on"}.get(pos, "end")
+        rank = self.drop_rank(self.indexOfTopLevelItem(source),
+                              None if target is None else self.indexOfTopLevelItem(target), where)
+        event.setDropAction(QtCore.Qt.IgnoreAction)
+        event.accept()
+        name = source.data(0, QtCore.Qt.UserRole)
+        QtCore.QTimer.singleShot(0, lambda: self.on_move(name, rank))
+
+    def keyPressEvent(self, event):
+        if event.modifiers() & QtCore.Qt.AltModifier and event.key() in (QtCore.Qt.Key_Up, QtCore.Qt.Key_Down):
+            item = self.currentItem()
+            if item is not None and item.flags() & QtCore.Qt.ItemIsDragEnabled:
+                row = self.indexOfTopLevelItem(item)
+                rank = self._op_rank(row) + (-1 if event.key() == QtCore.Qt.Key_Up else 1)
+                self.on_move(item.data(0, QtCore.Qt.UserRole), max(0, rank))
+            event.accept()
+            return
+        super(_OperationTree, self).keyPressEvent(event)
+
+
+def _event_pos(event):
+    pos = event.position() if hasattr(event, "position") else event.pos()
+    return pos.toPoint() if hasattr(pos, "toPoint") else pos
 
 
 class _StepLabel(QtWidgets.QLabel):

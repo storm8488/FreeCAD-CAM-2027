@@ -159,7 +159,8 @@ QTreeWidget, QTableWidget, QListWidget {{ background-color: {background}; altern
     border: 1px solid {divider}; border-radius: {rinput}px; gridline-color: {divider}; }}
 QTreeWidget::item, QTableWidget::item, QListWidget::item {{ min-height: {row}px; }}
 QTreeWidget::item:selected, QTableWidget::item:selected, QListWidget::item:selected {{
-    background-color: {selected}; color: {selectedText}; border-left: 3px solid {primary}; }}
+    background-color: {selected}; color: {selectedText}; }}
+QTreeWidget::item:selected:first, QTableWidget::item:selected:first {{ border-left: 3px solid {primary}; }}
 QHeaderView::section {{ background-color: {raised}; color: {muted}; border: none; border-bottom: 1px solid {divider};
     padding: {xs}px {sm}px; font-weight: 600; }}
 QScrollArea {{ border: none; }}

@@ -892,6 +892,8 @@ class Simulate(_Base):
         proj.doc.recompute()
         FreeCADGui.Selection.clearSelection()
         FreeCADGui.Selection.addSelection(proj.job)
+        if not free_task_panel():
+            return
         if name == "CAM_SimulatorGL":
             excluded = start_simulator(proj)
             if excluded:
@@ -901,6 +903,33 @@ class Simulate(_Base):
 
 
 _simulation = None  # garde le simulateur en vie (sinon le ramasse-miettes ferme sa fenêtre)
+
+
+def free_task_panel():
+    """FreeCAD n'ouvre qu'un panneau de tâches à la fois : « Active task dialog found » au lancement du
+    simulateur si un autre est ouvert. Le simulateur précédent est fermé ; un autre panneau (édition d'une
+    opération FreeCAD...) n'est fermé qu'avec l'accord de l'utilisateur. Retourne True si la place est libre."""
+    dialog = FreeCADGui.Control.activeDialog()
+    if not dialog:
+        return True
+    previous = _simulation
+    if previous is not None and getattr(previous, "taskForm", None) is not None:
+        try:
+            FreeCADGui.Control.closeDialog()
+            QtWidgets.QApplication.processEvents()
+            if not FreeCADGui.Control.activeDialog():
+                return True
+        except Exception:
+            pass
+    answer = QtWidgets.QMessageBox.question(
+        FreeCADGui.getMainWindow(), "CAM2027",
+        tr("Another task panel is open. Close it (unsaved changes in it are lost) and start the simulation?"),
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+    if answer != QtWidgets.QMessageBox.Yes:
+        return False
+    FreeCADGui.Control.closeDialog()
+    QtWidgets.QApplication.processEvents()
+    return not FreeCADGui.Control.activeDialog()
 
 
 def start_simulator(proj, play=True):

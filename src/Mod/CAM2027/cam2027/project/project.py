@@ -1052,6 +1052,12 @@ class Project(object):
             self._renumber()
         return j
 
+    def move_operation_to(self, op, index):
+        """Place l'opération au rang ``index`` de l'ordre d'usinage (positionnements A non comptés) ; retourne
+        son rang."""
+        group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
+        return self.move_operation(op, int(index) - group.index(op))
+
     def duplicate_operation(self, op):
         """Copie l'opération (mêmes outil, préréglage, géométrie et valeurs courantes ; habillages non copiés)
         juste après l'original."""
