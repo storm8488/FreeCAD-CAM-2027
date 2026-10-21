@@ -151,12 +151,23 @@ HOLE_STRATEGIES = ("drilling", "helix", "threadmill")
 MAX_CLASSIC_ROUGH_FACES = 200
 
 _MILLS = ("endmill", "bullnose", "ballend")
-#: types d'outil de la bibliothèque proposés pour chaque stratégie (le premier présent est présélectionné)
+#: types d'outil de la bibliothèque proposés pour chaque stratégie, dans l'ordre de préférence (le premier
+#: présent est présélectionné), d'après l'usage de chaque fraise dans Fusion, limités aux formes que FreeCAD
+#: sait calculer et simuler :
+#: - surfaçage : fraise à surfacer (son usage), puis fraise deux tailles ou torique ;
+#: - contour 2D : fraises deux tailles / torique / boule, et queue d'aronde, à rainurer, lollipop pour les
+#:   contre-dépouilles et rainures latérales ;
+#: - poches, adaptative, hélice : fraises qui coupent au centre (pas de fraise à surfacer ni à rainurer) ;
+#: - ébauche 3D : deux tailles, torique, boule (Fusion accepte la boule en ébauche adaptative) ;
+#: - finitions 3D : boule d'abord, torique, conique à bout rond, deux tailles ;
+#: - perçage : foret, ou fraise deux tailles en plongée ; filetage : fraise à fileter ;
+#: - V-carving, chanfrein : outils à pointe en V ; gravure : en V, boule ou deux tailles.
 TOOLS_FOR = {
-    "profile": _MILLS, "pocket": _MILLS, "pocket2d": _MILLS, "adaptive": ("endmill", "bullnose"),
-    "millface": ("facemill", "endmill", "bullnose"), "slot": _MILLS, "helix": ("endmill", "bullnose"),
-    "rough3d": ("endmill", "bullnose"), "surface3d": ("ballend", "bullnose", "taperedball", "endmill"),
-    "waterline": ("ballend", "bullnose", "endmill"), "drilling": ("drill",), "threadmill": ("threadmill",),
+    "profile": _MILLS + ("dovetail", "slot", "lollipop"), "pocket": _MILLS, "pocket2d": _MILLS,
+    "adaptive": ("endmill", "bullnose"), "millface": ("facemill", "endmill", "bullnose"),
+    "slot": _MILLS + ("slot",), "helix": ("endmill", "bullnose"),
+    "rough3d": ("endmill", "bullnose", "ballend"), "surface3d": ("ballend", "bullnose", "taperedball", "endmill"),
+    "waterline": ("ballend", "bullnose", "endmill"), "drilling": ("drill", "endmill"), "threadmill": ("threadmill",),
     "vcarve": ("vbit", "engrave", "chamfer"), "engrave": ("vbit", "engrave", "chamfer", "ballend", "endmill"),
     "chamfer": ("chamfer", "vbit", "engrave"),
 }
@@ -233,6 +244,13 @@ def top_faces(obj, tol=1e-6):
     """Faces planes horizontales au sommet du solide (surfaçage)."""
     top = obj.Shape.BoundBox.ZMax
     return ["Face%d" % i for i, f in _horizontal_planes(obj.Shape, tol) if abs(f.BoundBox.ZMax - top) < 1e-3]
+
+
+def stock_top_face(stock):
+    """Nom de la face du dessus du brut (surfaçage sans face plane au sommet de la pièce)."""
+    faces = stock.Shape.Faces
+    k = max(range(len(faces)), key=lambda i: (faces[i].BoundBox.ZMin, faces[i].Area))
+    return "Face%d" % (k + 1)
 
 
 def auto_geometry(kind, models):

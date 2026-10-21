@@ -36,7 +36,8 @@ class TestUiLogic(unittest.TestCase):
         by_type = {t.tool_type: t for t in lib.tools.values()}
         self.assertFalse(opsmod.tool_fits("vcarve", by_type["endmill"]))  # le bug : V-carving avec une fraise plate
         self.assertTrue(opsmod.tool_fits("vcarve", by_type["vbit"]))
-        self.assertFalse(opsmod.tool_fits("drilling", by_type["endmill"]))
+        self.assertTrue(opsmod.tool_fits("drilling", by_type["endmill"]))  # perçage par plongée (Fusion)
+        self.assertFalse(opsmod.tool_fits("drilling", by_type["ballend"]))
         self.assertTrue(opsmod.tool_fits("profile", by_type["endmill"]))
         self.assertFalse(opsmod.tool_fits("threadmill", by_type["endmill"]))
         self.assertLess(opsmod.tool_rank("surface3d", by_type["ballend"]), opsmod.tool_rank("surface3d", by_type["endmill"]))
@@ -494,6 +495,53 @@ class TestUiLogic(unittest.TestCase):
         proj.compute()
         self.assertIn(proj.operation_state(op), ("computed", "warning"))
         proj.close()
+
+    def test_facing_a_mesh_surface(self):
+        """Surfaçage d'une pièce en surface 3D (STL ouvert) : refusé auparavant (« seules les finitions 3D »).
+        Comme Fusion, le dessus du brut est surfacé jusqu'au haut de la pièce, sur tout le brut."""
+        import Mesh
+
+        from cam2027.gui.commands import default_params
+
+        proj = self._project("FaceSurf")
+        m = Mesh.createBox(40, 30, 10)
+        m.removeFacets([0, 1])
+        path = os.path.join(self.tmp, "open_face.stl")
+        m.write(path)
+        res = proj.import_model(path)
+        if res.kind != "surface":
+            self.skipTest("FreeCAD sans conversion de maillage sans couture")
+        proj.create_job(proj.model_candidates(), stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        self.assertEqual(opsmod.auto_geometry("millface", [clone]), [])  # aucune face plane : surface 3D
+        lib = proj.library
+        e = lib.search("6 mm flat end mill")[0]
+        params = default_params("millface", e, e.presets[0].resolve(e))
+        params.update({"BoundaryShape": "Stock", "FinalDepth": clone.Shape.BoundBox.ZMax})
+        op, _rec = proj.add_operation("millface", "Surfacage", lib.assemblies_for_tool(e.id)[0].id, e.presets[0].id,
+                                      base=[(proj.job.Stock, [opsmod.stock_top_face(proj.job.Stock)])], params=params)
+        proj.compute()
+        self.assertIn(proj.operation_state(op), ("computed", "warning"))
+        s = opsmod.toolpath_summary(op)
+        self.assertAlmostEqual(s["zmin"], clone.Shape.BoundBox.ZMax, places=3)  # jusqu'au haut de la pièce
+        rep = proj.material_check()
+        self.assertLess(rep["gouge_max"], 0.03)
+        stock_area = 44.0 * 34.0
+        self.assertAlmostEqual(rep["removed_volume"], stock_area * 1.0, delta=0.05 * stock_area)  # 1 mm sur tout le brut
+        proj.close()
+
+    def test_tool_types_per_strategy(self):
+        """Correspondance fraise -> stratégies (usage Fusion) : fraise à surfacer pour le surfaçage, pas pour les
+        poches ni l'adaptative (elle ne coupe pas au centre) ; queue d'aronde / rainurer en contour ; boule en
+        ébauche 3D ; fraise deux tailles en perçage par plongée."""
+        self.assertIn("facemill", opsmod.TOOLS_FOR["millface"])
+        self.assertEqual(opsmod.TOOLS_FOR["millface"][0], "facemill")  # présélectionnée pour le surfaçage
+        for kind in ("pocket", "adaptive", "rough3d", "helix", "drilling"):
+            self.assertNotIn("facemill", opsmod.TOOLS_FOR[kind], kind)
+        for t in ("dovetail", "slot", "lollipop"):
+            self.assertIn(t, opsmod.TOOLS_FOR["profile"])
+        self.assertIn("ballend", opsmod.TOOLS_FOR["rough3d"])
+        self.assertIn("endmill", opsmod.TOOLS_FOR["drilling"])
 
     def test_adaptive_projection_fallback(self):
         """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion

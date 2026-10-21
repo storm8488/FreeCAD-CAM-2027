@@ -523,6 +523,8 @@ class AddOperation(_Base):
         values = tool.preset(preset.currentData()).resolve(tool)
         k = kind.currentData()
         params = default_params(k, tool, values)
+        if k == "millface" and base and all(not subs for _o, subs in base):
+            base = []  # pièce sélectionnée en entier : comme sans sélection (faces du dessus, sinon dessus du brut)
         explicit = bool(base)
         if not base:
             models = list(proj.job.Model.Group)  # toute la pièce : chaque objet du modèle, pas seulement le premier
@@ -531,6 +533,12 @@ class AddOperation(_Base):
                 base = [(m, []) for m in models]
             elif auto:
                 base = auto
+            elif k == "millface":
+                # pas de face plane au sommet (surface 3D d'un STL, dessus bombé) : comme le surfaçage de Fusion,
+                # le dessus du brut est surfacé jusqu'au haut de la pièce, sur tout le brut
+                base = [(proj.job.Stock, [opsmod.stock_top_face(proj.job.Stock)])]
+                params.update({"BoundaryShape": "Stock",
+                               "FinalDepth": max(m.Shape.BoundBox.ZMax for m in models)})
             else:
                 _warn(tr("Nothing to machine found automatically for this strategy: select the faces in the 3D view (click, Ctrl+click), then add the operation."))
                 return

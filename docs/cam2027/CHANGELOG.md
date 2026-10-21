@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **Surfaçage avec une fraise à surfacer, y compris sur un STL** : le surfaçage refusait la pièce issue d'un
+  maillage (« surface 3D », fichier ER16 de l'utilisateur) et proposait une fraise droite. Il usine maintenant
+  le dessus du brut jusqu'au haut de la pièce (limite = brut) quand il n'y a pas de face plane du dessus, et la
+  pièce entière sélectionnée vaut sans sélection. Types d'outils par stratégie revus d'après l'usage Fusion :
+  surfaçage -> fraise à surfacer d'abord (puis fraise droite, torique) ; perçage -> foret (fraise droite
+  admise) ; finition 3D -> boule, torique, boule conique, droite ; ébauche 3D -> droite, torique, boule ;
+  chanfrein -> fraise à chanfreiner, V-bit, gravure. Au changement de stratégie, l'outil le plus adapté est
+  repris (sauf outil choisi par l'utilisateur et compatible).
 - **Choix de l'outil comme Fusion** : plus d'« assemblage d'outil » dans l'interface. Dans une opération (ajout,
   éditeur, fond plat, incrustation, gravure enroulée) : « Outil [Sélectionner…] [Éditer…] » et la liste des
   outils déjà utilisés dans le document. « Sélectionner… » ouvre la bibliothèque : tableau (#n - Ø, nom, type,

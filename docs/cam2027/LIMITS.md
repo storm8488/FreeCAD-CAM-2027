@@ -81,7 +81,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   travers le surplomb). Un fond partiellement couvert est écarté en entier : le sélectionner à la main.
 - La poche FreeCAD (décalage/zigzag) **n'est pas** adaptative ; « adaptative » est
   l'opération Adaptive de FreeCAD (engagement contrôlé 2D, monothread).
-- Surfaçage : faces planes ; avec `ClearEdges` (activé par le dialogue) le centre de
+- Surfaçage : faces planes (la pièce entière sélectionnée vaut sans sélection : faces du dessus, sinon dessus du
+  brut) ; avec `ClearEdges` (activé par le dialogue) le centre de
   l'outil dépasse juste les bords de la face (la fraise déborde d'un rayon + 0,1 mm).
 - Fraisage de filets (`Path.Op.ThreadMilling`) : un nom de filet (`ThreadName`) est résolu
   en diamètres/pas depuis les tables CSV de FreeCAD (`Mod/CAM/Data/Threads`) comme le fait
@@ -184,8 +185,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 ## Import et pièce
 
 - Maillages (STL, OBJ...) : fermé et jusqu'à 200 000 triangles -> solide affiné ; ouvert ou plus gros ->
-  **surface 3D** (faces du maillage, non cousues) : brut et finitions 3D (surface, Z constant) seulement,
-  avec `BoundBox = Stock` ; contour, poche, adaptative, ébauche 3D, perçage, gravure... refusés sur une
+  **surface 3D** (faces du maillage, non cousues) : brut, surfaçage (dessus du brut jusqu'au haut de la pièce,
+  limite = brut) et finitions 3D (surface, Z constant) seulement, avec `BoundBox = Stock` ; contour, poche, adaptative, ébauche 3D, perçage, gravure... refusés sur une
   surface. Sur FreeCAD 1.0 (pas de conversion sans couture), un tel maillage reste un maillage et ne peut pas
   être usiné (dit à l'import et au brut). Une surface de 215 000 faces pèse dans la vue 3D et dans le fichier.
 - Un fichier importé deux fois est signalé ; ses corps en double sont ignorés par « Brut et montage ».

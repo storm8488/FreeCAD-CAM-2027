@@ -71,6 +71,7 @@ class ToolField(QtWidgets.QWidget):
         self.kind = kind
         self.accept = accept  # filtre propre au dialogue (fraise plate, V-bit...) ; sinon la stratégie
         self._asm_id = None
+        self.user_chose = False  # outil choisi par l'utilisateur : gardé quand la stratégie change
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         row = QtWidgets.QHBoxLayout()
@@ -136,6 +137,7 @@ class ToolField(QtWidgets.QWidget):
     def _on_combo(self, index):
         aid = self.combo.itemData(index)
         if aid and aid != self._asm_id:
+            self.user_chose = True
             self.set_assembly(aid)
 
     def fits(self, tool):
@@ -146,21 +148,20 @@ class ToolField(QtWidgets.QWidget):
         return tool_fits(self.kind, tool) if self.kind else True
 
     def set_kind(self, kind, pick_default=True):
-        """Stratégie changée : garde l'outil s'il convient ; sinon un outil compatible déjà utilisé dans le
-        document, à défaut le meilleur outil compatible de la bibliothèque du projet."""
+        """Stratégie changée : garde l'outil choisi par l'utilisateur s'il convient ; sinon le type le plus
+        adapté à la stratégie, de préférence un outil déjà utilisé dans le document."""
         from ..project.operations import tool_rank
 
         self.kind = kind
         tool = self.tool()
-        if tool is not None and (self.fits(tool) or not pick_default):
+        if tool is not None and ((self.user_chose and self.fits(tool)) or not pick_default):
             return
         lib = self.proj.library
-        used = [aid for aid in self._used() if self.fits(lib.tool(lib.assembly(aid).tool_id))]
-        if used:
-            self.set_assembly(used[0])
-            return
+        used = set(self._used())
         fitting = [a for a in lib.assemblies.values() if self.fits(lib.tool(a.tool_id))]
-        fitting.sort(key=lambda a: (tool_rank(kind, lib.tool(a.tool_id)) if kind else 0, a.output.tool_number))
+        # le type le plus adapté d'abord (fraise à surfacer pour un surfaçage), puis un outil déjà utilisé
+        fitting.sort(key=lambda a: (tool_rank(kind, lib.tool(a.tool_id)) if kind else 0, a.id not in used,
+                                    a.output.tool_number))
         self.set_assembly(fitting[0].id if fitting else None)
 
     # -- boutons -----------------------------------------------------------------------------------
@@ -172,6 +173,7 @@ class ToolField(QtWidgets.QWidget):
             return
         asm_id = assembly_for(self.proj, dlg.selected)
         if asm_id is not None:
+            self.user_chose = True
             self.set_assembly(asm_id)
 
     def edit(self):
