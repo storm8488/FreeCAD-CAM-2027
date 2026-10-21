@@ -69,6 +69,44 @@ class TestUiLogic(unittest.TestCase):
         self.assertEqual(opsmod.pocket_floor_faces(tee), [])
         proj.close()
 
+    def test_pocket_floor_faces_fast_same_list(self):
+        """Fonds de poche : le tri rapide (faces voisines) rend exactement la liste de l'intersection complète
+        avec la pièce, sur un plateau avec surplomb, rampe, gradin et alvéoles rondes."""
+        V = FreeCAD.Vector
+        tray = Part.makeBox(120, 80, 20)
+        for k in range(4):  # alvéoles carrées dégagées, à profondeurs variées
+            tray = tray.cut(Part.makeBox(15, 15, 6 + 2 * k, V(5 + 20 * k, 5, 20 - 6 - 2 * k)))
+        for k in range(3):  # alvéoles rondes (fond plan, paroi cylindrique)
+            tray = tray.cut(Part.makeCylinder(6, 8, V(15 + 25 * k, 40, 12)))
+        tray = tray.cut(Part.makeBox(20, 20, 10, V(90, 5, 10)))  # gradin : deux fonds étagés
+        tray = tray.cut(Part.makeBox(10, 20, 5, V(90, 5, 5)))
+        # rainure en T : fond sous surplomb (exclu), goulotte au-dessus (fond dégagé partiel exclu aussi)
+        tray = tray.cut(Part.makeBox(30, 15, 4, V(5, 58, 6))).cut(Part.makeBox(10, 15, 10, V(15, 58, 10)))
+        # fond partiellement couvert par une rampe inclinée (face non verticale au-dessus d'une partie du fond)
+        tray = tray.cut(Part.makeBox(20, 15, 8, V(50, 58, 8)))
+        ramp = Part.Face(Part.makePolygon([V(50, 58, 20), V(50, 58, 12), V(60, 58, 20), V(50, 58, 20)]))
+        tray = tray.fuse(ramp.extrude(V(0, 15, 0))).removeSplitter()
+        obj = type("Obj", (), {})()
+        obj.Shape = tray
+
+        def reference(o):  # algorithme d'origine : intersection complète de la colonne avec la pièce
+            shape, out = o.Shape, []
+            bb = shape.BoundBox
+            for i, f in opsmod._horizontal_planes(shape):
+                if not bb.ZMin + 1e-3 < f.BoundBox.ZMin < bb.ZMax - 1e-3:
+                    continue
+                above = f.copy()
+                above.translate(V(0, 0, 1e-3))
+                if above.extrude(V(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0)).common(shape).Volume > 1e-3:
+                    continue
+                out.append("Face%d" % i)
+            return out
+
+        expected = reference(obj)
+        self.assertEqual(opsmod.pocket_floor_faces(obj), expected)
+        zs = sorted(round(tray.getElement(n).BoundBox.ZMin, 3) for n in expected)
+        self.assertEqual(zs, [5.0, 8.0, 10.0, 10.0, 12.0, 12.0, 12.0, 12.0, 14.0])  # ni le fond en T ni sous la rampe
+
     def test_model_candidates_and_mesh(self):
         import Mesh
 

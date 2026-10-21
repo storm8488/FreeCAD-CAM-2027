@@ -193,16 +193,40 @@ def pocket_floor_faces(obj, tol=1e-6):
 
     shape = obj.Shape
     bb = shape.BoundBox
+    # Matière dans la colonne au-dessus du fond ⇔ une face non verticale de la pièce y entre (en montant depuis
+    # un point de matière, on sort par une telle face, toujours dans la colonne). Le test face à face sur les
+    # seules faces voisines (boîtes englobantes) écarte vite les fonds dégagés ; l'intersection complète avec
+    # la pièce (lente : 1553 faces → 9 s pour 135 fonds) ne tranche plus que les fonds douteux.
+    tilted = []
+    for g in shape.Faces:
+        try:
+            vertical = g.Surface.__class__.__name__ == "Plane" and abs(g.normalAt(0, 0).z) < 1e-9
+        except Exception:
+            vertical = False
+        if not vertical:
+            tilted.append((g, g.BoundBox))
     out = []
     for i, f in _horizontal_planes(shape, tol):
         if not bb.ZMin + 1e-3 < f.BoundBox.ZMin < bb.ZMax - 1e-3:
             continue
         above = f.copy()
         above.translate(FreeCAD.Vector(0, 0, 1e-3))
-        if above.extrude(FreeCAD.Vector(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0)).common(shape).Volume > 1e-3:
+        column = above.extrude(FreeCAD.Vector(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0))
+        if _column_touched(column, tilted) and column.common(shape).Volume > 1e-3:
             continue
         out.append("Face%d" % i)
     return out
+
+
+def _column_touched(column, faces, eps=1e-6):
+    cb = column.BoundBox
+    for g, gb in faces:
+        if (gb.XMax <= cb.XMin + eps or gb.XMin >= cb.XMax - eps or gb.YMax <= cb.YMin + eps
+                or gb.YMin >= cb.YMax - eps or gb.ZMax <= cb.ZMin + eps):
+            continue
+        if g.common(column).Area > eps:
+            return True
+    return False
 
 
 def top_faces(obj, tol=1e-6):
