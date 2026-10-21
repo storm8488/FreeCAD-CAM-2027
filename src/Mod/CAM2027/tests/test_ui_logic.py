@@ -309,6 +309,7 @@ class TestUiLogic(unittest.TestCase):
             p = default_params(kind, flat, flat.presets[0].resolve(flat))
             self.assertEqual(p["LiftDistance"], p["StepDown"])
             self.assertGreater(p["LiftDistance"], 0)
+            self.assertAlmostEqual(p["HelixDiameterLimit"], 2.0)  # fraise de 6 : hélice de 2 mm
 
     def test_parallel_roughing_matches_serial(self):
         """Ébauche 3D : régions des niveaux préparées dans des processus = régions calculées ici (aires et
