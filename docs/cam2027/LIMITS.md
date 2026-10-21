@@ -47,7 +47,7 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   V-carving, alésage hélicoïdal, rainure, fraisage de filets, chanfreinage, poche 2D,
   **finition 3D de surface et en Z constant** (OpenCamLib, 3 axes : balayage rotatif non exposé ;
   échantillonnage par défaut 0,1 mm : à 0,5 mm les segments entre échantillons coupaient le haut des
-  parois, 1,45 mm d'entaille sur la plaque de test ;
+  parois, 0,25 mm d'entaille réelle sur la plaque de test ;
   **ébauche 3D** = adaptative niveau par niveau ; pièce entière sur FreeCAD 1.1 : mode « modèle » (pièce
   et brut tranchés à chaque niveau, calcul arrêtable ; quand la réunion des projections d'une tranche
   échoue dans FreeCAD, « Wire is not closed », la réunion face par face est gardée) ; sur 1.0.2 : autour
@@ -141,6 +141,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   le dessus de la pièce au centre d'une colonne, ou à 0,05 mm de lui (colonne pile sur une paroi
   verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
   dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
+  Chaque colonne signalée (les 4 000 plus profondes) est vérifiée en 3D sur la pièce triangulée : l'entaille
+  retenue est la distance du point coupé à la surface (nulle sous un surplomb), pas la hauteur de paroi
+  qu'une fraise tangente fait perdre à la colonne ; une colonne sur le bord de la silhouette (pièce absente
+  à 0,05 mm) n'est pas contrôlée.
   Balayage : fraise plate et boule exactes sur les pentes (disque et sphère balayés le long du segment 3D) ;
   torique et conique prises au point le plus proche sur des morceaux de 0,5 mm / 0,05 mm de dénivelé.
   Segments traités par paquets vectorisés (pré-contrôles de la queue, du porte-outil et des rapides sur

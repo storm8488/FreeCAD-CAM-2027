@@ -172,6 +172,32 @@ class TestZMap(unittest.TestCase):
             auto.sweep_arrays(P0, P1, flat)
             self.assertEqual(int((ref.top != auto.top).sum()), 0)
 
+    def test_refine_gouges(self):
+        """Vérification 3D des entailles : fraise tangente à une paroi raide (0,05 mm dedans) = 0,05 mm, pas la
+        hauteur de la paroi ; sous un surplomb = rien ; vraie plongée dans la pièce = sa profondeur."""
+        V = FreeCAD.Vector
+        # marche : dessus à 10 pour x < 10, à 2 au-delà ; surplomb : dalle 4..6 au-dessus de x 30..40, vide dessous
+        part = Part.makeBox(10, 20, 10).fuse(Part.makeBox(30, 20, 2)).fuse(Part.makeBox(10, 20, 2, V(30, 0, 4)))
+        z = sim.ZMap(0, 0, 50, 20, 12.0, 0.5)
+        flat = sim.ToolProfile("flat", 6.0)
+        z.sweep((13.05, 2, 3.0), (13.05, 18, 3.0), flat)  # bord de la fraise à 10,05 : rien
+        z.sweep((12.95, 2, 3.0), (12.95, 18, 3.0), flat)  # bord à 9,95 : 0,05 mm dans la marche
+        z.sweep((35, 2, 3.0), (35, 18, 3.0), flat)  # sous le surplomb (dalle 4..6) : la carte croit à une entaille
+        z.sweep((5, 10, 8.0), (5, 10, 8.0), flat)  # vraie plongée de 2 mm dans la marche
+        h, low = sim.model_heights(z, [part], lateral=sim.WALL_TOLERANCE)
+        raw = sim.compare(z, h, gouge_heights=low)
+        self.assertGreater(raw["gouge_cells"], 30)
+        fixed = sim.refine_gouges(z, [part], low)
+        rep = sim.compare(z, h, gouge_heights=fixed)
+        self.assertAlmostEqual(rep["gouge_max"], 2.0, delta=0.01)  # la plongée
+        x, y, _z = rep["gouge_at"]
+        self.assertLess(math.hypot(x - 5, y - 10), 3.01)
+        wall = [(i, j) for i in range(z.nx) for j in range(z.ny) if 9.5 < z.xs[i] < 10.0 and 3 < z.ys[j] < 17]
+        self.assertTrue(wall)
+        self.assertTrue(all(fixed[i, j] - z.top[i, j] < 0.06 for i, j in wall))  # paroi : 0,05 au plus
+        under = [(i, j) for i in range(z.nx) for j in range(z.ny) if 31 < z.xs[i] < 39 and 3 < z.ys[j] < 17]
+        self.assertTrue(all(fixed[i, j] - z.top[i, j] <= 1e-9 for i, j in under))  # sous le surplomb : rien
+
     def test_model_heights_vectorized(self):
         """Dessus de la pièce rastérisé par groupes = valeurs attendues (boîte, sphère, parois, hors pièce)."""
         z = sim.ZMap(-5, -5, 25, 25, 20.0, 0.5)
@@ -192,6 +218,16 @@ class TestZMap(unittest.TestCase):
         self.assertEqual(h[i, j], -float("inf"))
         i, j, _x, _y = _cell(z, 12, 3)
         self.assertEqual(h[i, j], -float("inf"))
+        # bord de silhouette : une boîte qui finit à x = 10,26, colonne centrée à 10,25 : dedans au centre, dehors
+        # à +0,05 -> hauteur basse -inf (pas d'entaille comptée sur la hauteur du bord)
+        z2 = sim.ZMap(0, 0, 20, 20, 20.0, 0.5)
+        h2, low2 = sim.model_heights(z2, [Part.makeBox(10.26, 10, 8)], lateral=sim.WALL_TOLERANCE)
+        i, j, x, _y = _cell(z2, 10.25, 5)
+        self.assertAlmostEqual(x, 10.25)
+        self.assertAlmostEqual(h2[i, j], 8.0)
+        self.assertEqual(low2[i, j], -float("inf"))
+        i, j, _x, _y = _cell(z2, 9.75, 5)
+        self.assertAlmostEqual(low2[i, j], 8.0)
 
 
 class TestMaterialCheck(unittest.TestCase):

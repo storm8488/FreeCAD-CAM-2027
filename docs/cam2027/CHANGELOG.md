@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Entailles vérifiées en 3D** : la carte de hauteur transformait un contact latéral de 0,05 mm contre une
+  paroi raide en entaille de toute la hauteur de la paroi (5,09 puis 1,85 mm signalés sur le casse-noix de
+  l'utilisateur, export bloqué). Les colonnes signalées sont maintenant vérifiées sur la pièce triangulée
+  (distance du point coupé à la surface, dedans / dehors par parité) et les colonnes du bord de la
+  silhouette ne sont plus comptées. Casse-noix : 0,069 mm réels (0,070 mesurés indépendamment, boule-
+  maillage) ; plaque à 0,5 mm d'échantillonnage : 0,25 mm réels, toujours bloquant. 85 tests.
 - **Contrôle matière et calcul des parcours accélérés** (demande de l'utilisateur : « le simulateur et la
   génération de parcours sont bien trop lents »). Contrôle matière : balayage par paquets vectorisés
   (segments consécutifs sur leur fenêtre commune, limitée en cellules et en gaspillage), formule exacte de

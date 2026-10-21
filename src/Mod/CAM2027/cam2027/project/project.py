@@ -747,6 +747,9 @@ class Project(object):
                                          lateral=sim.WALL_TOLERANCE)
         self._thread_the_holes(zmap, heights)
         self._thread_the_holes(zmap, low)
+        # entailles vérifiées en 3D : vraie pénétration au lieu de la hauteur de paroi (trous filetés déjà
+        # écartés : ils ne sont plus candidats)
+        low = sim.refine_gouges(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)], low, tolerance)
         report = sim.compare(zmap, heights, tolerance, gouge_heights=low)
         checked = bool(simulated)
         not_run = [label for label, _r in skipped]

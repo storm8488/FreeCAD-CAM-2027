@@ -597,7 +597,7 @@ def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
     """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce).
 
     ``lateral`` > 0 : retourne ``(hauteurs au centre, hauteurs basses)``, les basses étant la plus basse des
-    hauteurs au centre et à ``lateral`` mm de lui (4 directions). Sert au contrôle d'entaille : une colonne
+    hauteurs au centre et à ``lateral`` mm de lui (4 directions ; -inf si l'un de ces points est hors pièce). Sert au contrôle d'entaille : une colonne
     dont le centre tombe pile sur une paroi verticale (grille alignée sur les cotes de la pièce) prendrait
     le haut de la paroi alors que la fraise passe tangente à côté.
 
@@ -664,7 +664,9 @@ def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
         return hs[0]
     low = hs[0].copy()
     for h in hs[1:]:
-        low = np.where(np.isfinite(h), np.minimum(low, h), low)
+        # hors pièce à ``lateral`` mm (-inf) : colonne sur le bord de la silhouette, pas contrôlée non plus
+        # (une colonne pile sur le bord d'un surplomb comptait toute sa hauteur comme entaillée)
+        low = np.minimum(low, h)
     return hs[0], low
 
 
@@ -694,6 +696,130 @@ def surface_mesh(zmap, mask=None, lift=0.0):
     d = np.stack([x0, y1, z], axis=1)
     tri = np.concatenate([np.stack([a, b, c], axis=1), np.stack([a, c, d], axis=1)]).reshape(-1, 3)
     return Mesh.Mesh([tuple(p) for p in tri.tolist()])
+
+
+#: entailles vérifiées en 3D (distance exacte à la pièce) : les plus profondes d'abord, au plus tant de colonnes
+REFINE_MAX_CELLS = 4000
+#: portée de la recherche de la surface autour d'une colonne entaillée (mm) ; au-delà, l'entaille verticale
+#: est gardée
+REFINE_REACH = 10.0
+_BUCKET_MM = 2.0
+
+
+def _triangles(shapes, deflection):
+    """Triangles ``(A, B, C)`` (tableaux ``(n, 3)``) des formes, triangulées sur une copie."""
+    np = _np()
+    As, Bs, Cs = [], [], []
+    for shape in shapes:
+        try:
+            fresh = shape.copy(True, False)
+        except TypeError:
+            fresh = shape
+        points, triangles = fresh.tessellate(deflection)
+        if not triangles:
+            continue
+        pts = np.array([[v.x, v.y, v.z] for v in points])
+        tri = np.asarray(triangles, dtype=int)
+        As.append(pts[tri[:, 0]]); Bs.append(pts[tri[:, 1]]); Cs.append(pts[tri[:, 2]])
+    if not As:
+        z = np.zeros((0, 3))
+        return z, z, z
+    return np.concatenate(As), np.concatenate(Bs), np.concatenate(Cs)
+
+
+def _point_triangle_distance(p, A, B, C):
+    """Distance du point ``p`` à chaque triangle (vectorisé) : projection sur le plan si elle tombe dans le
+    triangle, sinon distance aux trois arêtes."""
+    np = _np()
+
+    def seg(P0, P1):
+        d = P1 - P0
+        L2 = (d * d).sum(1)
+        t = np.clip(((p - P0) * d).sum(1) / np.where(L2 > 0, L2, 1.0), 0.0, 1.0)
+        return np.linalg.norm(p - (P0 + d * t[:, None]), axis=1)
+
+    ab, ac = B - A, C - A
+    n = np.cross(ab, ac)
+    nn = np.linalg.norm(n, axis=1)
+    ok = nn > 1e-15
+    nu = n / np.where(ok, nn, 1.0)[:, None]
+    dist_plane = ((p - A) * nu).sum(1)
+    q = p - nu * dist_plane[:, None]
+    # q dans le triangle : mêmes signes des trois produits mixtes
+    c1 = (np.cross(B - A, q - A) * n).sum(1)
+    c2 = (np.cross(C - B, q - B) * n).sum(1)
+    c3 = (np.cross(A - C, q - C) * n).sum(1)
+    inside = ok & (c1 >= 0) & (c2 >= 0) & (c3 >= 0)
+    face = np.where(inside, np.abs(dist_plane), np.inf)
+    return np.minimum.reduce([face, seg(A, B), seg(B, C), seg(C, A)])
+
+
+def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=0.05):
+    """Vérifie en 3D les colonnes que la carte de hauteur dit entaillées et remplace leur entaille verticale
+    par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce,
+    nulle si ce point est hors de la pièce (dessous d'un surplomb, que la carte ne voit pas).
+
+    Près d'une paroi raide, une fraise qui entre de 0,05 mm sur le côté abaisse la colonne de toute la hauteur
+    de la paroi (1,85 mm signalés sur le casse-noix de l'utilisateur pour 0,05 mm réels). Retourne les
+    hauteurs d'entaille corrigées (copie)."""
+    np = _np()
+    gh = np.array(gouge_heights, dtype=float, copy=True)
+    vertical = np.where(np.isfinite(gh), gh - zmap.top, -np.inf)
+    cand = np.argwhere(vertical > tolerance)
+    if not len(cand):
+        return gh
+    order = np.argsort(-vertical[cand[:, 0], cand[:, 1]])[:REFINE_MAX_CELLS]
+    cand = cand[order]
+    A, B, C = _triangles(shapes, deflection)
+    if not len(A):
+        return gh
+    lo = np.minimum(np.minimum(A, B), C)
+    hi = np.maximum(np.maximum(A, B), C)
+    # casiers de 2 mm sur XY : triangle -> casiers couverts par sa boîte
+    bx0 = np.floor((lo[:, 0] - zmap.x0) / _BUCKET_MM).astype(int)
+    bx1 = np.floor((hi[:, 0] - zmap.x0) / _BUCKET_MM).astype(int)
+    by0 = np.floor((lo[:, 1] - zmap.y0) / _BUCKET_MM).astype(int)
+    by1 = np.floor((hi[:, 1] - zmap.y0) / _BUCKET_MM).astype(int)
+    buckets = {}
+    for k in range(len(A)):
+        for bx in range(bx0[k], bx1[k] + 1):
+            for by in range(by0[k], by1[k] + 1):
+                buckets.setdefault((bx, by), []).append(k)
+
+    def near(x, y, reach):
+        out = set()
+        for bx in range(int(math.floor((x - reach - zmap.x0) / _BUCKET_MM)), int(math.floor((x + reach - zmap.x0) / _BUCKET_MM)) + 1):
+            for by in range(int(math.floor((y - reach - zmap.y0) / _BUCKET_MM)), int(math.floor((y + reach - zmap.y0) / _BUCKET_MM)) + 1):
+                out.update(buckets.get((bx, by), ()))
+        return np.fromiter(out, dtype=int) if out else np.zeros(0, dtype=int)
+
+    for i, j in cand:
+        x, y, z = float(zmap.xs[i]), float(zmap.ys[j]), float(zmap.top[i, j])
+        v = float(vertical[i, j])
+        reach = min(v, REFINE_REACH) + 0.05
+        idx = near(x, y, reach)
+        if not len(idx):
+            continue
+        a, b, c = A[idx], B[idx], C[idx]
+        # dedans / dehors : parité des traversées de la verticale au-dessus du point (légèrement décalée pour
+        # ne pas tomber sur une arête)
+        px, py = x + 1.3e-5, y + 0.7e-5
+        det = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
+        okd = np.abs(det) > 1e-15
+        dets = np.where(okd, det, 1.0)
+        l1 = ((b[:, 1] - c[:, 1]) * (px - c[:, 0]) + (c[:, 0] - b[:, 0]) * (py - c[:, 1])) / dets
+        l2 = ((c[:, 1] - a[:, 1]) * (px - c[:, 0]) + (a[:, 0] - c[:, 0]) * (py - c[:, 1])) / dets
+        l3 = 1.0 - l1 - l2
+        crosses = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
+        zc = l1 * a[:, 2] + l2 * b[:, 2] + l3 * c[:, 2]
+        above = int((crosses & (zc > z)).sum())
+        if above % 2 == 0:
+            gh[i, j] = z  # point coupé hors de la pièce : pas d'entaille
+            continue
+        d = float(_point_triangle_distance(np.array([x, y, z]), a, b, c).min())
+        if d < reach:
+            gh[i, j] = z + min(d, v)
+    return gh
 
 
 def gouge_mask(zmap, heights, tolerance=0.02):
