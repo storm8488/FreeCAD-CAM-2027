@@ -4,7 +4,7 @@
 import math
 
 from ..i18n import tr, tr_msg
-from .labels import asm_label, preset_label
+from .labels import preset_label
 from ..project import sheet as sheetmod
 from ..project import wrap as wrapmod
 from . import theme
@@ -41,23 +41,21 @@ class WrapDialog(QtWidgets.QDialog):
             names = [n for n, _s in rec["wrap_base"]]
             self.drawing.setCurrentIndex(max(0, self.drawing.findData(names[0]) if names else 0))
         form.addRow(tr("Unrolled drawing"), self.drawing)
-        lib = proj.library
-        self.asm = QtWidgets.QComboBox()
-        from ..project.operations import tool_fits, tool_rank
+        from .toolpicker import ToolField
 
-        fitting = [a for a in lib.assemblies.values() if tool_fits("engrave", lib.tool(a.tool_id))]
-        for a in sorted(fitting, key=lambda a: (tool_rank("engrave", lib.tool(a.tool_id)), a.output.tool_number)):
-            self.asm.addItem(asm_label(a), a.id)
+        self.asm = ToolField(proj, "engrave")
         self.preset = QtWidgets.QComboBox()
-        self.asm.currentIndexChanged.connect(lambda _i: self._fill_presets())
+        self.asm.changed.connect(self._fill_presets)
         if rec:
-            self.asm.setCurrentIndex(max(0, self.asm.findData(rec["assembly_id"])))
+            self.asm.set_assembly(rec["assembly_id"])
+        else:
+            self.asm.set_kind("engrave")
         self._fill_presets()
         if rec:
             self.preset.setCurrentIndex(max(0, self.preset.findData(rec["preset_id"])))
             for w in (self.drawing, self.asm, self.preset):
                 w.setEnabled(False)  # outil et dessin : recréer l'opération pour les changer
-        form.addRow(tr("Tool assembly"), self.asm)
+        form.addRow(tr("Tool"), self.asm)
         form.addRow(tr("Cutting preset"), self.preset)
         params = rec["params"] if rec else {"depth": -0.5, "step_down": 0.25, "safe_margin": 5.0}
         self.depth = self._spin(0.01, 50.0, -params["depth"])

@@ -13,7 +13,7 @@ import FreeCADGui
 
 from .qt import QtCore, QtGui, QtWidgets
 from ..i18n import tr, tr_msg
-from .labels import asm_label, preset_label
+from .labels import preset_label
 from ..tools import bridge
 from ..project.operations import STRATEGIES, param_kind, read_params, thread_names
 from ..project import paramspec
@@ -167,19 +167,12 @@ class OperationEditor(QtWidgets.QDialog):
     def _tool_tab(self):
         w = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(w)
-        lib = self.proj.library
-        self.asm_combo = QtWidgets.QComboBox()
-        from ..project.operations import tool_fits
+        from .toolpicker import ToolField
 
-        kind = self.rec.get("kind")
-        for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
-            # outils du bon type pour la stratégie (et l'outil actuel, même s'il ne convient plus)
-            if tool_fits(kind, lib.tool(a.tool_id)) or a.id == self.rec.get("assembly_id"):
-                self.asm_combo.addItem(asm_label(a), a.id)
-        idx = self.asm_combo.findData(self.rec.get("assembly_id"))
-        if idx >= 0:
-            self.asm_combo.setCurrentIndex(idx)
-        form.addRow(tr("Tool assembly"), self.asm_combo)
+        # comme Fusion : Sélectionner… (bibliothèque) / Éditer…, outils du document en liste déroulante
+        self.asm_combo = ToolField(self.proj, self.rec.get("kind"))
+        self.asm_combo.set_assembly(self.rec.get("assembly_id"))
+        form.addRow(tr("Tool"), self.asm_combo)
         self.cutter_label = QtWidgets.QLabel()
         self.cutter_label.setWordWrap(True)
         form.addRow(tr("Cutter"), self.cutter_label)
@@ -194,11 +187,11 @@ class OperationEditor(QtWidgets.QDialog):
             v = bridge.tool_controller_values(tc)
             form.addRow(tr("Tool controller"), QtWidgets.QLabel("%s (T%d, F%.0f, S%.0f)" % (
                 tc.Label, v["tool_number"], v["feed_mm_min"], v["spindle_rpm"])))
-        note = QtWidgets.QLabel(tr("Values are frozen at creation time: a later change of the library never alters this operation. Choosing another assembly or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept)."))
+        note = QtWidgets.QLabel(tr("Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept)."))
         note.setWordWrap(True)
         note.setProperty("role", "muted")
         form.addRow(note)
-        self.asm_combo.currentIndexChanged.connect(lambda _i: self._fill_presets())
+        self.asm_combo.changed.connect(self._fill_presets)
         self.preset_combo.currentIndexChanged.connect(lambda _i: self._show_values())
         self._fill_presets(select=self.rec.get("preset_id"))
         return w

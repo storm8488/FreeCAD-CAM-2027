@@ -91,9 +91,10 @@ def run():
                 i = c.findData(strategy)
                 if i >= 0:
                     c.setCurrentIndex(i)
-            asm = [c for c in dlg.findChildren(QtWidgets.QComboBox) if c.count() and c.itemData(0) and
-                   str(c.itemData(0)).count("-") >= 2]
-            result["tool"] = asm[0].currentText() if asm else None
+            from cam2027.gui.toolpicker import ToolField
+
+            fields = dlg.findChildren(ToolField)
+            result["tool"] = fields[0].combo.currentText() if fields else None
         dlg.show()
         pump(0.1)
         dlg.accept()

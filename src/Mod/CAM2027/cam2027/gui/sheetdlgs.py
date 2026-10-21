@@ -2,29 +2,29 @@
 """Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication."""
 
 from ..i18n import tr, tr_msg
-from .labels import asm_label, preset_label
+from .labels import preset_label
 from ..project import sheet as sheetmod
 from . import theme
 from .qt import QtCore, QtWidgets
 
 
-def tool_pickers(lib, keep=lambda tool: True):
-    """(combo assemblage, combo préréglage) limités aux outils ``keep``."""
-    asm = QtWidgets.QComboBox()
+def tool_pickers(proj, keep=lambda tool: True):
+    """(champ Outil comme Fusion, liste des préréglages) limités aux outils ``keep``."""
+    from .toolpicker import ToolField
+
+    asm = ToolField(proj, accept=keep)
     preset = QtWidgets.QComboBox()
-    for a in sorted(lib.assemblies.values(), key=lambda a: a.output.tool_number):
-        if keep(lib.tool(a.tool_id)):
-            asm.addItem(asm_label(a), a.id)
 
     def fill():
         preset.clear()
-        if asm.currentData() is None:
+        tool = asm.tool()
+        if tool is None:
             return
-        tool = lib.tool(lib.assembly(asm.currentData()).tool_id)
         for p in tool.presets:
             preset.addItem(preset_label(p), p.id)
 
-    asm.currentIndexChanged.connect(lambda _i: fill())
+    asm.changed.connect(fill)
+    asm.set_kind(None)
     fill()
     return asm, preset
 
@@ -80,12 +80,12 @@ class FlatDepthDialog(QtWidgets.QDialog):
         self.depth = _spin(0.1, 100.0, 3.0)
         self.depth.setToolTip(tr("The V-carve is limited to this depth; wider areas are cleared flat at this depth."))
         form.addRow(tr("Flat depth (mm)"), self.depth)
-        self.asm, self.preset = tool_pickers(proj.library, is_flat)
+        self.asm, self.preset = tool_pickers(proj, is_flat)
         form.addRow(tr("Flat end mill"), self.asm)
         form.addRow(tr("Cutting preset"), self.preset)
         _hint(form, tr("The flat end mill clears the wide areas at the V-carve final depth; the V-bit then follows the flat area outline and the sharp corners. Created before the V-carve."))
         self.buttons = _buttons(self, form)
-        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.vcarve.count() > 0 and self.asm.count() > 0)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.vcarve.count() > 0 and self.asm.currentData() is not None)
 
     def apply(self):
         op = self.proj.doc.getObject(self.vcarve.currentData())
@@ -108,10 +108,10 @@ class InlayDialog(QtWidgets.QDialog):
                 self.drawing.addItem(obj.Label, obj.Name)
                 names.add(obj.Name)
         form.addRow(tr("Closed drawing"), self.drawing)
-        self.vasm, self.vpreset = tool_pickers(proj.library, is_vbit)
+        self.vasm, self.vpreset = tool_pickers(proj, is_vbit)
         form.addRow(tr("V-bit"), self.vasm)
         form.addRow(tr("V-bit preset"), self.vpreset)
-        self.fasm, self.fpreset = tool_pickers(proj.library, is_flat)
+        self.fasm, self.fpreset = tool_pickers(proj, is_flat)
         form.addRow(tr("Flat end mill"), self.fasm)
         form.addRow(tr("Flat end mill preset"), self.fpreset)
         self.female = _spin(0.1, 50, 5.0)
@@ -136,7 +136,7 @@ class InlayDialog(QtWidgets.QDialog):
             g = inlay.check_inlay_depths(self.female.value(), self.start.value(), self.male.value())
             self.gaps.setText(tr("Glue gap at the bottom: {b} mm; gap between the boards: {s} mm.",
                                  b="%.2f" % g["bottom_gap"], s="%.2f" % g["surface_gap"]))
-            ok = self.drawing.count() > 0 and self.vasm.count() > 0 and self.fasm.count() > 0
+            ok = self.drawing.count() > 0 and self.vasm.currentData() is not None and self.fasm.currentData() is not None
         except ValueError as exc:
             self.gaps.setText(tr_msg(exc))
             ok = False

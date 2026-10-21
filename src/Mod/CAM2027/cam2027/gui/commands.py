@@ -8,7 +8,7 @@ import FreeCADGui
 
 from .qt import QtCore, QtGui, QtWidgets, exec_dialog
 from ..i18n import tr, tr_msg
-from .labels import asm_label, preset_label
+from .labels import preset_label
 from .. import compat
 from ..version import __version__, FREECAD_PINNED_TAG
 from ..project.project import Project, ExportBlocked
@@ -448,8 +448,10 @@ class AddOperation(_Base):
         limits = QtWidgets.QLabel()
         limits.setWordWrap(True)
         form.addRow(tr("Known limits"), limits)
-        asm = QtWidgets.QComboBox()
-        form.addRow(tr("Tool assembly"), asm)
+        from .toolpicker import ToolField
+
+        asm = ToolField(proj)  # comme Fusion : Sélectionner… / Éditer…, outils du document en liste
+        form.addRow(tr("Tool"), asm)
         tool_note = QtWidgets.QLabel()
         tool_note.setWordWrap(True)
         theme.set_role(tool_note, "warning")
@@ -460,13 +462,11 @@ class AddOperation(_Base):
             k = kind.currentData()
             limits.setText(tr(STRATEGIES[k]["limits"]) or "-")
             asm.blockSignals(True)
-            asm.clear()
-            fitting = [a for a in lib.assemblies.values() if opsmod.tool_fits(k, lib.tool(a.tool_id))]
-            for a in sorted(fitting, key=lambda a: (opsmod.tool_rank(k, lib.tool(a.tool_id)), a.output.tool_number)):
-                asm.addItem(asm_label(a), a.id)
+            asm.set_kind(k)
             asm.blockSignals(False)
-            tool_note.setText("" if fitting else tr("No tool of the right type in the library for this strategy: add one in the tool library."))
-            tool_note.setVisible(not fitting)
+            ok = asm.tool() is not None and opsmod.tool_fits(k, asm.tool())
+            tool_note.setText("" if ok else tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
+            tool_note.setVisible(not ok)
             fill_presets()
             if name.property("auto"):
                 label = tr(STRATEGIES[k]["label"]).split(" (")[0]
@@ -480,13 +480,16 @@ class AddOperation(_Base):
 
         def fill_presets():
             preset.clear()
-            if asm.currentData() is None:
+            tool = asm.tool()
+            if tool is None:
                 return
-            tool = lib.tool(lib.assembly(asm.currentData()).tool_id)
             for p in tool.presets:
                 preset.addItem(preset_label(p), p.id)
+            ok = opsmod.tool_fits(kind.currentData(), tool)
+            tool_note.setText("" if ok else tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
+            tool_note.setVisible(not ok)
 
-        asm.currentIndexChanged.connect(lambda _i: fill_presets())
+        asm.changed.connect(fill_presets)
         kind.currentIndexChanged.connect(on_strategy)
         on_strategy()
         sel_label = QtWidgets.QLabel(", ".join("%s: %s" % (o.Label, " ".join(subs) or tr("whole")) for o, subs in base)
@@ -513,8 +516,9 @@ class AddOperation(_Base):
         if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         if asm.currentData() is None or preset.currentData() is None:
-            _warn(tr("No tool of the right type in the library for this strategy: add one in the tool library."))
+            _warn(tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
             return
+        lib = proj.library  # l'instantané a pu recevoir l'outil choisi
         a, tool, _h = lib.resolve_assembly(asm.currentData())
         values = tool.preset(preset.currentData()).resolve(tool)
         k = kind.currentData()

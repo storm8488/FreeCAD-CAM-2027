@@ -565,8 +565,29 @@ def scenario_editor(scenario, files):
             problem(scenario, "editor apply failed: %s" % ed.status.text())
         if abs(float(proj.base_operation(op).StepDown.getValueAs("mm")) - 2.5) > 1e-6:
             problem(scenario, "StepDown not applied")
-    if ed.asm_combo.count() > 1:
-        ed.asm_combo.setCurrentIndex((ed.asm_combo.currentIndex() + 1) % ed.asm_combo.count())
+    # changement d'outil comme un utilisateur : « Sélectionner… » puis un autre outil compatible
+    from cam2027.gui import toolpicker
+
+    field = ed.asm_combo
+    current = field.tool()
+    others = [t for t, _l in toolpicker._all_tools(proj) if field.fits(t) and (current is None or t.id != current.id)]
+    if others:
+        def pick(dlg):
+            if isinstance(dlg, toolpicker.ToolPickerDialog):
+                dlg.refresh(select=others[0].id)
+                dlg.show()
+                pump(0.1)
+                dlg.accept()
+                return QtWidgets.QDialog.Accepted
+            return QtWidgets.QDialog.Rejected
+        saved = toolpicker.exec_dialog
+        toolpicker.exec_dialog = pick
+        try:
+            field.select()
+        finally:
+            toolpicker.exec_dialog = saved
+        if field.tool() is None or field.tool().id != others[0].id:
+            problem(scenario, "tool picker did not change the tool")
         if not ed.apply():
             problem(scenario, "editor tool change failed: %s" % ed.status.text())
     spins and spins[0][1].setValue(1.5)

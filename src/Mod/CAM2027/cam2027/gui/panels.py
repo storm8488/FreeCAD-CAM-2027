@@ -179,7 +179,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.addTab(self._build_cutter_tab(), tr("Cutter"))
         self.tabs.addTab(self._build_presets_tab(), tr("Cutting data"))
-        self.tabs.addTab(self._build_assembly_tab(), tr("Holder & assembly"))
+        self.tabs.addTab(self._build_assembly_tab(), tr("Holder"))
         self.tabs.tabBar().setElideMode(QtCore.Qt.ElideRight)  # jamais un onglet coupé au début du mot
         self.tabs.setMinimumWidth(self.tabs.tabBar().sizeHint().width() + 8)
         splitter.addWidget(self.tabs)
@@ -329,19 +329,20 @@ class ToolLibraryPanel(QtWidgets.QWidget):
     def _build_assembly_tab(self):
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
-        lay.addWidget(QtWidgets.QLabel(tr("Assemblies using this tool")))
+        # comme Fusion : l'outil a son porte-outil et sa sortie, sans liste d'« assemblages » à gérer (un seul
+        # par outil, créé automatiquement ; la liste reste interne)
         self.asm_list = QtWidgets.QListWidget()
         self.asm_list.currentRowChanged.connect(self.on_assembly_selected)
+        self.asm_list.setVisible(False)
         lay.addWidget(self.asm_list)
         form = QtWidgets.QFormLayout()
-        self.a_name = QtWidgets.QLineEdit()
-        form.addRow(tr("Assembly name"), self.a_name)
+        self.a_name = QtWidgets.QLineEdit()  # nom interne, non affiché
         self.a_holder = QtWidgets.QComboBox()
         form.addRow(tr("Holder"), self.a_holder)
         self.a_stickout = QtWidgets.QDoubleSpinBox()
         self.a_stickout.setRange(0.0, 1000.0)
         self.a_stickout.setDecimals(2)
-        form.addRow(tr("Stickout (mm)"), self.a_stickout)
+        form.addRow(tr("Length below the holder (mm)"), self.a_stickout)
         self.a_gauge = QtWidgets.QLabel()
         form.addRow(tr("Gauge length (mm)"), self.a_gauge)
         self.a_number = QtWidgets.QSpinBox()
@@ -359,8 +360,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         form.addRow(tr("Comment"), self.a_comment)
         lay.addLayout(form)
         ab = QtWidgets.QHBoxLayout()
-        for label, slot in ((tr("New assembly"), self.new_assembly), (tr("Apply assembly"), self.apply_assembly),
-                            (tr("Delete assembly"), self.delete_assembly), (tr("New holder..."), self.new_holder)):
+        for label, slot in ((tr("Apply"), self.apply_assembly), (tr("New holder..."), self.new_holder)):
             b = QtWidgets.QPushButton(label)
             b.clicked.connect(slot)
             ab.addWidget(b)
@@ -404,6 +404,16 @@ class ToolLibraryPanel(QtWidgets.QWidget):
                 if self.table.item(row, 2).data(QtCore.Qt.UserRole) == self.current.id:
                     self.table.selectRow(row)
                     break
+
+    def show_tool(self, tool_id):
+        """Ouvre l'outil ``tool_id`` dans la fiche (bouton « Éditer… » d'une opération)."""
+        if tool_id not in self.lib.tools:
+            return
+        self.search.clear()
+        self.type_filter.setCurrentIndex(0)
+        self.current = self.lib.tool(tool_id)
+        self.refresh_list()
+        self.load_tool(self.current)
 
     def selected_ids(self):
         ids = []

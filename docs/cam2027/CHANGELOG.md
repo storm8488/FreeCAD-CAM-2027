@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **Choix de l'outil comme Fusion** : plus d'« assemblage d'outil » dans l'interface. Dans une opération (ajout,
+  éditeur, fond plat, incrustation, gravure enroulée) : « Outil [Sélectionner…] [Éditer…] » et la liste des
+  outils déjà utilisés dans le document. « Sélectionner… » ouvre la bibliothèque : tableau (#n - Ø, nom, type,
+  rayon de bout, diamètre, longueur de dent), recherche, type, « seulement les outils adaptés à la stratégie »,
+  aperçu dynamique et « Nouvel outil… » (type, diamètre, corps, dents, longueurs, rayon, angle, avec aperçu).
+  « Éditer… » ouvre l'outil dans la bibliothèque, dont l'onglet « Assemblage » devient « Porte-outil »
+  (porte-outil, longueur sous le porte-outil, numéro). En interne chaque outil garde un jeu porte-outil +
+  sortie créé automatiquement (contrôle des collisions, numéro d'outil).
 - **Une fraise créée dans la bibliothèque est proposée tout de suite** : elle n'apparaissait pas dans
   « Ajouter une opération » (fraise à surfacer de l'utilisateur), pour deux raisons. Une fraise neuve n'avait
   ni préréglage de coupe ni assemblage : elle en reçoit un par défaut (12 000 tr/min, 600 mm/min, à ajuster ;
