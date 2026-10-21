@@ -351,7 +351,26 @@ def strategy_module(kind):
     mod = importlib.import_module(STRATEGIES[kind]["module"])
     if kind in ("adaptive", "rough3d"):
         patch_adaptive_slicing(mod)
+    if kind == "surface3d":
+        patch_surface_keepalive()
     return mod
+
+
+def patch_surface_keepalive():
+    """Finition 3D : FreeCAD simplifie chaque ligne du balayage (``PathUtils.simplify3dLine``) ; on y rend la
+    main à l'interface (``keep_gui_alive``), sans rien changer au calcul."""
+    import PathScripts.PathUtils as PathUtils
+
+    original = getattr(PathUtils, "simplify3dLine", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+
+    def simplify(line, tolerance=1e-4):
+        keep_gui_alive()
+        return original(line, tolerance=tolerance)
+
+    simplify.cam2027_patched = True
+    PathUtils.simplify3dLine = simplify
 
 
 def patch_adaptive_slicing(mod=None):
@@ -379,6 +398,30 @@ def patch_adaptive_slicing(mod=None):
     projection.cam2027_patched = True
     mod.projectFacesToXY = projection
     _patch_roughing_regions(mod)
+    from . import parallel_adaptive
+
+    parallel_adaptive.install(mod)
+
+
+def keep_gui_alive(_state={"t": 0.0}):
+    """Rend la main à l'interface (au plus toutes les 0,2 s) pendant un calcul long en Python : sans cela
+    Windows marque CAM2027 « Ne répond pas » et « Arrêter le calcul » reste sans effet. La fenêtre de
+    progression est modale : seuls son bouton et le rafraîchissement passent."""
+    import time
+
+    now = time.time()
+    if now - _state["t"] < 0.2:
+        return
+    _state["t"] = now
+    try:
+        import FreeCAD
+
+        if FreeCAD.GuiUp:
+            import FreeCADGui
+
+            FreeCADGui.updateGui()
+    except Exception:
+        pass
 
 
 #: empreinte SHA-1 de ``_workingEdgeHelperRoughing`` de FreeCAD 1.1.4 (le remplacement n'est installé que sur
@@ -415,41 +458,42 @@ def _patch_roughing_regions(mod):
                 and rb.YMax <= fb.YMax + tol and region.Area <= f.Area + tol)
 
     def helper(op, obj, depths):
+        from . import parallel_levels
+
         insideRegions = list()
         outsideRegions = list()
         shps = op.model[0].Shape.fuse([k.Shape for k in op.model[1:]])
         projdir = FreeCAD.Vector(0, 0, 1)
         modelOutlineFaces = [Part.makeFace(TechDraw.findShapeOutline(s, 1, projdir)) for s in shps.Solids]
-        lastdepth = obj.StartDepth.Value
+        stock_top = op.stock.Shape.BoundBox.ZMax
+        work = [d for d in depths if d < stock_top]
+        # CAM2027 : régions de chaque niveau préparées en parallèle (parallel_levels), sinon une par une ici ;
+        # la fusion des niveaux en régions reste dans l'ordre
+        stop = lambda: bool(getattr(obj, "StopProcessing", False))  # noqa: E731
+        pre = parallel_levels.compute(shps, op.stock.Shape, [d - obj.ZStockToLeave.Value for d in work], stop)
+        pre = dict(zip(work, pre)) if pre is not None else {}
         for depth in depths:
-            if depth >= op.stock.Shape.BoundBox.ZMax:
-                lastdepth = depth
+            keep_gui_alive()
+            if stop():  # « Arrêter le calcul » pendant la préparation
+                break
+            if depth >= stock_top:
                 continue
-            stockface = mod._getSolidProjection(op.stock.Shape, depth - obj.ZStockToLeave.Value)
-            aboveRefined = mod._getSolidProjection(shps, depth - obj.ZStockToLeave.Value)
-            if aboveModelFaces := [Part.makeFace(TechDraw.findShapeOutline(f, 1, projdir)) for f in aboveRefined.Faces]:
-                aboveModelFaces = aboveModelFaces[0].fuse(aboveModelFaces[1:])
+            if depth in pre:
+                aboveModelFaces, finalCut, stockface, aboveRefined = pre[depth]
             else:
-                aboveModelFaces = Part.Shape()
+                aboveModelFaces, finalCut, stockface, aboveRefined = parallel_levels.level_regions(
+                    mod, shps, op.stock.Shape, modelOutlineFaces, depth - obj.ZStockToLeave.Value)
             if (outsideRegions and outsideRegions[-1]["region"].Wires and aboveModelFaces.Wires
                     and not aboveModelFaces.cut(outsideRegions[-1]["region"]).Wires):
                 outsideRegions[-1]["depths"].append(depth)
+                prev = outsideRegions[-1]["region"]
+                if aboveModelFaces.Wires and abs(prev.Area - aboveModelFaces.Area) > 1e-6 * max(prev.Area, 1.0):
+                    # silhouette plus petite que celle de la région gardée : poches recalculées avec celle-ci,
+                    # comme FreeCAD (outsideRegions[-1])
+                    finalCut = parallel_levels.final_cut_for(prev, aboveRefined, stockface, modelOutlineFaces)
             else:
                 outsideRegions.append({"region": aboveModelFaces, "depths": [depth]})
-            if aboveModelFaces.Wires:
-                outsideface = stockface.cut(outsideRegions[-1]["region"].Faces)
-                if outsideface.Wires:
-                    belowFaces = [f.cut(outsideface) for f in modelOutlineFaces]
-                else:
-                    belowFaces = [f for f in modelOutlineFaces]
-                if belowFaces:
-                    belowCut = belowFaces[0].fuse(belowFaces[1:]).cut(aboveRefined)
-                    if belowCut.Wires:
-                        finalCut = DraftGeomUtils.concatenate(belowCut.removeSplitter())
-                    else:
-                        finalCut = Part.Shape()
-                else:
-                    finalCut = Part.Shape()
+            if aboveModelFaces.Wires and finalCut is not None:
                 for f in finalCut.Faces:
                     addNew = True
                     for rdict in insideRegions:
@@ -461,7 +505,6 @@ def _patch_roughing_regions(mod):
                             break
                     if addNew:
                         insideRegions.append({"region": f, "depths": [depth]})
-            lastdepth = depth
         return insideRegions, outsideRegions
 
     helper.cam2027_patched = True
@@ -699,17 +742,72 @@ def compute_state(obj, base=None, record=None):
     if getattr(base, "Active", True) is False:
         return "inactive"
     states = set(getattr(obj, "State", []) or []) | set(getattr(base, "State", []) or [])
-    cmds = obj.Path.Commands if getattr(obj, "Path", None) is not None else []
-    cutting = sum(1 for c in cmds if c.Name in _CUTTING_CODES)
+    stats = path_stats(obj.Path, obj) if getattr(obj, "Path", None) is not None else None
+    cutting = stats["cutting"] if stats else 0
     if "Invalid" in states or not obj.isValid():
         return "failed"
     if "Touched" in states:
-        return "todo" if not cmds else "stale"
+        return "todo" if not (stats and stats["commands"]) else "stale"
     if cutting == 0:
         return "failed"  # aucun mouvement de coupe : rien ne sera usiné
     if record and (record.get("warnings") or record.get("ignored_params")):
         return "warning"
     return "computed"
+
+
+#: statistiques de parcours déjà lues : empreinte -> statistiques (le panneau Projet les relit à chaque
+#: rafraîchissement ; relire 350 000 commandes en Python prend environ une seconde)
+_PATH_STATS = {}
+_PATH_STATS_MAX = 64
+
+
+def _feed_key(obj):
+    """Avances et vitesse du contrôleur d'outil de l'opération (ou de l'opération habillée) : elles changent
+    les F du parcours sans changer sa géométrie."""
+    seen = 0
+    while obj is not None and seen < 8:
+        tc = getattr(obj, "ToolController", None)
+        if tc is not None:
+            return tuple(round(float(getattr(getattr(tc, k, None), "Value", getattr(tc, k, 0) or 0)), 6)
+                         for k in ("HorizFeed", "VertFeed", "SpindleSpeed"))
+        obj = getattr(obj, "Base", None)
+        seen += 1
+    return ()
+
+
+def path_stats(path, owner=None):
+    """Commandes, mouvements de coupe, avances (mm/min), axes, codes et enveloppe d'un ``Path`` ; lus une fois
+    par parcours (empreinte sans relire les commandes : nombre, longueur, boîte englobante, avances du
+    contrôleur d'outil de ``owner``)."""
+    bb = path.BoundBox
+    key = (path.Size, round(float(path.Length), 9),
+           tuple(round(v, 9) for v in (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)),
+           getattr(owner, "Name", None), _feed_key(owner))
+    hit = _PATH_STATS.get(key)
+    if hit is not None:
+        return hit
+    cmds = path.Commands
+    feeds = set()
+    axes = set()
+    bbox = {}
+    cutting = 0
+    for c in cmds:
+        if c.Name in _CUTTING_CODES:
+            cutting += 1
+        params = c.Parameters
+        if "F" in params:
+            feeds.add(round(float(params["F"]) * 60.0, 3))
+        for k, v in params.items():
+            if k in ("X", "Y", "Z", "A", "B", "C"):
+                axes.add(k)
+                lo, hi = bbox.get(k, (v, v))
+                bbox[k] = (min(lo, v), max(hi, v))
+    stats = {"commands": len(cmds), "cutting": cutting, "feeds": sorted(feeds), "axes": sorted(axes),
+             "gcodes": sorted(set(c.Name for c in cmds)), "bbox": bbox, "length_mm": float(path.Length)}
+    if len(_PATH_STATS) >= _PATH_STATS_MAX:
+        _PATH_STATS.clear()
+    _PATH_STATS[key] = stats
+    return stats
 
 
 def toolpath_summary(op):
@@ -719,29 +817,16 @@ def toolpath_summary(op):
     sont converties en mm/min. L'enveloppe est calculée sur les points
     programmés (``Path.BoundBox`` inclut l'origine et n'est pas utilisable).
     """
-    path = op.Path
-    cmds = path.Commands
-    feeds = set()
-    axes = set()
-    bbox = {}
-    for c in cmds:
-        params = c.Parameters
-        if "F" in params:
-            feeds.add(round(float(params["F"]) * 60.0, 3))
-        for k, v in params.items():
-            if k in ("X", "Y", "Z", "A", "B", "C"):
-                axes.add(k)
-                lo, hi = bbox.get(k, (v, v))
-                bbox[k] = (min(lo, v), max(hi, v))
-    gcodes = sorted(set(c.Name for c in cmds))
+    st = path_stats(op.Path, op)
+    bbox = st["bbox"]
     return {
         "name": op.Label,
-        "commands": len(cmds),
-        "length_mm": float(path.Length),
-        "feeds": sorted(feeds),
-        "axes": sorted(axes),
-        "gcodes": gcodes,
-        "bbox": bbox,
+        "commands": st["commands"],
+        "length_mm": st["length_mm"],
+        "feeds": st["feeds"],
+        "axes": st["axes"],
+        "gcodes": st["gcodes"],
+        "bbox": dict(bbox),
         "zmin": bbox["Z"][0] if "Z" in bbox else None,
         "zmax": bbox["Z"][1] if "Z" in bbox else None,
         "cycle_time": getattr(op, "CycleTime", None),

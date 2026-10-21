@@ -2,6 +2,7 @@
 """Logique derrière l'interface (bugs trouvés par les scénarios utilisateur) : pièces détectées, maillages,
 outils compatibles, géométrie automatique, fusion d'assemblage, contrôle mémorisé dans le document, messages."""
 
+import json
 import math
 import os
 import tempfile
@@ -270,6 +271,68 @@ class TestUiLogic(unittest.TestCase):
             p = default_params(kind, flat, flat.presets[0].resolve(flat))
             self.assertEqual(p["LiftDistance"], p["StepDown"])
             self.assertGreater(p["LiftDistance"], 0)
+
+    def test_parallel_roughing_matches_serial(self):
+        """Ébauche 3D : régions des niveaux préparées dans des processus = régions calculées ici (aires et
+        différences nulles), et adaptatives calculées dans des processus = mêmes trajets qu'ici."""
+        import Path.Op.Adaptive as adaptive
+
+        from cam2027.project import parallel_adaptive, parallel_levels
+
+        if not hasattr(adaptive, "_getSolidProjection") or parallel_levels._python() is None:
+            self.skipTest("FreeCAD sans mode modèle ou sans python.exe")
+        opsmod.patch_adaptive_slicing(adaptive)
+        V = FreeCAD.Vector
+        part = Part.makeBox(60, 40, 12).cut(Part.makeBox(20, 20, 8, V(5, 5, 4))).cut(Part.makeCylinder(6, 6, V(45, 20, 6)))
+        stock = Part.makeBox(64, 44, 13, V(-2, -2, 0))
+        zs = [11.5, 8.5, 5.5, 3.5, 1.5]
+        par = parallel_levels.compute(part, stock, zs)
+        self.assertIsNotNone(par)
+        import TechDraw
+
+        outline = [Part.makeFace(TechDraw.findShapeOutline(s, 1, V(0, 0, 1))) for s in part.Solids]
+        for z, got in zip(zs, par):
+            ref = parallel_levels.level_regions(adaptive, part, stock, outline, z)
+            for a, b in zip(ref, got):
+                if a is None or a.isNull() or not a.Faces:
+                    self.assertTrue(b is None or b.isNull() or not b.Faces, z)
+                    continue
+                self.assertAlmostEqual(a.Area, b.Area, places=6)
+                self.assertLess(a.cut(b).Area + b.cut(a).Area, 1e-6)
+        # adaptatives : 3 régions en processus = en série
+        import area
+
+        def job(square):
+            return {"params": {"stepOverFactor": 0.4, "toolDiameter": 6.0, "helixRampDiameter": 5.0,
+                               "keepToolDownDistRatio": 3.0, "stockToLeave": 0.5, "tolerance": 0.1,
+                               "forceInsideOut": False, "finishingProfile": True},
+                    "opType": int(area.AdaptiveOperationType.ClearingInside),
+                    "stock": [[(-10, -10), (90, -10), (90, 60), (-10, 60)]], "path": [square]}
+
+        jobs = [job([(0, 0), (40 + 5 * k, 0), (40 + 5 * k, 30), (0, 30)]) for k in range(3)]
+        serial = [parallel_adaptive._run_job(area, j) for j in jobs]
+        par = parallel_adaptive._run_parallel(jobs, None)
+        # l'adaptative de FreeCAD n'est pas déterministe (deux calculs de suite dans le même processus ne
+        # donnent pas les mêmes points) : même structure, même longueur de coupe à 5 %, rien hors du contour
+
+        def cut_length(results):
+            total = 0.0
+            for r in results:
+                for motion, pts in r["AdaptivePaths"]:
+                    if motion == int(area.AdaptiveMotionType.Cutting):
+                        total += sum(math.dist(p, q) for p, q in zip(pts, pts[1:]))
+            return total
+
+        for k, (a, b) in enumerate(zip(serial, par)):
+            self.assertIsNotNone(b, k)
+            self.assertEqual(len(a), len(b))
+            self.assertAlmostEqual(cut_length(b), cut_length(a), delta=0.05 * cut_length(a))
+            w = 40 + 5 * k
+            for r in b:
+                for motion, pts in r["AdaptivePaths"]:
+                    if motion == int(area.AdaptiveMotionType.Cutting):
+                        for x, y in pts:
+                            self.assertTrue(3 - 1e-6 <= x <= w - 3 + 1e-6 and 3 - 1e-6 <= y <= 27 + 1e-6, (x, y))
 
     def test_adaptive_projection_fallback(self):
         """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion

@@ -1153,6 +1153,7 @@ class Project(object):
         for op in self.wrapped_operations():
             self._generate_wrap(op)  # le dessin ou le brut ont pu changer
         opsmod.patch_adaptive_slicing()  # projet rouvert : l'adaptative n'est pas encore passée par strategy_module
+        opsmod.patch_surface_keepalive()
         self.doc.recompute()
         results = []
         for op in self.operations():
