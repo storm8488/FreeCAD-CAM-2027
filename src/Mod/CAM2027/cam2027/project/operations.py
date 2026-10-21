@@ -353,6 +353,8 @@ def strategy_module(kind):
         patch_adaptive_slicing(mod)
     if kind == "surface3d":
         patch_surface_keepalive()
+    if kind == "pocket":
+        patch_pocket(mod)
     return mod
 
 
@@ -509,6 +511,80 @@ def _patch_roughing_regions(mod):
 
     helper.cam2027_patched = True
     mod._workingEdgeHelperRoughing = helper
+
+
+#: empreintes SHA-1 du code FreeCAD remplacé par ``patch_pocket`` (même code en 1.0.2 et 1.1.4, sauf
+#: ``_buildPathArea`` : une empreinte par version, la partie utilisée est identique)
+POCKET_SHAPES_SHA1 = "a9c3e2225a919f4b0d9dff1524197fe101612391"
+POCKET_REMOVAL_SHA1 = "b57fc89eee79edc8a647e0d70f066236ff25c6b7"
+AREA_BUILD_SHA1 = ("c947d9bb22a0e7b54043af311f1572c5fcb30703",  # 1.1.4
+                   "af27b6f0ede71f0493e55f8aeaf05ae1dd1660c1")  # 1.0.2
+
+
+def _sha1(fn):
+    import hashlib
+    import inspect
+
+    try:
+        return hashlib.sha1(inspect.getsource(fn).encode()).hexdigest()
+    except Exception:
+        return None
+
+
+def patch_pocket(mod=None):
+    """Poche 3D sur des faces traitées « collectivement » (fonds d'alvéoles choisis automatiquement) : les
+    booléens d'OpenCascade de ``areaOpShapes`` (découpe de l'enveloppe, intersections avec les fonds) et la
+    découpe en niveaux de ``_buildPathArea`` sont faits dans des processus (``parallel_pocket``), l'interface
+    restant vivante : 26 s -> moins de 10 s sur un plateau à 135 alvéoles, mêmes volumes. Installé seulement
+    si le code FreeCAD est exactement celui attendu ; les autres cas passent par le code d'origine."""
+    if mod is None:
+        mod = importlib.import_module("Path.Op.Pocket")
+    cls = getattr(mod, "ObjectPocket", None)
+    original = getattr(cls, "areaOpShapes", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+    import Path.Op.Area as area_mod
+
+    build = area_mod.ObjectOp._buildPathArea
+    if (_sha1(original) != POCKET_SHAPES_SHA1 or _sha1(getattr(mod, "_identifyRemovalSolids", None)) != POCKET_REMOVAL_SHA1
+            or _sha1(build) not in AREA_BUILD_SHA1):
+        return
+    from . import parallel_pocket
+
+    def collective(obj):
+        if obj.HandleMultipleFeatures != "Collectively" or obj.AdaptivePocketStart or obj.AdaptivePocketFinish:
+            return False
+        return all(base[1] and all("Face" in sub for sub in base[1]) for base in obj.Base)
+
+    def area_op_shapes(self, obj):
+        if not obj.Base or not collective(obj):
+            return original(self, obj)
+        # branche « faces, collectivement » de FreeCAD, la découpe et les intersections en parallèle
+        import FreeCAD
+        import Part
+
+        removalshapes = []
+        for base in obj.Base:
+            Faces = [getattr(base[0].Shape, sub) for sub in base[1]]
+            (fzmin, fzmax) = self.getMinMaxOfFaces(Faces)
+            if obj.FinalDepth.Value < fzmin:
+                mod.Path.Log.warning(mod.translate("CAM", "Final depth set below ZMin of face(s) selected."))
+            shape = Part.makeCompound(Faces)
+            env = mod.PathUtils.getEnvelope(base[0].Shape, subshape=shape, depthparams=self.depthparams)
+            faceExtrusions = [f.extrude(FreeCAD.Vector(0.0, 0.0, 1.0)) for f in Faces]
+            removal = parallel_pocket.removal_solids(env, base[0].Shape, faceExtrusions)
+            if removal is None:
+                removal = mod._identifyRemovalSolids(env.cut(base[0].Shape), faceExtrusions)
+            obj.removalshape = removal
+            removalshapes.append((obj.removalshape, False, "3DPocket"))
+        return removalshapes
+
+    def build_path_area(self, obj, baseobject, isHole, start, getsim):
+        return parallel_pocket.build_path_area(area_mod, build, self, obj, baseobject, isHole, start, getsim)
+
+    area_op_shapes.cam2027_patched = True
+    cls.areaOpShapes = area_op_shapes
+    cls._buildPathArea = build_path_area
 
 
 def create_operation(job, kind, name, tool_controller, base=None, params=None):

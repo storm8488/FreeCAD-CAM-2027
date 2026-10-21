@@ -61,6 +61,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   garder dans FreeCAD). L'adaptative de FreeCAD n'est **pas déterministe** : deux calculs identiques ne
   donnent pas exactement les mêmes points (vérifié dans un même processus), le contrôle matière donne les
   mêmes résultats. Pendant le calcul, la vue 3D n'affiche plus la progression des trajets en direct.
+- Poche 3D sur des faces traitées collectivement (fonds d'alvéoles choisis automatiquement) : découpe de
+  l'enveloppe, intersections et niveaux calculés dans des processus Python de FreeCAD (`parallel_pocket`,
+  `CAM2027_PARALLEL_POCKET=0` pour les garder dans FreeCAD ; installé seulement sur le code FreeCAD attendu,
+  1.0.2 et 1.1.4). La poche de FreeCAD n'est **pas exactement reproductible** non plus sur une grosse pièce :
+  sur le plateau à 135 alvéoles, le calcul en série donne d'une fois à l'autre 21 561 ou 21 545 commandes
+  (739,8 ou 739,3 cm³ enlevés au contrôle, liaisons à la profondeur de coupe), sans entaille ; le calcul en
+  processus retombe sur ces mêmes parcours. « Arrêter le calcul » n'arrête pas la poche (FreeCAD ne le
+  prévoit pas pour elle) ; l'interface reste rafraîchie.
 - Adaptative et ébauche 3D : liaisons « en zone dégagée » remontées d'une passe (`LiftDistance` = passe ;
   0 dans FreeCAD, l'adaptative en faisait parfois une à travers la matière). Le Z constant (OpenCamLib) ne
   s'arrête pas en cours de calcul : sur une grande pièce l'interface reste occupée (39 s sur le chauffage

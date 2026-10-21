@@ -334,6 +334,70 @@ class TestUiLogic(unittest.TestCase):
                         for x, y in pts:
                             self.assertTrue(3 - 1e-6 <= x <= w - 3 + 1e-6 and 3 - 1e-6 <= y <= 27 + 1e-6, (x, y))
 
+    def test_parallel_pocket_matches_serial(self):
+        """Poche 3D sur des fonds d'alvéoles (collectivement) : découpe, intersections et niveaux calculés dans
+        des processus = calcul de FreeCAD en série (même volume à enlever, même parcours, même contrôle)."""
+        from cam2027.project import parallel_pocket
+
+        if parallel_pocket._python() is None:
+            self.skipTest("FreeCAD sans python.exe")
+        V = FreeCAD.Vector
+        tray = Part.makeBox(100, 80, 20)
+        for i in range(4):
+            for j in range(3):
+                tray = tray.cut(Part.makeCylinder(6, 8, V(14 + 24 * i, 16 + 24 * j, 12)) if (i + j) % 2 else
+                                Part.makeBox(14, 14, 8, V(5 + 24 * i, 9 + 24 * j, 12)))
+        proj = self._project("PocketPar")
+        obj = proj.doc.addObject("Part::Feature", "Tray")
+        obj.Shape = tray.removeSplitter()
+        proj.doc.recompute()
+        proj.create_job([obj], stock={"kind": "box_margins", "xy": 3.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        base = opsmod.auto_geometry("pocket", [clone])
+        self.assertEqual(len(base[0][1]), 12)
+        lib = proj.library
+        e = lib.search("3 mm flat end mill")[0]
+        op, _rec = proj.add_operation("pocket", "Pocket", lib.assemblies_for_tool(e.id)[0].id, e.presets[0].id,
+                                      base=base, params={"StepDown": 2.0, "StepOver": 40})
+        import Path.Op.Pocket as pocket
+
+        self.assertTrue(getattr(pocket.ObjectPocket.areaOpShapes, "cam2027_patched", False))  # 1.0.2 et 1.1.4
+        saved = (parallel_pocket.MIN_SOLIDS, parallel_pocket.MIN_HEIGHTS, parallel_pocket._run)
+        runs = []
+
+        def counting(tasks, files):
+            runs.append(tasks[0]["kind"])
+            return saved[2](tasks, files)
+
+        results = {}
+        try:
+            parallel_pocket.MIN_SOLIDS = parallel_pocket.MIN_HEIGHTS = 1
+            parallel_pocket._run = counting
+            for switch in ("0", "1"):
+                os.environ[parallel_pocket.ENV_SWITCH] = switch
+                op.touch()
+                proj.compute()
+                rep = proj.material_check()
+                results[switch] = (op.removalshape.Volume, len(op.removalshape.Solids), op.Path.Commands, rep)
+        finally:
+            parallel_pocket.MIN_SOLIDS, parallel_pocket.MIN_HEIGHTS, parallel_pocket._run = saved
+            os.environ.pop(parallel_pocket.ENV_SWITCH, None)
+        self.assertEqual(sorted(set(runs)), ["removal", "sections"])
+        (vol0, n0, cmds0, rep0), (vol1, n1, cmds1, rep1) = results["0"], results["1"]
+        self.assertEqual(n0, 12)
+        self.assertEqual(n1, n0)
+        self.assertAlmostEqual(vol1, vol0, delta=1e-6 * vol0)
+        self.assertEqual([c.Name for c in cmds1], [c.Name for c in cmds0])
+        for a, b in zip(cmds0, cmds1):
+            self.assertEqual(sorted(a.Parameters), sorted(b.Parameters))
+            for k, v in a.Parameters.items():
+                self.assertAlmostEqual(b.Parameters[k], v, delta=1e-5)
+        self.assertGreater(rep0["removed_volume"], 0.0)
+        self.assertAlmostEqual(rep1["removed_volume"], rep0["removed_volume"], delta=1e-6 * rep0["removed_volume"])
+        self.assertLess(rep1["gouge_max"], 0.05, rep1)
+        self.assertLess(rep0["gouge_max"], 0.05, rep0)
+        proj.close()
+
     def test_adaptive_projection_fallback(self):
         """Mode « modèle » : quand la réunion des projections (DraftGeomUtils.concatenate) échoue, la réunion
         des projections face par face est gardée (sinon l'ébauche 3D entière échoue sans parcours)."""

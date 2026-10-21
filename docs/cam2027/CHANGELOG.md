@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Poche 3D sur tous les cœurs, interface qui répond** : sur le plateau à 135 alvéoles, la poche passait
+  26 s dans les booléens d'OpenCascade, interface figée. La découpe de l'enveloppe des fonds par la pièce et
+  les intersections avec les fonds (volume par volume) ainsi que la découpe en niveaux (`Path.Area`, niveau
+  par niveau) sont faites dans des processus Python de FreeCAD (`parallel_pocket`) : 26 s -> 6 s, même
+  volume à enlever, même parcours que le calcul en série, aucune entaille. Le cercle du plan de travail est
+  refait dans chaque processus : relu en BREP, il changeait légèrement les niveaux.
 - **Ébauche 3D sur tous les cœurs, interface qui répond** (demande de l'utilisateur : « le logiciel ne
   répond plus » pendant une ébauche 3D). Les régions de chaque niveau (ombre, silhouette, poches : booléens
   OpenCascade) sont préparées dans des processus Python de FreeCAD (`parallel_levels`, formes en BREP) et
