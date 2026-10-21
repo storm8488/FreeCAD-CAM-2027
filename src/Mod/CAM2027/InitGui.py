@@ -85,7 +85,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
 
         titles = [tr(title) for title, _names in commands.STAGE_MENUS]
         # les menus de l'atelier sont construits juste après Activated
-        QtCore.QTimer.singleShot(0, lambda: standalone.fix_menu_titles(titles))
+        QtCore.QTimer.singleShot(0, lambda: standalone.guard_menu_titles(titles))
 
     def Deactivated(self):
         pass

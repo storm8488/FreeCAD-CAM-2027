@@ -94,6 +94,21 @@ class busy(object):
         return False
 
 
+#: au-delà, le brut simulé affiché est simplifié (erreur 0,01 mm) : 700 000 triangles alourdissaient la vue 3D
+DISPLAY_MESH_MAX_FACETS = 100000
+
+
+def _display_mesh(mesh):
+    """Maillage pour l'affichage seulement : zones planes simplifiées (``decimate``, 0,01 mm au plus), 10 fois
+    moins de triangles sur une grande pièce ; le contrôle garde sa carte de hauteur complète."""
+    if mesh.CountFacets > DISPLAY_MESH_MAX_FACETS:
+        try:
+            mesh.decimate(0.01, 0.9)
+        except Exception:
+            pass
+    return mesh
+
+
 def _after_change():
     if FreeCAD.ActiveDocument:
         FreeCAD.ActiveDocument.recompute()
@@ -949,7 +964,7 @@ def show_material_result(proj, rep):
     doc = proj.doc
     objs = []
     for name, mesh, colour in (
-            ("CAM2027SimStock", sim.surface_mesh(proj.last_zmap), (0.62, 0.66, 0.72)),
+            ("CAM2027SimStock", _display_mesh(sim.surface_mesh(proj.last_zmap)), (0.62, 0.66, 0.72)),
             ("CAM2027SimGouges", sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights,
                                                                                 rep["tolerance"]), lift=0.02),
              (0.9, 0.15, 0.15))):

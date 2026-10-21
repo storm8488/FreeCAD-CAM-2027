@@ -502,6 +502,13 @@ def run():
         finally:
             welcome.recent_projects = real
         log("standalone: welcome hidden with a document, advanced mode, default layout, recent list OK")
+    # accents des titres de menu après les reconstructions de la barre (mode avancé, disposition, atelier)
+    FreeCADGui.activateWorkbench("CAM2027Workbench")
+    for _k in range(5):
+        QtWidgets.QApplication.processEvents()
+    titles = [a.text() for a in FreeCADGui.getMainWindow().menuBar().actions()]
+    assert not any("Ã" in t for t in titles), "menu title read as Latin-1: %s" % titles
+    log("menu titles: %s" % titles)
     log("OK")
 
 

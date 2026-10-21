@@ -56,6 +56,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   pas de reprise, pas de 4e axe, pas d'attaches/dogbones/rampes
   inline (les habillages FreeCAD restent utilisables dans l'atelier CAM standard sur le
   même document).
+- Ébauche 3D (mode « modèle ») et adaptatives à plusieurs régions : calculées dans des processus Python de
+  FreeCAD (`bin/python.exe`, au plus 12 ; `CAM2027_PARALLEL_LEVELS=0` / `CAM2027_PARALLEL_ADAPTIVE=0` pour les
+  garder dans FreeCAD). L'adaptative de FreeCAD n'est **pas déterministe** : deux calculs identiques ne
+  donnent pas exactement les mêmes points (vérifié dans un même processus), le contrôle matière donne les
+  mêmes résultats. Pendant le calcul, la vue 3D n'affiche plus la progression des trajets en direct.
 - Adaptative et ébauche 3D : liaisons « en zone dégagée » remontées d'une passe (`LiftDistance` = passe ;
   0 dans FreeCAD, l'adaptative en faisait parfois une à travers la matière). Le Z constant (OpenCamLib) ne
   s'arrête pas en cours de calcul : sur une grande pièce l'interface reste occupée (39 s sur le chauffage

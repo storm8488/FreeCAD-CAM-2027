@@ -2,6 +2,24 @@
 
 ## Non publié
 
+- **Ébauche 3D sur tous les cœurs, interface qui répond** (demande de l'utilisateur : « le logiciel ne
+  répond plus » pendant une ébauche 3D). Les régions de chaque niveau (ombre, silhouette, poches : booléens
+  OpenCascade) sont préparées dans des processus Python de FreeCAD (`parallel_levels`, formes en BREP) et
+  les adaptatives indépendantes des régions y sont calculées aussi (`parallel_adaptive`, le TODO de
+  FreeCAD). Plateau 47 s -> 11,8 s, chauffage 52 s -> 19,7 s, mêmes résultats au contrôle matière.
+  L'interface est rafraîchie toutes les 0,2 s pendant la préparation, l'attente des processus et la
+  finition 3D : plus de « Ne répond pas », « Arrêter le calcul » arrête les processus. Une ombre « maison »
+  plus rapide a été essayée puis retirée (entaille de 3,4 mm sur le chauffage, introuvable dans la
+  projection de FreeCAD).
+- **Fluidité et affichage** : statistiques de parcours mises en cache (le panneau Projet relisait deux fois
+  chaque parcours de 350 000 commandes à chaque rafraîchissement) ; brut simulé affiché simplifié au-delà
+  de 100 000 triangles (0,01 mm, 10 fois moins) ; gros STL affiché par son maillage, la surface 3D et son
+  clone restent masqués (import du casse-noix dans l'interface : 43 s -> 21 s) ; accents des menus gardés quand
+  FreeCAD reconstruit la barre (« PrÃ©parer ») ; étapes du panneau Projet sur deux lignes fixes avec « … »
+  (elles se chevauchaient dans un dock étroit) ; onglet « Assemblage » de la bibliothèque d'outils (le
+  libellé long était tronqué) ; nom de stratégie traduit dans les refus. 86 tests ; matrice de 75 cas
+  (5 pièces, 15 stratégies) sans plantage, dépassement ni entaille ; scénarios utilisateur 3 fois de suite
+  sans problème.
 - **Finition 3D échantillonnée à 0,05 mm par défaut** (0,1 mm laissait 0,07 mm d'entaille sur le casse-noix).
   Mesuré : casse-noix 39,8 -> 43,3 s, sans entaille ; plateau 11,7 -> 18,6 s ; chauffage 35,6 -> 59,7 s ;
   plaque 1,1 -> 1,7 s ; aucune entaille sur ces pièces.

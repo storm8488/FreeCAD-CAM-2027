@@ -166,14 +166,16 @@ def mesh_to_surface(doc, mesh_obj, tolerance=0.05):
     shape = Part.Shape()
     shape.makeShapeFromMesh(mesh_obj.Mesh.Topology, tolerance, False)
     obj = doc.addObject("Part::Feature", mesh_obj.Name + "_surface")
+    if FreeCAD.GuiUp and obj.ViewObject is not None:
+        # affichage : le maillage d'origine (léger) ; la surface, utilisée pour les calculs, reste masquée
+        # (sa triangulation pour la vue 3D prenait 40 à 60 s sur 215 000 faces)
+        obj.ViewObject.Visibility = False
     obj.Shape = shape
     obj.addProperty("App::PropertyBool", MESH_SURFACE_PROPERTY, "CAM2027", "3D surface from a mesh: not a solid")
     setattr(obj, MESH_SURFACE_PROPERTY, True)
     name = mesh_obj.Label
     mesh_obj.Label = tr("{name} (mesh)", name=name)
     obj.Label = name
-    if FreeCAD.GuiUp and mesh_obj.ViewObject is not None:
-        mesh_obj.ViewObject.Visibility = False
     doc.recompute()
     return obj
 

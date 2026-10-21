@@ -205,6 +205,16 @@ class Project(object):
                     pass
         job.Label = "Job"
         self.info.Job = job
+        if FreeCAD.GuiUp:
+            # surface 3D issue d'un gros maillage : le clone du job reste masqué (avant le recalcul : sinon il
+            # est triangulé pour la vue), le maillage d'origine s'affiche
+            for clone in self.surface_models():
+                if clone.ViewObject is not None:
+                    clone.ViewObject.Visibility = False
+                for src in getattr(clone, "Objects", None) or []:
+                    mesh = self.doc.getObject(src.Name[:-len("_surface")]) if src.Name.endswith("_surface") else None
+                    if mesh is not None and mesh.ViewObject is not None:
+                        mesh.ViewObject.Visibility = True
         # Job.Create ajoute un « TC: Default Tool » (fraise 5 mm) sans rapport avec la
         # bibliothèque : les contrôleurs sont créés par add_operation uniquement.
         for tc in list(job.Tools.Group):
@@ -269,7 +279,7 @@ class Project(object):
         job = self.job
         if kind not in SURFACE_STRATEGIES and self.surface_models():
             raise UserError("{op}: the part is a 3D surface from a mesh (not a solid): only 3D surface finishing (surface, waterline) can machine it",
-                            op=opsmod.STRATEGIES[kind]["label"])
+                            op=Msg(opsmod.STRATEGIES[kind]["label"]))
         if self.surface_models():
             # BaseBoundBox : FreeCAD calcule l'enveloppe (booleen) de la forme, 18 Go et des heures sur 215 000 faces
             params = dict(params or {})

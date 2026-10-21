@@ -180,6 +180,8 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.tabs.addTab(self._build_cutter_tab(), tr("Cutter"))
         self.tabs.addTab(self._build_presets_tab(), tr("Cutting data"))
         self.tabs.addTab(self._build_assembly_tab(), tr("Holder & assembly"))
+        self.tabs.tabBar().setElideMode(QtCore.Qt.ElideRight)  # jamais un onglet coupé au début du mot
+        self.tabs.setMinimumWidth(self.tabs.tabBar().sizeHint().width() + 8)
         splitter.addWidget(self.tabs)
 
         # colonne droite : aperçu
@@ -901,9 +903,7 @@ class ProjectPanel(QtWidgets.QWidget):
             status = QtWidgets.QLabel()
             status.setFixedWidth(22)
             status.setAlignment(QtCore.Qt.AlignCenter)
-            text = QtWidgets.QLabel()
-            text.setWordWrap(True)
-            text.setMinimumHeight(2 * text.fontMetrics().lineSpacing() + 4)  # libellé + détail sur deux lignes
+            text = _StepLabel()  # libellé + détail sur deux lignes fixes (le retour automatique chevauchait)
             btn = QtWidgets.QPushButton(tr(button))
             btn.setIcon(theme.icon(_STEP_ICONS[key]))
             btn.clicked.connect(lambda _c=False, cmd=command: FreeCADGui.runCommand(cmd))
@@ -966,8 +966,7 @@ class ProjectPanel(QtWidgets.QWidget):
         status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % (
             theme.status_color("done" if done else "todo"), "✔" if done else "○"))
         status.setToolTip(tr("done") if done else tr("to do"))
-        text.setText("<b>%s</b>%s" % (tr(label), (" <span style='color:%s'>%s</span>" % (theme.color("muted"), detail))
-                                     if detail else ""))
+        text.set_step(tr(label), detail, theme.color("muted"))
 
     def refresh(self):
         self._updating = True
@@ -1267,6 +1266,44 @@ def show_tool_library():
 
 def ensure_project_panel():
     return _dock("Project", tr("CAM2027 project"), ProjectPanel, QtCore.Qt.RightDockWidgetArea)
+
+
+class _StepLabel(QtWidgets.QLabel):
+    """Étape du panneau Projet : libellé en gras puis détail sur une deuxième ligne, raccourci par « … » à la
+    largeur disponible (texte complet en infobulle). Hauteur fixe de deux lignes : un QLabel à retour
+    automatique dans la grille débordait sur l'étape suivante quand le dock était étroit."""
+
+    def __init__(self):
+        super(_StepLabel, self).__init__()
+        self._label, self._detail, self._muted = "", "", None
+        self.setWordWrap(False)
+        self.setTextFormat(QtCore.Qt.RichText)
+        self.setFixedHeight(2 * self.fontMetrics().lineSpacing() + 4)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self.setMinimumWidth(60)
+
+    def set_step(self, label, detail, muted):
+        self._label, self._detail, self._muted = label, detail or "", muted
+        self.setToolTip("%s %s" % (label, detail) if detail else label)
+        self._render()
+
+    def resizeEvent(self, event):
+        super(_StepLabel, self).resizeEvent(event)
+        self._render()
+
+    def _render(self):
+        import html
+
+        fm = self.fontMetrics()
+        width = max(20, self.width() - 4)
+        bold = QtGui.QFont(self.font())
+        bold.setBold(True)
+        label = QtGui.QFontMetrics(bold).elidedText(self._label, QtCore.Qt.ElideRight, width)
+        detail = fm.elidedText(self._detail, QtCore.Qt.ElideRight, width) if self._detail else ""
+        text = "<b>%s</b>" % html.escape(label)
+        if detail:
+            text += "<br><span style='color:%s'>%s</span>" % (self._muted, html.escape(detail))
+        self.setText(text)
 
 
 def refresh_project_panel():

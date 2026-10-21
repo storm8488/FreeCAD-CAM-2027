@@ -202,6 +202,44 @@ def fix_menu_titles(titles):
     return fixed
 
 
+_menu_guard = None
+
+
+def guard_menu_titles(titles):
+    """Garde les accents des titres de menu : FreeCAD reconstruit la barre de menus (mode avancé, retour sur
+    l'atelier...) et relit chaque fois le titre en Latin-1. Un filtre d'événements sur la barre corrige les
+    titres à chaque menu ajouté ou modifié."""
+    import FreeCADGui
+    from PySide import QtCore
+
+    global _menu_guard
+    bar = FreeCADGui.getMainWindow().menuBar()
+    if _menu_guard is not None:
+        _menu_guard.titles = list(titles)
+        fix_menu_titles(titles)
+        return _menu_guard
+
+    class _Guard(QtCore.QObject):
+        def __init__(self, parent, titles):
+            super(_Guard, self).__init__(parent)
+            self.titles = list(titles)
+            self.busy = False
+
+        def eventFilter(self, obj, event):
+            if event.type() in (QtCore.QEvent.ActionAdded, QtCore.QEvent.ActionChanged) and not self.busy:
+                self.busy = True  # setText déclenche lui-même ActionChanged
+                try:
+                    fix_menu_titles(self.titles)
+                finally:
+                    self.busy = False
+            return False
+
+    _menu_guard = _Guard(bar, titles)
+    bar.installEventFilter(_menu_guard)
+    fix_menu_titles(titles)
+    return _menu_guard
+
+
 # -- rapport de plantage -----------------------------------------------------------------------------
 
 _crash_log = None
