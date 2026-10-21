@@ -596,6 +596,29 @@ class TestUiLogic(unittest.TestCase):
         self.assertIsNotNone(reopened.last_check())
         reopened.close()
 
+    def test_rough3d_regions_and_shadows_cleaned(self):
+        """Ébauche 3D sur une pièce aux nombreuses petites faces (disque WobbleRing de l'utilisateur) : une poche
+        dont le « trou » est le bossage voisin (face retournée) vidait le bossage (entaille de 1,5 mm) ;
+        l'ombre de secours d'un cylindre couché suit sa largeur réelle, pas seulement son bord."""
+        V = FreeCAD.Vector
+        small = Part.makePolygon([V(0, 0, 0), V(1, 0, 0), V(1, 2, 0), V(0, 2, 0), V(0, 0, 0)])
+        boss = Part.makePolygon([V(0, 0, 0), V(5, 0, 0), V(5, 6, 0), V(0, 6, 0), V(0, 0, 0)])
+        # fils mal orientés : aire de la face différente de « contour moins trous » -> plus petit contour seul
+        for wires in ([small, boss], [small, boss.reversed()]):
+            inverted = Part.Face(Part.Plane(), wires)
+            self.assertNotAlmostEqual(inverted.Area, 28.0, places=3)
+            self.assertAlmostEqual(opsmod._clean_region(inverted).Area, 2.0, places=6)
+        hole = Part.makePolygon([V(1, 1, 0), V(2, 1, 0), V(2, 2, 0), V(1, 2, 0), V(1, 1, 0)])
+        pocket = Part.Face(Part.Face(boss).cut(Part.Face(hole)).Faces[0])
+        self.assertIs(opsmod._clean_region(pocket), pocket)  # poche saine : inchangée
+        # demi-cylindre couché (rainure) : 10 mm de long, rayon 2 -> ombre de 4 x 10 mm
+        cyl = Part.makeCylinder(2, 10, V(0, 0, 5), V(0, 1, 0))
+        half = cyl.common(Part.makeBox(10, 10, 10, V(-5, 0, 5))).Faces
+        sides = [opsmod._face_shadow(f) for f in half if isinstance(f.Surface, Part.Cylinder)]
+        self.assertAlmostEqual(sides[0].fuse(sides[1:]).removeSplitter().Area, 40.0, delta=0.2)
+        top = [f for f in half if isinstance(f.Surface, Part.Plane) and f.BoundBox.ZLength < 1e-9][0]
+        self.assertAlmostEqual(opsmod._face_shadow(top).Area, 40.0, delta=1e-6)
+
     def test_undo_removes_an_added_operation(self):
         """Ctrl+Z : l'ajout d'une opération est une étape d'annulation entière. Le document temporaire de la forme
         du ToolBit n'est fermé qu'après la transaction (sinon, dans l'interface, l'opération et son ToolController

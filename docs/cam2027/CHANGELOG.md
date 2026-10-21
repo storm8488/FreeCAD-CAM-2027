@@ -2,6 +2,19 @@
 
 ## Non publié
 
+- **Ébauche 3D sur une pièce aux nombreuses petites faces** (disque WobbleRing de l'utilisateur, STEP de
+  181 faces) : « aucun parcours sur la pièce entière ». Quatre défauts de FreeCAD/OpenCascade, l'un après
+  l'autre : projection des faces sur XY en échec (« Wire is not closed », même face par face), contour d'une
+  lamelle d'aire nulle introuvable (« EdgeWalker has no edges »), discrétisation d'un fil ouvert qui plante
+  (« Access violation »), et une poche aux fils mal orientés dont le « trou » était le bossage voisin :
+  l'adaptative vidait le bossage (entaille de 1,5 mm trouvée par le contrôle matière). Corrigé : ombre de
+  secours d'une face (polygone de son bord si elle est plane, sinon sa triangulation à 0,01 mm), contour de
+  secours, discrétisation arête par arête, poches nettoyées (une face dont l'aire n'est pas « contour moins
+  trous » ne garde que son plus petit contour : au pire de la matière reste, jamais d'entaille). Pièce
+  entière : 15 000 commandes, 9,0 cm³, aucune entaille, 11 s.
+- **Poche trop étroite pour la fraise** : la poche, la poche 2D et l'adaptative sur la pièce entière
+  disaient « sélectionnez les faces » ; elles disent maintenant que la fraise est trop grande et la plus
+  grande qui passe (5,7 mm sur les logements d'écrou du disque, fraise de 6 mm proposée).
 - **Annuler / Rétablir (Ctrl+Z, Ctrl+Y)** : « Annuler » restait grisé, CAM2027 n'ouvrait aucune transaction
   FreeCAD. Chaque action est maintenant une étape d'annulation : import, brut et montage, ajout d'une
   opération, modification dans l'éditeur, activer/désactiver, déplacer, dupliquer, supprimer, fond plat,

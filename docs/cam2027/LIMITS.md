@@ -72,6 +72,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Adaptative et ébauche 3D : entrée en hélice seulement (pas de rampe ni de plongée) ; l'hélice démarre à
   0,95 x le diamètre et se réduit région par région jusqu'à 10 % du diamètre ; une région plus étroite que la
   fraise reste pleine (trou de 4 mm pour une fraise de 6). Fraise à coupe au centre conseillée.
+- Ébauche 3D (mode « modèle ») : une face que FreeCAD ne sait pas projeter sur XY a une ombre approchée à
+  0,01 mm (triangulation) ; une poche aux fils incohérents (découpe d'OpenCascade sur une pièce aux nombreuses
+  petites faces) est réduite à son plus petit contour : de la matière peut rester pour la finition.
 - Adaptative et ébauche 3D : liaisons « en zone dégagée » remontées d'une passe (`LiftDistance` = passe ;
   0 dans FreeCAD, l'adaptative en faisait parfois une à travers la matière). Le Z constant (OpenCamLib) ne
   s'arrête pas en cours de calcul : sur une grande pièce l'interface reste occupée (39 s sur le chauffage

@@ -568,6 +568,11 @@ class AddOperation(_Base):
         if not explicit and proj.operation_state(op) == "failed":
             proj.remove_operation(op)
             _after_change()
+            fit = opsmod.largest_tool_for(base) if k in ("pocket", "pocket2d", "adaptive") else None
+            if fit is not None and fit < tool.geometry.diameter:
+                _warn(tr("The {d} mm tool is too large for the pockets found on the part (largest tool that fits: {fit} mm): choose a smaller tool, or select the faces to machine.",
+                         d="%g" % tool.geometry.diameter, fit="%.1f" % fit))
+                return
             _warn(tr("This strategy produced no toolpath on the whole part: select the faces or edges to machine, then add the operation again."))
             return
         if rec["warnings"]:

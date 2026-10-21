@@ -21,6 +21,8 @@ import time
 #: désactive la préparation parallèle (``0``)
 ENV_SWITCH = "CAM2027_PARALLEL_LEVELS"
 MAX_WORKERS = 12
+#: aire en dessous de laquelle une face projetée est ignorée (mm²)
+MIN_FACE_AREA = 1e-6
 #: en dessous, préparation en série (le démarrage des processus coûterait plus qu'il ne rapporte)
 MIN_LEVELS = 4
 
@@ -37,10 +39,26 @@ def level_regions(mod, model_shape, stock_shape, model_outline_faces, z):
     projdir = FreeCAD.Vector(0, 0, 1)
     stockface = mod._getSolidProjection(stock_shape, z)
     above = mod._getSolidProjection(model_shape, z)
-    faces = [Part.makeFace(TechDraw.findShapeOutline(f, 1, projdir)) for f in above.Faces]
+    faces = [o for o in (_outline(f, projdir, Part, TechDraw) for f in above.Faces) if o is not None]
     above_model = faces[0].fuse(faces[1:]) if faces else Part.Shape()
     final_cut = final_cut_for(above_model, above, stockface, model_outline_faces, DraftGeomUtils, Part)
     return above_model, final_cut, stockface, above
+
+
+def _outline(face, projdir, Part, TechDraw):
+    """Face pleine du contour d'une face projetée (à plat en XY), comme FreeCAD (``findShapeOutline``). Sur un
+    STEP aux nombreuses petites faces (disque WobbleRing), la projection contient de fines lamelles où TechDraw
+    ne trouve pas de contour (« EdgeWalker has no edges to load ») : le contour est alors le fil extérieur de la
+    face ; une lamelle d'aire nulle, qui n'ajoute rien à l'ombre, est ignorée."""
+    try:
+        return Part.makeFace(TechDraw.findShapeOutline(face, 1, projdir))
+    except Exception:
+        try:
+            return Part.Face(face.OuterWire)
+        except Exception:
+            if face.Area <= MIN_FACE_AREA:
+                return None
+            raise
 
 
 def final_cut_for(outside_region, above, stockface, model_outline_faces, DraftGeomUtils=None, Part=None):

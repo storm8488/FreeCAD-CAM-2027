@@ -273,6 +273,32 @@ def auto_geometry(kind, models):
     return out
 
 
+def largest_tool_for(base, precision=0.05):
+    """Plus grand diamètre de fraise qui entre dans au moins une des faces de ``base`` (fonds de poche trouvés
+    automatiquement), à ``precision`` près ; None sans face plane. Sert à dire pourquoi une poche ne donne
+    aucun parcours (disque WobbleRing : logements de 26,5 mm², fraise de 6 mm proposée par défaut)."""
+    best = None
+    for obj, subs in base or []:
+        for sub in subs:
+            face = obj.Shape.getElement(sub)
+            lo, hi = 0.0, max(face.BoundBox.XLength, face.BoundBox.YLength)
+
+            def fits(d):
+                try:
+                    return bool(face.makeOffset2D(-d / 2.0).Faces)
+                except Exception:
+                    return False
+
+            while hi - lo > precision:
+                mid = (lo + hi) / 2.0
+                if fits(mid):
+                    lo = mid
+                else:
+                    hi = mid
+            best = lo if best is None else max(best, lo)
+    return best
+
+
 def thread_table(thread_type):
     """Lignes (dict) de la table FreeCAD des filets standard ``Mod/CAM/Data/Threads``."""
     import FreeCAD
@@ -417,6 +443,81 @@ def patch_surface_keepalive():
     PathUtils.simplify3dLine = simplify
 
 
+#: écart de la triangulation d'une face dont FreeCAD ne sait pas projeter les fils (mm)
+SHADOW_DEFLECTION = 0.01
+
+
+def _face_shadow(face):
+    """Ombre sur XY d'une face que FreeCAD ne sait pas projeter seule (disque WobbleRing : fonds plats,
+    cylindres des rainures, « Wire is not closed ») : face plane -> polygone de son bord discrétisé (trous
+    compris, exact) ; face courbe -> réunion des triangles de sa triangulation (le bord seul sous-estimait
+    l'ombre d'un cylindre qui se replie vu de dessus : 2,0 mm² au lieu de 2,9, entaille de 1,5 mm).
+    None si la face n'a pas d'ombre (face verticale)."""
+    import FreeCAD
+    import Part
+
+    outer = _polygon(face.OuterWire, SHADOW_DEFLECTION) if isinstance(face.Surface, Part.Plane) else None
+    if outer is not None:
+        holes = [h for h in (_polygon(w, SHADOW_DEFLECTION) for w in face.Wires if not w.isSame(face.OuterWire))
+                 if h is not None]
+        try:
+            shadow = Part.makeFace([outer] + holes, "Part::FaceMakerBullseye")
+            if shadow.isValid() and shadow.Area > 1e-6:
+                return shadow
+        except Exception:
+            pass
+    points, triangles = face.tessellate(SHADOW_DEFLECTION)
+    flat = [FreeCAD.Vector(p.x, p.y, 0.0) for p in points]
+    faces = []
+    for i, j, k in triangles:
+        a, b, c = flat[i], flat[j], flat[k]
+        if abs((b - a).cross(c - a).z) > 1e-9:
+            faces.append(Part.Face(Part.makePolygon([a, b, c, a])))
+    if not faces:
+        return None
+    return faces[0].fuse(faces[1:]).removeSplitter() if len(faces) > 1 else faces[0]
+
+
+def _polygon(wire, deflection):
+    import FreeCAD
+    import Part
+
+    pts = []
+    for p in wire.discretize(Deflection=deflection):
+        p = FreeCAD.Vector(p.x, p.y, 0.0)
+        if not pts or (p - pts[-1]).Length > 1e-5:
+            pts.append(p)
+    if len(pts) > 1 and (pts[0] - pts[-1]).Length <= 1e-5:
+        pts.pop()
+    return Part.makePolygon(pts + [pts[0]]) if len(pts) >= 3 else None
+
+
+def _patch_discretize(mod):
+    """Discrétisation des régions de l'adaptative : sur le disque WobbleRing une région garde une lamelle
+    ouverte (une ligne de 6,4 mm et une courbe de 0,03 mm, aire nulle) et ``Wire.discretize`` plante
+    (« Access violation »), toute l'ébauche 3D échoue. Chaque arête se discrétise pourtant seule : ses points
+    sont alors mis bout à bout (polygone d'aire nulle, sans effet sur le parcours)."""
+    original = getattr(mod, "discretize", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+
+    def discretize(edge, flipDirection=False):
+        try:
+            return original(edge, flipDirection)
+        except Exception:
+            pts = []
+            for e in getattr(edge, "OrderedEdges", None) or edge.Edges:
+                for p in e.discretize(Deflection=0.002):
+                    if not pts or (p - pts[-1]).Length > 1e-9:
+                        pts.append(p)
+            if flipDirection:
+                pts.reverse()
+            return pts
+
+    discretize.cam2027_patched = True
+    mod.discretize = discretize
+
+
 def patch_adaptive_slicing(mod=None):
     """Mode « modèle » de l'adaptative (FreeCAD 1.1) : à chaque niveau, les faces de la pièce au-dessus de la
     tranche sont projetées sur XY puis réunies en une face par ``DraftGeomUtils.concatenate``. Sur certaines
@@ -433,14 +534,20 @@ def patch_adaptive_slicing(mod=None):
         try:
             return original(faces, *args, **kwargs)
         except Exception:
-            parts = [original([f], *args, **kwargs) for f in faces]
-            parts = [p for p in parts if not p.isNull() and p.Faces]
+            parts = []
+            for f in faces:
+                try:
+                    parts.append(original([f], *args, **kwargs))
+                except Exception:
+                    parts.append(_face_shadow(f))
+            parts = [p for p in parts if p is not None and not p.isNull() and p.Faces]
             if not parts:
                 raise
             return parts[0].fuse(parts[1:]).removeSplitter() if len(parts) > 1 else parts[0]
 
     projection.cam2027_patched = True
     mod.projectFacesToXY = projection
+    _patch_discretize(mod)
     _patch_roughing_regions(mod)
     from . import parallel_adaptive
 
@@ -471,6 +578,39 @@ def keep_gui_alive(_state={"t": 0.0}):
 #: empreinte SHA-1 de ``_workingEdgeHelperRoughing`` de FreeCAD 1.1.4 (le remplacement n'est installé que sur
 #: cette version exacte du code)
 ROUGHING_HELPER_SHA1 = "dba8a4f537de339e8a419ff74a3291e9e5447226"
+
+
+def _clean_region(face):
+    """Poche d'un niveau de l'ébauche 3D, débarrassée de ce que la découpe booléenne laisse sur une pièce aux
+    nombreuses petites faces (disque WobbleRing) : fils ouverts ou d'aire nulle (lamelles), et faces aux fils
+    mal orientés. Une poche d'aire -32,55 mm² (= -(1,98 + 30,58)) avait pour second fil le bossage voisin :
+    l'adaptative vidait le bossage, entaille de 1,5 mm. Une face saine a pour aire son contour moins ses trous ;
+    sinon seul son plus petit contour est gardé (au pire de la matière reste pour la finition, jamais
+    d'entaille). None si rien ne reste."""
+    import Part
+
+    def area(w):
+        try:
+            return abs(Part.Face(w).Area)
+        except Exception:
+            return 0.0
+
+    wires = [(w, area(w)) for w in face.Wires if w.isClosed()]
+    wires = [(w, a) for w, a in wires if a > 1e-6]
+    if not wires:
+        return None
+    outer = face.OuterWire
+    outer_area = area(outer)
+    holes = [(w, a) for w, a in wires if not w.isSame(outer)]
+    expected = outer_area - sum(a for _w, a in holes)
+    consistent = (face.Area > 0 and abs(face.Area - expected) <= 1e-3 * max(1.0, outer_area)
+                  and all(a < outer_area and outer.BoundBox.isInside(w.BoundBox) for w, a in holes))
+    if consistent and len(wires) == len(face.Wires):
+        return face
+    if consistent:
+        return Part.makeFace([outer] + [w for w, _a in holes], "Part::FaceMakerBullseye")
+    smallest = min(wires, key=lambda wa: wa[1])[0]
+    return Part.makeFace([smallest], "Part::FaceMakerBullseye")
 
 
 def _patch_roughing_regions(mod):
@@ -539,6 +679,9 @@ def _patch_roughing_regions(mod):
                 outsideRegions.append({"region": aboveModelFaces, "depths": [depth]})
             if aboveModelFaces.Wires and finalCut is not None:
                 for f in finalCut.Faces:
+                    f = _clean_region(f)  # CAM2027 : poche retournée ou lamelle (disque WobbleRing)
+                    if f is None:
+                        continue
                     addNew = True
                     for rdict in insideRegions:
                         if not _included(rdict["region"], f):  # CAM2027 : filtre avant la découpe
