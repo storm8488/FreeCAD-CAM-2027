@@ -256,15 +256,15 @@ class TestUiLogic(unittest.TestCase):
         proj.close()
 
     def test_default_params(self):
-        """Réglages initiaux tirés de la matrice stratégies × pièces : finition 3D échantillonnée à 0,1 mm
-        (0,5 mm : 1,45 mm d'entaille sur la plaque), Z constant à 0,5 mm (0,1 mm : plus de 400 s sur le
+        """Réglages initiaux tirés de la matrice stratégies × pièces : finition 3D échantillonnée à 0,05 mm
+        (0,5 mm : entaille sur la plaque ; 0,1 mm : 0,07 mm sur le casse-noix), Z constant à 0,5 mm (0,1 mm : plus de 400 s sur le
         chauffage), liaisons de l'adaptative remontées d'une passe (G0 à travers 3 mm de matière sinon)."""
         from cam2027.gui.commands import default_params
 
         lib = starter_library()
         ball = lib.search("6 mm ball end mill")[0]
         flat = lib.search("6 mm flat end mill")[0]
-        self.assertEqual(default_params("surface3d", ball, ball.presets[0].resolve(ball))["SampleInterval"], 0.1)
+        self.assertEqual(default_params("surface3d", ball, ball.presets[0].resolve(ball))["SampleInterval"], 0.05)
         self.assertEqual(default_params("waterline", ball, ball.presets[0].resolve(ball))["SampleInterval"], 0.5)
         for kind in ("adaptive", "rough3d"):
             p = default_params(kind, flat, flat.presets[0].resolve(flat))

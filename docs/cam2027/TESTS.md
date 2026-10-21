@@ -115,11 +115,14 @@ hauteur à 0,5 mm). Avant / après les optimisations du 2026-10-20.
 | Pièce | Opération | Commandes | Calcul avant | Calcul après | Contrôle avant | Contrôle après |
 |---|---|---|---|---|---|---|
 | plateau `bitTray3030+v7.stl` (1 553 faces) | finition 3D boule 6 mm, 0,1 mm | 173 000 | 13-20 s | 12 s | 96 s | 7,9 s |
+| plateau | finition 3D, 0,05 mm (défaut) | 190 000 | - | 18,6 s | - | 8,1 s |
 | plateau | adaptative, 135 fonds | 404 000 | 11-19 s | 11 s | 21 s | 12,3 s |
 | plateau | ébauche 3D (mode modèle) | 240 000 | 78-97 s | 47 s | 12-16 s | 8,5 s |
 | plateau | poche 3D, 135 fonds | 21 500 | 26-31 s | 31 s | 1,7 s | 1,1 s |
 | plateau | Z constant boule 6 mm, 0,5 mm | 232 000 | 7,6 s | 5,6 s | 13,8 s | 15,2 s |
 | chauffage Vz330 (STEP, 2 corps) | finition 3D boule 6 mm, 0,1 mm | 88 000 | 34 s | 38 s | 66 s | 6,4 s |
+| chauffage | finition 3D, 0,05 mm (défaut) | 94 000 | - | 59,7 s | - | 6,0 s |
+| casse-noix (STL 215 552 triangles, surface) | finition 3D, 0,05 mm (défaut) | 29 000 | - | 43,3 s | - | 28 s |
 | chauffage | ébauche 3D (mode modèle) | 348 000 | 54-58 s | 52 s | 24 s | 18,8 s |
 | chauffage | adaptative | 27 000 | 1,1 s | 6 s (recalcul complet) | 3,7 s | 2,3 s |
 

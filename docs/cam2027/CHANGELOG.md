@@ -2,6 +2,9 @@
 
 ## Non publié
 
+- **Finition 3D échantillonnée à 0,05 mm par défaut** (0,1 mm laissait 0,07 mm d'entaille sur le casse-noix).
+  Mesuré : casse-noix 39,8 -> 43,3 s, sans entaille ; plateau 11,7 -> 18,6 s ; chauffage 35,6 -> 59,7 s ;
+  plaque 1,1 -> 1,7 s ; aucune entaille sur ces pièces.
 - **Entailles vérifiées en 3D** : la carte de hauteur transformait un contact latéral de 0,05 mm contre une
   paroi raide en entaille de toute la hauteur de la paroi (5,09 puis 1,85 mm signalés sur le casse-noix de
   l'utilisateur, export bloqué). Les colonnes signalées sont maintenant vérifiées sur la pièce triangulée

@@ -680,7 +680,7 @@ def default_params(kind, tool, values):
     if kind == "millface":
         params["ClearEdges"] = True
     if kind == "surface3d":
-        params.update({"StepOver": stepover, "CutPattern": "ZigZag", "SampleInterval": 0.1})
+        params.update({"StepOver": stepover, "CutPattern": "ZigZag", "SampleInterval": 0.05})
         params.pop("StepDown", None)  # passe unique de finition par défaut
     if kind == "waterline":
         params.update({"LayerMode": "Multi-pass", "SampleInterval": 0.5})

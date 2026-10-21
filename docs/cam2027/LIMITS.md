@@ -46,8 +46,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Stratégies exposées : contour, poche, adaptative 2D, perçage, surfaçage, gravure,
   V-carving, alésage hélicoïdal, rainure, fraisage de filets, chanfreinage, poche 2D,
   **finition 3D de surface et en Z constant** (OpenCamLib, 3 axes : balayage rotatif non exposé ;
-  échantillonnage par défaut 0,1 mm : à 0,5 mm les segments entre échantillons coupaient le haut des
-  parois, 0,25 mm d'entaille réelle sur la plaque de test ;
+  échantillonnage par défaut 0,05 mm : à 0,5 mm les segments entre échantillons coupaient le haut des
+  parois (0,25 mm d'entaille réelle sur la plaque de test), à 0,1 mm encore 0,07 mm sur le casse-noix ;
   **ébauche 3D** = adaptative niveau par niveau ; pièce entière sur FreeCAD 1.1 : mode « modèle » (pièce
   et brut tranchés à chaque niveau, calcul arrêtable ; quand la réunion des projections d'une tranche
   échoue dans FreeCAD, « Wire is not closed », la réunion face par face est gardée) ; sur 1.0.2 : autour
