@@ -2,6 +2,20 @@
 
 ## Non publié
 
+- **[B3]** Correctif : **double-clic sur une opération dans l'arbre** : la page de tâches FreeCAD s'ouvrait à moitié
+  puis ne se fermait plus (Annuler et OK levaient `'NoneType' object has no attribute 'resetEditVisibility'`,
+  transaction laissée ouverte) : le job créé par CAM2027 n'avait pas le fournisseur de vue de l'atelier CAM. Il
+  l'a maintenant (`project.attach_job_view`, posé aussi à l'activation d'un projet enregistré avant). Une fois la
+  page réparée, **Annuler supprimait l'opération** (fournisseur de vue resté « en cours de création ») : corrigé.
+  Scénario `b3-tree-edit`.
+- **[B3]** Correctif : pages de tâches des finitions CAM2027 (crête constante, plats, angles) : aucune page au
+  double-clic (filtre de sélection inconnu de FreeCAD, `KeyError`), et après réouverture du projet dans une
+  nouvelle session page introuvable (`TaskPanelOpPage` créée seulement à l'ajout d'une opération). Enregistrées au
+  démarrage de l'atelier (`commands.register_task_pages`). Scénario `b3-reopen` (11 stratégies, enregistrement,
+  réouverture, page de chaque opération, parcours identiques après recalcul).
+- **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
+  d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
+
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

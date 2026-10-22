@@ -1382,6 +1382,24 @@ class _UndoObserver(object):
                     obj.purgeTouched()
         QtCore.QTimer.singleShot(0, refresh_project_panel)
 
+    # Le panneau montrait encore l'ancien projet après un changement d'onglet, l'ouverture d'un fichier ou la
+    # fermeture du document (différé : à l'ouverture, les fournisseurs de vue sont relus après le document).
+
+    def slotActivateDocument(self, doc):
+        QtCore.QTimer.singleShot(0, _document_activated)
+
+    def slotDeletedDocument(self, doc):
+        QtCore.QTimer.singleShot(0, refresh_project_panel)
+
+
+def _document_activated():
+    proj = state.active_project()
+    if proj is not None and proj.has_job:
+        from ..project.project import attach_job_view
+
+        attach_job_view(proj.job)  # projet enregistré avant que le job ait son fournisseur de vue
+    refresh_project_panel()
+
 
 _undo_observer = None
 
