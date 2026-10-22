@@ -1167,5 +1167,12 @@
   "Pattern number": "Numéro de motif",
   "Short strokes in staggered rows; length and depth vary at random around the values (same pattern number = same texture). Strokes stop where the tool would leave the area.": "Coups courts en rangées décalées ; longueur et profondeur varient au hasard autour des valeurs (même numéro de motif = même texture). Les coups s'arrêtent là où l'outil sortirait de la zone.",
   "texture: spacing, stroke length and depth must be above 0": "texture : l'écart, la longueur des coups et la profondeur doivent être supérieurs à 0",
-  "texture needs a ball end mill or a V-bit": "la texture demande une fraise boule ou un V-bit"
+  "texture needs a ball end mill or a V-bit": "la texture demande une fraise boule ou un V-bit",
+  "Prism": "Prisme",
+  "V-bit bevel from the outline of a closed vector: ridge or flat top": "Biseau au V-bit depuis le contour d'un vecteur fermé : crête ou dessus plat",
+  "Depth at the outline (mm)": "Profondeur au contour (mm)",
+  "Bevel from the outline at the V-bit angle: a ridge where the bevels meet, a flat top if the shape is wider. The V-bit flank also cuts outside the outline (pocket the surroundings to the same depth).": "Biseau depuis le contour à l'angle du V-bit : crête où les biseaux se rejoignent, dessus plat si la forme est plus large. Le flanc du V-bit coupe aussi hors du contour (pocheter les alentours à la même profondeur).",
+  "prism: depth and stepover must be above 0": "prisme : la profondeur et le pas doivent être supérieurs à 0",
+  "prism needs a V-bit": "le prisme demande un V-bit",
+  "prism: {d} mm is deeper than the V-bit cutting length": "prisme : {d} mm dépasse la longueur coupante du V-bit"
 }

@@ -522,6 +522,35 @@ class TestDecor(unittest.TestCase):
         self.assertGreater(float(cut[r < 15.0].mean()), 0.15)
         self.assertGreater(float(cut[(r > 16.0) & (r < 18.0)].mean()), 0.05)
 
+    def test_prism_bevel(self):
+        """Prisme au V-bit 90° dans un rectangle 40 x 20, profondeur 3 : sur la carte simulée, biseau
+        z = −3 + distance au contour (dessus plat au-delà de 3 mm) à 0,05 mm, aucune entaille."""
+        from cam2027.project import decor, vectors
+
+        lib = starter_library()
+        proj = frame_project("Prism", lib, 100.0, 40.0)
+        rect = vectors.add_vector(proj, Part.Compound([Part.makePolygon(
+            [V(30, 10, 0), V(70, 10, 0), V(70, 30, 0), V(30, 30, 0), V(30, 10, 0)])]), "Rect")
+        vbit, vasm = tool_ids(lib, "V-bit", lambda t: t.geometry.tip_included_angle_deg == 90.0)
+        with self.assertRaises(Exception):  # 12 mm : plus profond que la longueur coupante du V-bit (6,35)
+            decor.add_prism(proj, "Too deep", vasm.id, vbit.presets[0].id, rect, depth=12.0)
+        op, _rec = decor.add_prism(proj, "Prism", vasm.id, vbit.presets[0].id, rect, depth=3.0, stepover=1.0)
+        self.assertGreater(len(op.Path.Commands), 10)
+        proj.material_check(resolution=0.1)
+        zmap = proj.last_zmap
+        import numpy as np
+
+        X, Y = np.meshgrid(zmap.xs, zmap.ys, indexing="ij")
+        dist = np.minimum.reduce([X - 30.0, 70.0 - X, Y - 10.0, 30.0 - Y])
+        inside = dist > 0.05
+        expected = np.minimum(0.0, -3.0 + dist)
+        diff = zmap.top[inside] - expected[inside]
+        self.assertGreaterEqual(float(diff.min()), -0.02)  # aucune entaille
+        self.assertLessEqual(float(diff.max()), 0.05)  # biseau complet (pointe du V-bit de 0,1 mm comprise)
+        # dehors : le flanc extérieur descend de 3 mm au contour à 0 à 3 mm du contour, rien au-delà
+        far = dist < -3.1
+        self.assertAlmostEqual(float(zmap.top[far].min()), 0.0, places=6)
+
 V = FreeCAD.Vector
 
 

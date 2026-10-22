@@ -294,5 +294,7 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   d'onglet aux angles d'un rail fermé (les passes tournent avec le rail).
 - **Cannelures** : profondeur seule réglable (la largeur suit la forme de l'outil) ; rampes linéaires.
 - **Texture** : coups horizontaux seulement (pas d'angle ni de motif croisé), forme de coup en arc fixe.
-- **Prisme** (Aspire « Prism ») : non fait.
+- **Prisme** : V-bit seulement, biseau vers l'intérieur (prisme en relief) ; le flanc extérieur coupe aussi hors
+  du contour sur `p · tan(α/2)` (pocheter les alentours à la même profondeur, comme dans Aspire) ; pas de
+  prisme en creux.
 

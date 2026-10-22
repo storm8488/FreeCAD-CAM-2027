@@ -213,6 +213,13 @@ class Texture(_DecorCommand):
     tooltip = "Random short strokes in a closed vector (ball end mill or V-bit), same pattern number = same texture"
 
 
+class Prism(_DecorCommand):
+    atelier = "engrave"
+    dialog = "PrismDialog"
+    text = "Prism"
+    tooltip = "V-bit bevel from the outline of a closed vector: ridge or flat top"
+
+
 from . import vectors  # noqa: E402
 
 COMMANDS = [
@@ -224,10 +231,11 @@ COMMANDS = [
     ("CAM2027_Moulding", Moulding),
     ("CAM2027_Fluting", Fluting),
     ("CAM2027_Texture", Texture),
+    ("CAM2027_Prism", Prism),
 ] + vectors.COMMANDS
 #: menu et barre d'outils Dessin
 DRAWING_MENU = vectors.TOOLBAR + ["Separator", "CAM2027_TraceBitmap"]
 #: entrées du menu Usiner
-MACHINING_MENU = ["Separator", "CAM2027_PhotoVCarve", "CAM2027_Moulding", "CAM2027_Fluting", "CAM2027_Texture", "Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]
+MACHINING_MENU = ["Separator", "CAM2027_PhotoVCarve", "CAM2027_Moulding", "CAM2027_Fluting", "CAM2027_Texture", "CAM2027_Prism", "Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]
 #: entrées du menu Exporter
 EXPORT_MENU = ["CAM2027_SetupSheetPdf"]

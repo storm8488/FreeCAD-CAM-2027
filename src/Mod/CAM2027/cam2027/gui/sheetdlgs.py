@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication,
-vectorisation d'image et Photo V-Carve, moulure, cannelures et texture."""
+vectorisation d'image et Photo V-Carve, moulure, cannelures, texture et prisme."""
 
 from ..i18n import tr, tr_msg
 from .labels import preset_label
@@ -423,4 +423,36 @@ class TextureDialog(QtWidgets.QDialog):
         return decor.add_texture(self.proj, tr("Texture"), self.asm.currentData(), self.preset.currentData(), region,
                                  self.spacing.value(), self.length.value(), self.depth.value(),
                                  self.variation.value() / 100.0, self.seed.value())
+
+
+class PrismDialog(QtWidgets.QDialog):
+    """Prisme (Aspire « Prism ») : biseau au V-bit depuis le contour d'un vecteur fermé."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(PrismDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Prism"))
+        form = QtWidgets.QFormLayout(self)
+        self.region = QtWidgets.QComboBox()
+        names = [o.Name for o in selected]
+        for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+            if sheetmod.closed_wires(obj):
+                self.region.addItem(obj.Label, obj.Name)
+        form.addRow(tr("Closed vector"), self.region)
+        self.asm, self.preset = tool_pickers(proj, is_vbit)
+        form.addRow(tr("V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.depth = _spin(0.1, 50, 3.0)
+        form.addRow(tr("Depth at the outline (mm)"), self.depth)
+        _hint(form, tr("Bevel from the outline at the V-bit angle: a ridge where the bevels meet, a flat top if the shape is wider. The V-bit flank also cuts outside the outline (pocket the surroundings to the same depth)."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.region.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        region = self.proj.doc.getObject(self.region.currentData())
+        return decor.add_prism(self.proj, tr("Prism"), self.asm.currentData(), self.preset.currentData(), region,
+                               self.depth.value())
 

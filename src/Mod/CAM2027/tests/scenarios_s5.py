@@ -245,7 +245,7 @@ def scenario_setup_pdf(gs, scenario, files, tmp):
 
 
 def scenario_decor(gs, scenario, files):
-    """Moulure quart-de-rond le long du rectangle, cannelures sur le triangle, texture dans le cercle, par leurs
+    """Moulure quart-de-rond le long du rectangle, cannelures sur le triangle, texture dans le cercle, prisme sur le rectangle, par leurs
     dialogues."""
     proj = _sheet_project(gs, scenario, "Decor", files["svg"])
     if proj is None:
@@ -271,7 +271,8 @@ def scenario_decor(gs, scenario, files):
     circle = [v for v in vectors if len(v.Shape.Edges) == 1]
     for name, title, handler, target in (("CAM2027_Moulding", "Moulding", moulding, rect),
                                          ("CAM2027_Fluting", "Fluting", fluting, tri),
-                                         ("CAM2027_Texture", "Texture", lambda dlg: True, circle)):
+                                         ("CAM2027_Texture", "Texture", lambda dlg: True, circle),
+                                         ("CAM2027_Prism", "Prism", lambda dlg: True, rect)):
         FreeCADGui.Selection.clearSelection()
         if target:
             FreeCADGui.Selection.addSelection(target[0])
@@ -280,9 +281,9 @@ def scenario_decor(gs, scenario, files):
     gs.run_command(scenario, "CAM2027_Compute")
     proj = gs.project()
     states = [(o.Label, proj.operation_state(o), len(o.Path.Commands)) for o in proj.operations()]
-    gs.log("  moulding, fluting, texture: %s" % states)
-    if len(states) != 3:
-        gs.problem(scenario, "3 operations expected (moulding, fluting, texture), got %s" % states)
+    gs.log("  moulding, fluting, texture, prism: %s" % states)
+    if len(states) != 4:
+        gs.problem(scenario, "4 operations expected (moulding, fluting, texture, prism), got %s" % states)
     for label, st, n in states:
         if st != "computed" or n < 10:
             gs.problem(scenario, "operation %s is %s (%d moves)" % (label, st, n))

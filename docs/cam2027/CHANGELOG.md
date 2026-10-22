@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **[S5]** **Prisme** (Aspire « Prism ») : Usiner > Prisme biseaute au V-bit un vecteur fermé depuis son contour
+  (profondeur au contour, pente du flanc vers l'intérieur : crête là où les biseaux se rejoignent, dessus plat
+  sinon). La pointe suit les décalages intérieurs (angles vifs) à `z = −p + s / tan(α/2)`, plat de pointe
+  compris : le flanc du V-bit est exactement le biseau. Rectangle 40 × 20, V-bit 90°, 3 mm : biseau à
+  0,05 mm sur la carte simulée, aucune entaille ; profondeur au-delà de la longueur coupante refusée.
 - **[S5]** **Texture** (Aspire « Texture Toolpath ») : Usiner > Texture remplit un vecteur fermé de coups de
   gouge courts en rangées décalées (boule ou V-bit), longueur et profondeur tirées au hasard autour des valeurs
   (numéro de motif = graine : même texture à chaque calcul), chaque coup plongeant en arc ; près du bord, un

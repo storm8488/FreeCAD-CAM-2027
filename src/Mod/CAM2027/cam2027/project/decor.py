@@ -15,6 +15,11 @@ longueur de départ, palier, rampe de retour à 0 sur une longueur de fin (V-bit
 hasard autour des valeurs demandées (graine fixe : même texture à chaque calcul) ; chaque coup plonge en arc
 (profondeur maximale au milieu). Près du bord, un coup est coupé là où la fraise, à sa profondeur, ne
 reste plus entière dans la zone (plongée ou remontée verticale à la coupure).
+
+**Prisme** : biseau au V-bit depuis le contour d'un vecteur fermé, profondeur ``p`` au contour et pente du flanc
+du V-bit vers l'intérieur (crête là où les biseaux se rejoignent, dessus plat si la forme est plus large). La
+pointe suit les décalages intérieurs du contour à ``s`` mm, à ``z = −p + s / tan(α/2)`` : le flanc intérieur du
+V-bit est alors exactement le biseau, sans reste entre les passes.
 """
 
 import math
@@ -27,6 +32,7 @@ DECOR_PREFIX = "CAM2027Decor"
 MOULDING_KIND = "moulding"
 FLUTING_KIND = "fluting"
 TEXTURE_KIND = "texture"
+PRISM_KIND = "prism"
 
 #: sections prédéfinies : nom -> fonction(largeur, profondeur) -> points (u, z)
 PROFILES = ("quarter_round", "cove", "chamfer", "ogee")
@@ -319,3 +325,62 @@ def add_texture(proj, name, assembly_id, preset_id, region_obj, spacing=3.0, len
     params = {"region": region_obj.Name, "spacing": spacing, "length": length, "depth": depth,
               "variation": variation, "seed": seed}
     return add_decor_operation(proj, TEXTURE_KIND, name, assembly_id, preset_id, lines, params)
+
+
+def prism_passes(face, depth, half_angle_deg, stepover, z_top=0.0, tip_radius=0.0, deflection=0.01):
+    """Contours fermés ``[[(x, y, z)]]`` du prisme : bord du plat de pointe (``tip_radius``) sur les décalages
+    intérieurs à ``s`` = 0, ``stepover``, ... du contour (angles vifs : arêtes du biseau sur les bissectrices),
+    pointe à ``z_top − depth + s / tan(demi-angle)``, jusqu'au dessus. Le centre de la pointe est à
+    ``s − tip_radius`` du contour : le flanc commence au bord du plat, exactement sur le biseau."""
+    if depth <= 0 or stepover <= 0:
+        raise UserError("prism: depth and stepover must be above 0")
+    t = math.tan(math.radians(half_angle_deg))
+    out = []
+    k = 0
+    while True:
+        s = k * stepover
+        z = z_top - depth + s / t
+        if z >= z_top - 1e-6:
+            break
+        offset = tip_radius - s  # > 0 : vers l'extérieur (première passe, plat de pointe à cheval sur le contour)
+        if abs(offset) > 1e-9:
+            try:
+                region = face.makeOffset2D(offset, 2, False, False, False)
+            except Exception:  # plus rien à l'intérieur
+                break
+        else:
+            region = face
+        wires = [w for f in region.Faces for w in f.Wires]
+        if not wires or region.Area < 1e-6:
+            break
+        for w in wires:
+            pts = w.discretize(Deflection=deflection)
+            if (pts[0] - pts[-1]).Length > 1e-9:
+                pts.append(pts[0])
+            out.append([(p.x, p.y, z) for p in pts])
+        k += 1
+    return out
+
+
+def add_prism(proj, name, assembly_id, preset_id, region_obj, depth=3.0, stepover=None):
+    """Prisme au V-bit dans le vecteur fermé ``region_obj``. ``stepover`` par défaut : moitié de la largeur du
+    flanc (le flanc couvre toute la pente quand elle est plus étroite que la fraise). Retourne ``(op, record)``."""
+    from . import vectors
+
+    face = vectors.faces_of(region_obj.Shape)
+
+    def lines(tool, z_top):
+        angle = tool.geometry.tip_included_angle_deg
+        if tool.tool_type not in ("vbit", "engrave", "chamfer") or not angle:
+            raise UserError("prism needs a V-bit")
+        half = float(angle) / 2.0
+        flank = tool.geometry.diameter / 2.0
+        if depth * math.tan(math.radians(half)) > flank + 1e-9 and depth > float(tool.geometry.flute_length or depth):
+            raise UserError("prism: {d} mm is deeper than the V-bit cutting length", d="%g" % depth)
+        step = stepover or max(0.05, 0.5 * flank)
+        tip = float(getattr(tool.geometry, "tip_diameter", 0.0) or 0.0) / 2.0
+        return prism_passes(face, depth, half, step, z_top, tip_radius=tip)
+
+    params = {"region": region_obj.Name, "depth": depth, "stepover": stepover}
+    return add_decor_operation(proj, PRISM_KIND, name, assembly_id, preset_id, lines, params)
+
