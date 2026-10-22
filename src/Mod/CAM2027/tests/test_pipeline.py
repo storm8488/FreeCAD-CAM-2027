@@ -619,7 +619,8 @@ class TestPipeline(unittest.TestCase):
             if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 4.0) < 1e-6 and abs(f.BoundBox.ZMin - 4.0) < 1e-6:
                 bottom = "Face%d" % i
         op, _rec = proj.add_operation("pocket", "Pocket", asm.id, endmill.presets[0].id, base=[(clone, [bottom])],
-                                      params={"StepDown": 2.0, "StepOver": 40, "FinalDepth": 4.0})
+                                      params={"StepDown": 2.0, "StepOver": 40, "FinalDepth": 4.0,
+                                              "OffsetPattern": "Offset", "ClearingPattern": "Offset"})  # zigzag : refusé
         r0 = proj.compute()[0]
         radius = endmill.geometry.diameter / 2.0
         self.assertAlmostEqual(r0["bbox"]["X"][0], 15.0 + radius, places=2)  # paroi de la poche à X = 15

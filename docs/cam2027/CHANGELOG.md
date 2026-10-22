@@ -33,6 +33,12 @@
 - **[B1]** Poches et surfaçage sous FreeCAD 1.1 : le motif de vidage (`OffsetPattern`) y est renommé
   `ClearingPattern` ; il n'était plus ni proposé dans l'éditeur ni appliqué (paramètre ignoré). Les deux noms sont
   maintenant connus (`operations.STRATEGIES`, `paramspec`).
+- **[B1]** Dogbones : FreeCAD règle le côté des os pour un contour (`Side` / `Direction`) ; sur une poche au motif
+  Décalage en opposition, aucun os n'était posé : le côté suit maintenant le sens de coupe. En zigzag (motif par
+  défaut de la poche 3D) et zigzag + décalage, et sur l'adaptative, FreeCAD plante des os aux demi-tours des passes
+  et aux coudes des trochoïdes, dans les parois quel que soit le côté (2,75 à 5 mm sur la plaque des tests, 26 mm
+  de haut et 3,5 mm de côté sur le plateau `bitTray3030+v7`) : refus avec un message qui dit quel motif choisir.
+  Le dépassement voulu d'un os (0,88 mm dans un angle droit, fraise de 6 mm) est dit dans les limites.
 
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors

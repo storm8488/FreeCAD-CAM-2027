@@ -184,6 +184,32 @@ class TestDressups(unittest.TestCase):
         proj.compute()
         return proj, op
 
+    def test_dogbones_on_pockets_in_both_cut_modes(self):
+        """Poches au motif Décalage en opposition : FreeCAD réglait le côté des os pour un contour (« Right » sans
+        Side ni Direction) et n'en mettait aucun ; le côté suit maintenant le sens de coupe. L'os dépasse des parois
+        de r·(1 - 1/√2) = 0,88 mm au plus (coin à 90°, fraise de 6 mm) : c'est le but d'un dogbone, pas plus."""
+        for kind in ("pocket", "pocket2d"):
+            for mode in ("Climb", "Conventional"):
+                proj, op = self._profile(kind, {"CutMode": mode, "OffsetPattern": "Offset", "ClearingPattern": "Offset"})
+                bone, _ignored = proj.add_dressup(op, "dogbone")
+                proj.compute()
+                self.assertGreater(bone.Path.Size, op.Path.Size, (kind, mode))  # des os ont bien été ajoutés
+                report = proj.material_check()
+                self.assertLess(report["gouge_max"] or 0.0, 3.0 * (1.0 - 0.5 ** 0.5) + 0.05, (kind, mode))
+
+    def test_dogbones_refused_on_zigzag_and_adaptive(self):
+        """Zigzag (poche 3D par défaut) et adaptative : FreeCAD plante des os aux demi-tours des passes et aux
+        coudes des trochoïdes, dans les parois quel que soit le côté (4 à 5 mm sur la plaque, 26 mm de haut sur le
+        plateau à alvéoles) : refus expliqué."""
+        from cam2027.i18n import UserError
+
+        for kind, extra in (("pocket", {}), ("pocket2d", {"OffsetPattern": "ZigZag", "ClearingPattern": "ZigZag"}),
+                            ("adaptive", {})):
+            proj, op = self._profile(kind, extra)
+            with self.assertRaises(UserError):
+                proj.add_dressup(op, "dogbone")
+            self.assertEqual(proj.dressups(op), [], kind)
+
     def test_tags_on_a_dressup_not_yet_computed(self):
         """Attaches ajoutées juste après une rampe (même validation de l'éditeur, sans recalcul entre les deux) :
         FreeCAD lisait le parcours vide de la rampe (« list index out of range »)."""
