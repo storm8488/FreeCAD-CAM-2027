@@ -240,5 +240,41 @@ class TestRestStock(unittest.TestCase):
         self.assertAlmostEqual(float(zmap.top.max()), 11.0)
 
 
+class TestBallLevelFill(unittest.TestCase):
+    def test_ball_level_fill_matches_windows(self):
+        """Boule à Z constant : remplissage sur les capsules = balayage par fenêtres, cellule pour cellule, sur des
+        polylignes aléatoires (segments minuscules, longs, points, plusieurs hauteurs, pentes mêlées)."""
+        import random
+
+        import numpy as np
+
+        rng = random.Random(5)
+        ball = sim.ToolProfile("ball", 6.0)
+        for trial in range(5):
+            p = [rng.uniform(5, 45), rng.uniform(5, 45), 2.0]
+            P0, P1 = [], []
+            for _k in range(500):
+                step = rng.choice([0.05, 0.3, 0.3, 2.0, 30.0])
+                ang = rng.uniform(0, 2 * math.pi)
+                q = [min(max(p[0] + step * math.cos(ang), -2.0), 52.0), min(max(p[1] + step * math.sin(ang), -2.0), 52.0),
+                     p[2]]
+                r = rng.random()
+                if r < 0.05:
+                    q = list(p)  # point
+                elif r < 0.15:
+                    q[2] = rng.choice([-1.0, 0.5, 2.0, 4.0])  # changement de niveau (pente ou plongée)
+                P0.append(list(p))
+                P1.append(q)
+                p = q
+            P0, P1 = np.array(P0), np.array(P1)
+            ref = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            for start, stop in sim.chunk_bounds(P0, P1, ref.res, ball.radius):
+                ref._sweep_chunk(P0[start:stop], P1[start:stop], ball)
+            fill = sim.ZMap(0, 0, 50, 50, 5.0, 0.5)
+            fill.sweep_arrays(P0, P1, ball)
+            self.assertEqual(int((ref.top != fill.top).sum()), 0, "essai %d" % trial)
+            self.assertLess(fill.top.min(), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

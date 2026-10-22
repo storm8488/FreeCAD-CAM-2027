@@ -141,8 +141,9 @@ class ZMap(object):
 
         Fraise plate : les segments horizontaux (et les verticaux, disque au point bas) sont regroupés par
         hauteur, quel que soit leur ordre, et chaque groupe est rempli par colonnes (``_sweep_flat_level``) ;
-        les segments inclinés, et tout pour les autres profils, passent par fenêtres communes
-        (``_sweep_chunk``)."""
+        boule : les segments horizontaux de même hauteur sont évalués sur leurs seules capsules
+        (``_sweep_ball_level``) ; les segments inclinés, et tout pour les autres profils, passent par fenêtres
+        communes (``_sweep_chunk``)."""
         np = _np()
         P0, P1 = split_segments(P0, P1, tool)
         if tool.kind == "flat" and len(P0):
@@ -151,8 +152,56 @@ class ZMap(object):
                 sel = P0[:, 2] == z
                 self._sweep_flat_level(P0[sel], P1[sel], float(z), tool.radius)
             P0, P1 = rest0, rest1
+        elif tool.kind == "ball" and len(P0):
+            level = P0[:, 2] == P1[:, 2]
+            H0, H1 = P0[level], P1[level]
+            for z in np.unique(H0[:, 2]):
+                sel = np.nonzero(H0[:, 2] == z)[0]
+                for s0 in range(0, len(sel), BALL_LEVEL_SEGMENTS):
+                    k = sel[s0:s0 + BALL_LEVEL_SEGMENTS]
+                    self._sweep_ball_level(H0[k], H1[k], tool)
+            P0, P1 = P0[~level], P1[~level]
         for start, stop in chunk_bounds(P0, P1, self.res, tool.radius):
             self._sweep_chunk(P0[start:stop], P1[start:stop], tool)
+
+    def _sweep_ball_level(self, P0, P1, tool):
+        """Boule, segments horizontaux de même hauteur : seules les cellules de la capsule de chaque segment
+        (``_capsule_columns``, une cellule de marge) sont évaluées, avec la formule de ``_bottom`` (distance au
+        segment, profil de la boule), puis gardées au minimum. Même carte que par fenêtres communes, sans les
+        cellules de la fenêtre que le segment ne couvre pas."""
+        np = _np()
+        r = tool.radius
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return
+        i0, i1, j0, j1, _grid = win
+        seg, cols, lo, hi, ok = self._capsule_columns(P0, P1, r, i0, i1)
+        seg, cols, lo, hi = seg[ok], cols[ok], lo[ok], hi[ok]
+        jlo = np.clip(np.ceil((lo - self.y0) / self.res - 0.5) - 1, j0, j1 - 1).astype(int)
+        jhi = np.clip(np.floor((hi - self.y0) / self.res - 0.5) + 1, j0, j1 - 1).astype(int)
+        counts = np.maximum(jhi - jlo + 1, 0)
+        ends = np.cumsum(counts)
+        start = 0
+        while start < len(counts):  # paquets de paires d'au plus CHUNK_CELLS cellules (longs rapides)
+            stop = max(int(np.searchsorted(ends, (ends[start - 1] if start else 0) + CHUNK_CELLS, "right")), start + 1)
+            p, q = _ragged(counts[start:stop])  # (segment-colonne, cellule)
+            p += start
+            jj = jlo[p] + q
+            s, ii = seg[p], cols[p]
+            X, Y = self.xs[ii], self.ys[jj]
+            x0, y0, z0 = P0[s, 0], P0[s, 1], P0[s, 2]
+            dx, dy = P1[s, 0] - x0, P1[s, 1] - y0
+            L2 = dx * dx + dy * dy
+            vertical = L2 < 1e-18
+            t_foot = ((X - x0) * dx + (Y - y0) * dy) / np.where(vertical, 1.0, L2)
+            t = np.where(vertical, 0.0, np.clip(t_foot, 0.0, 1.0))
+            d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))
+            inside = d <= r + 1e-9
+            z = z0 + tool.lift(np.minimum(d, r))
+            np.minimum.at(self.top, (ii[inside], jj[inside]), z[inside])
+            start = stop
 
     def excess_any(self, P0, P1, radius, offset, threshold, flat):
         """Vrai si, sur l'état courant, de la matière dépasse ``pointe + offset`` de plus de ``threshold`` dans
@@ -186,19 +235,12 @@ class ZMap(object):
         block = self.top[i0:i1, j0:j1]
         np.minimum(block, np.where(covered, zlev, np.inf), out=block)
 
-    def _flat_cover(self, P0, P1, r):
-        """Cellules couvertes par des segments horizontaux élargis de ``r`` : dans chaque colonne de cellules,
-        la capsule couvre un intervalle de Y, union de ses trois morceaux (disque de départ, disque d'arrivée,
-        bande entre les perpendiculaires aux extrémités) ; les intervalles sont cumulés par colonne
-        (``add.at`` puis somme cumulée) : une cellule est couverte si son centre est dans l'un d'eux,
-        exactement comme ``d <= r`` dans ``_bottom``. Retourne ``(i0, i1, j0, j1, masque)`` ou None."""
+    def _capsule_columns(self, P0, P1, r, i0, i1):
+        """Intervalle de Y couvert par chaque segment horizontal élargi de ``r`` dans chaque colonne de cellules
+        de la fenêtre ``[i0, i1)`` : union de ses trois morceaux (disque de départ, disque d'arrivée, bande entre
+        les perpendiculaires aux extrémités ; la capsule est convexe, l'union est un intervalle). Paires
+        (segment, colonne) à plat : ``(segment, colonne, bas, haut, non vide)``."""
         np = _np()
-        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
-                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
-                           grid=False)
-        if win is None:
-            return None
-        i0, i1, j0, j1, _grid = win
         rr = r + 1e-9
         res = self.res
         xA, yA, xB, yB = P0[:, 0], P0[:, 1], P1[:, 0], P1[:, 1]
@@ -245,6 +287,23 @@ class ZMap(object):
         lo = np.minimum(np.minimum(loA, loB), loS)
         hi = np.maximum(np.maximum(hiA, hiB), hiS)
         ok = valid & np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)
+        return seg, cols, lo, hi, ok
+
+    def _flat_cover(self, P0, P1, r):
+        """Cellules couvertes par des segments horizontaux élargis de ``r`` : dans chaque colonne de cellules,
+        la capsule couvre un intervalle de Y, union de ses trois morceaux (disque de départ, disque d'arrivée,
+        bande entre les perpendiculaires aux extrémités) ; les intervalles sont cumulés par colonne
+        (``add.at`` puis somme cumulée) : une cellule est couverte si son centre est dans l'un d'eux,
+        exactement comme ``d <= r`` dans ``_bottom``. Retourne ``(i0, i1, j0, j1, masque)`` ou None."""
+        np = _np()
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return None
+        i0, i1, j0, j1, _grid = win
+        res = self.res
+        cols, lo, hi, ok = self._capsule_columns(P0, P1, r, i0, i1)[1:]
         # cellules dont le centre y0 + (j + 0.5) res est dans [lo, hi]
         jlo = np.ceil((lo - self.y0) / res - 0.5)
         jhi = np.floor((hi - self.y0) / res - 0.5)
@@ -380,6 +439,8 @@ class ZMap(object):
 #: paquets vectorisés : segments × cellules de la fenêtre commune au plus (~100 Mo de tableaux temporaires)
 CHUNK_CELLS = 1_500_000
 CHUNK_SEGMENTS = 512
+#: boule à Z constant : segments d'un même niveau remplis d'un coup (une centaine de cellules chacun)
+BALL_LEVEL_SEGMENTS = 20000
 #: suites de segments plats au même Z traitées par colonnes : au moins / au plus tant de segments d'un coup
 FLAT_RUN_MIN = 4
 FLAT_RUN_MAX = 20000

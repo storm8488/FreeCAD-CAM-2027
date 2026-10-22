@@ -41,6 +41,10 @@
 - **[B2]** **Reprise de matière après un perçage en cycles** : le brut restant simulait les opérations précédentes
   sans développer les cycles de perçage (G81, G83… ignorés), contrairement au contrôle matière : les trous percés
   restaient pleins dans le brut de la reprise. Cycles développés en mouvements équivalents (`holes.expand_cycles`).
+- **[B2]** **Contrôle matière plus rapide à Z constant avec une fraise boule** (suite) : segments horizontaux d'une
+  boule regroupés par hauteur et évalués sur leurs seules capsules (intervalle exact par colonne, comme la fraise
+  plate) au lieu de fenêtres communes. Z constant du plateau : balayage 5,5-6,2 s → 4,1-4,7 s, contrôle
+  11,5-13,7 s → 10,1-12,2 s, carte identique bit à bit (et cellule pour cellule sur 5 parcours aléatoires).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
