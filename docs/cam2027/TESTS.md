@@ -171,3 +171,26 @@ Suite complète après intégration : 150 tests sur 1.1.4 et 1.0.2 (2 ignorés s
 problème, smoke 1.0, matrice 15 stratégies × 6 pièces (90 cas) : 6 cas signalés, tous des collisions de longueur
 de coupe ou de porte-outil (chauffage de 45 mm de haut, finitions du plateau et de l'ER16 avec la fraise par
 défaut), aucune entaille, plantage ni dépassement de temps.
+
+### Intégration de la chasse aux bugs du 2026-10-22 (avant `dcb2373` / après `8a7d603`)
+
+Mêmes réglages que la section précédente, FreeCADCmd 1.1.4, un processus à la fois, avant et après alternés
+(trois cas répétés deux fois dans l'ordre inverse : écarts de moins de 5 % entre répétitions). Les temps absolus
+dépendent de la charge de la machine : comparer avant / après d'une même ligne.
+
+| Pièce | Opération | Commandes avant / après | Calcul avant / après | Contrôle avant / après | Entaille avant / après |
+|---|---|---|---|---|---|
+| plateau | finition 3D | 190 027 / 190 027 | 45,6 / 19,2 s | 12,9 / 11,3 s | 0 / 0 |
+| plateau | adaptative (fonds) | ~270 000 (adaptative non déterministe) | 16,7 / 7,4 s | 11,7 / 10,7 s | 0 / 0 |
+| plateau | ébauche 3D | 293 868 / 293 868 | 25,5 / 25,3 s | 13,0 / 10,3 s | 0 / 0 |
+| plateau | poche (fonds) | 21 545 / 21 561 | 8,0 / 7,9 s | 1,7 / 1,2 s | 0 / 0 |
+| plateau | Z constant | 232 212 / 232 212 | 9,8 / 7,3 s | 22,3 / 10,6 s | 0 / 0 |
+| chauffage (2 corps) | finition 3D | 145 378 / 94 333 | 245,6 / 171,0 s | 18,5 / 9,4 s | **41,1 / 0 mm** |
+| chauffage | ébauche 3D | 345 133 / 345 133 | 29,6 / 30,0 s | 27,0 / 11,8 s | 0 / 0 |
+| chauffage | adaptative (fonds) | 27 499 / 26 611 | 10,4 / 10,9 s | 5,1 / 2,5 s | 0 / 0 |
+
+Finition 3D du chauffage : l'ancien parcours passait sous le couvercle du second corps (entaille réelle, corrigée par
+`e68734f`) ; le volume enlevé (1 686 -> 971 cm³) et le nombre de commandes baissent d'autant. Suite complète après
+intégration : 213 tests sur 1.1.4 et 1.0.2 (2 ignorés sur 1.0), 48 scénarios sans problème, smoke 1.0, matrice
+90 cas : 6 collisions de longueur de coupe / porte-outil (les mêmes qu'avant), aucune entaille, plantage ni
+dépassement de temps ; aucun processus au-delà de 8 Go.
