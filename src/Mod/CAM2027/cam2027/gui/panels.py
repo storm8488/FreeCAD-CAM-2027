@@ -870,8 +870,7 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.refresh_list()
         box = QtWidgets.QMessageBox(self)
         box.setWindowTitle(tr("Fusion import report"))
-        box.setText(tr("Imported {n} tool(s). This importer is not yet validated on a real Fusion export.",
-                       n=len(report.imported)))
+        box.setText(tr("Imported {n} tool(s), skipped {s} (details below).", n=len(report.imported), s=len(report.skipped)))
         box.setDetailedText(report.to_text())
         exec_dialog(box)
 

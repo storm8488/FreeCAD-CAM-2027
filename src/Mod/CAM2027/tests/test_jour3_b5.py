@@ -130,6 +130,102 @@ class TestToolNumbers(unittest.TestCase):
         self.assertEqual(exportmod.tool_number_issues(proj), [])
 
 
+FUSION = os.path.join(os.path.dirname(__file__), "fixtures", "fusion-library-lunyee.tools")
+
+
+class TestFusionImport(unittest.TestCase):
+    def test_reimport_adds_no_duplicate(self):
+        """Importer deux fois le même export Fusion doublait les 11 outils et leurs numéros (bug B5-4)."""
+        from cam2027.tools.library import ToolLibrary
+        from cam2027.tools.fusion_import import import_fusion_library
+
+        lib = ToolLibrary("real")
+        import_fusion_library(FUSION, lib)
+        report = import_fusion_library(FUSION, lib)
+        self.assertEqual(report.imported, [])
+        self.assertEqual(len(report.skipped), 11)
+        self.assertTrue(all("already in the library" in why for _n, why in report.skipped), report.skipped)
+        self.assertEqual(lib.summary()["tools"], 11)
+        self.assertEqual(lib.summary()["assemblies"], 11)
+
+    def test_numbers_already_used_are_renumbered(self):
+        """Import dans la bibliothèque de démarrage (T1..T8) : les numéros Fusion déjà pris recevaient le même T
+        qu'un autre outil (bug B5-4) ; ils sont renumérotés après le plus grand et le rapport le dit."""
+        from cam2027.tools.fusion_import import import_fusion_library
+
+        lib = starter_library()
+        report = import_fusion_library(FUSION, lib)
+        self.assertEqual(len(report.imported), 11)
+        numbers = [a.output.tool_number for a in lib.assemblies.values()]
+        self.assertEqual(len(numbers), len(set(numbers)), sorted(numbers))
+        self.assertEqual(sorted(numbers), list(range(1, 20)))
+        renumbered = [w for w in report.warnings if "already used" in w]
+        self.assertEqual(len(renumbered), 8, report.warnings)
+        self.assertTrue(any("T1 already used" in w and "T12" in w for w in renumbered), renumbered)
+        for a in lib.assemblies.values():
+            self.assertTrue(a.name.startswith("T%d " % a.output.tool_number), a.name)
+
+    def test_corrupted_files_give_a_clear_error(self):
+        """Fichier abîmé : ValueError lisible (affichée par la bibliothèque), jamais une autre exception qui
+        laisse la commande sans message (bug B5-5) ; un outil illisible est ignoré et listé, les autres importés."""
+        import json
+        import zipfile
+        from cam2027.tools.library import ToolLibrary
+        from cam2027.tools.fusion_import import import_fusion_library
+
+        tmp = tempfile.mkdtemp(prefix="cam2027-b5-")
+        good = zipfile.ZipFile(FUSION).read("tools.json") if "tools.json" in zipfile.ZipFile(FUSION).namelist() \
+            else zipfile.ZipFile(FUSION).read(zipfile.ZipFile(FUSION).namelist()[0])
+        cases = {}
+        # archive tronquée (téléchargement interrompu)
+        raw = open(FUSION, "rb").read()
+        cases["truncated.tools"] = raw[: len(raw) // 2]
+        # archive dont le contenu est abîmé (CRC faux)
+        broken = bytearray(raw)
+        start = raw.index(b"PK\x03\x04") + 30 + len(zipfile.ZipFile(FUSION).namelist()[0].encode())
+        for i in range(start + 20, start + 60):
+            broken[i] ^= 0x55
+        cases["crc.tools"] = bytes(broken)
+        cases["garbage.json"] = bytes(range(256)) * 4
+        cases["empty.json"] = b""
+        cases["list.json"] = b"[1, 2, 3]"
+        cases["notjson.json"] = b"{\"data\": [ {\"type\": "
+        for name, data in cases.items():
+            path = os.path.join(tmp, name)
+            with open(path, "wb") as fp:
+                fp.write(data)
+            lib = ToolLibrary("x")
+            try:
+                report = import_fusion_library(path, lib)
+            except ValueError as exc:
+                self.assertTrue(str(exc), name)
+                continue
+            except Exception as exc:  # noqa: BLE001
+                self.fail("%s: %s %s" % (name, type(exc).__name__, exc))
+            self.assertEqual(report.imported, [], name)
+        # outils mal formés au milieu d'outils valides
+        data = json.loads(good.decode("utf-8"))
+        data["data"] = [None, "text", {"type": "flat end mill", "geometry": [1, 2]},
+                        {"type": "flat end mill", "description": "bad preset", "geometry": data["data"][3]["geometry"],
+                         "start-values": {"presets": [None]}}] + data["data"][:2]
+        path = os.path.join(tmp, "mixed.json")
+        with open(path, "w", encoding="utf-8") as fp:
+            json.dump(data, fp)
+        lib = ToolLibrary("x")
+        report = import_fusion_library(path, lib)
+        self.assertEqual(len(report.imported), 3, report.to_text())
+        self.assertEqual(len(report.skipped), 3, report.to_text())
+
+    def test_report_message_is_true(self):
+        """La fenêtre de rapport disait l'importateur « pas encore validé sur un export réel » alors qu'il l'est
+        (fixture réelle ci-dessus, LIMITS.md) ; elle donne maintenant les nombres importés et ignorés."""
+        src = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cam2027", "gui", "panels.py")
+        with open(src, encoding="utf-8") as fp:
+            text = fp.read()
+        self.assertNotIn("not yet validated on a real Fusion export", text)
+        self.assertIn("skipped {s}", text)
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
