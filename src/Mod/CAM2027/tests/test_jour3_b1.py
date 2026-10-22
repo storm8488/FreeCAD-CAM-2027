@@ -90,6 +90,33 @@ class TestMultiBodySurface(unittest.TestCase):
             self.assertNotIn(5.0, [round(z, 3) for z in zs], kind)
 
 
+    def test_parallel_waterline_same_as_serial(self):
+        """Niveaux du Z constant calculés dans des processus : même G-code que FreeCAD en série."""
+        from cam2027.project import parallel_waterline
+
+        params = {"LayerMode": "Multi-pass", "StepDown": 2.0, "SampleInterval": 0.5}
+        computed = []
+        original = parallel_waterline.compute
+
+        def recording(*args):
+            computed.append(original(*args))
+            return computed[-1]
+
+        parallel_waterline.compute = recording
+        try:
+            _proj, op = self._run("waterline", params)
+        finally:
+            parallel_waterline.compute = original
+        self.assertTrue(computed and all(r is not None for r in computed))  # vraiment en parallèle
+        parallel = op.Path.toGCode()
+        os.environ[parallel_waterline.ENV_SWITCH] = "0"
+        try:
+            _proj, op = self._run("waterline", params)
+        finally:
+            del os.environ[parallel_waterline.ENV_SWITCH]
+        self.assertGreater(op.Path.Size, 100)
+        self.assertEqual(parallel, op.Path.toGCode())
+
 class TestSurfaceSpeed(unittest.TestCase):
     """Accélérations de la finition 3D : mêmes points que FreeCAD."""
 

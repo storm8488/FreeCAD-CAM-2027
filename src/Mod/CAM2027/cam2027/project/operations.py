@@ -539,6 +539,10 @@ def strategy_module(kind):
         patch_surface_keepalive()
     if kind in ("surface3d", "waterline"):
         patch_surface_models()
+    if kind == "waterline":
+        from . import parallel_waterline
+
+        parallel_waterline.install(mod)
     if kind == "pocket":
         patch_pocket(mod)
     return mod

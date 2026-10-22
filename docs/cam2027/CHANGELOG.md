@@ -17,6 +17,10 @@
   numpy, et les fonctions de motif (lignes, zigzag, cercles, spirale) lisent la liste des arêtes une fois au lieu
   de la reconstruire à chaque arête. Plateau `bitTray3030+v7` : 23,0 / 25,5 s → 11,0 / 12,1 s ; chauffage :
   ≈ −3 % (OpenCamLib, déjà parallèle sur tous les cœurs, domine).
+- **[B1]** Z constant : les niveaux (carte des points hauts et bas, contours, commandes : Python pur de FreeCAD, un
+  niveau après l'autre) sont calculés dans des processus par le même code de FreeCAD (`project/parallel_waterline.py`,
+  `CAM2027_PARALLEL_WATERLINE=0` pour le désactiver), même G-code. Chauffage : 15,3 / 14,9 s → 9,1 / 9,1 s ;
+  plateau : 5,7 / 5,7 s → 5,0 / 4,6 s.
 
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
