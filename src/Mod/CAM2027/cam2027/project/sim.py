@@ -795,8 +795,9 @@ def _point_triangle_distance(p, A, B, C):
 
 def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_DEFLECTION):
     """Vérifie en 3D les colonnes que la carte de hauteur dit entaillées et remplace leur entaille verticale
-    par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce,
-    nulle si ce point est hors de la pièce (dessous d'un surplomb, que la carte ne voit pas).
+    par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce ;
+    si ce point est hors de la pièce (dessous d'un surplomb), la fraise verticale traverse le surplomb : distance
+    du milieu de la première traversée de la pièce au-dessus du point.
 
     Près d'une paroi raide, une fraise qui entre de 0,05 mm sur le côté abaisse la colonne de toute la hauteur
     de la paroi (1,85 mm signalés sur le casse-noix de l'utilisateur pour 0,05 mm réels). Retourne les
@@ -851,11 +852,16 @@ def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_
         l3 = 1.0 - l1 - l2
         crosses = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
         zc = l1 * a[:, 2] + l2 * b[:, 2] + l3 * c[:, 2]
-        above = int((crosses & (zc > z)).sum())
-        if above % 2 == 0:
-            gh[i, j] = z  # point coupé hors de la pièce : pas d'entaille
-            continue
-        d = float(_point_triangle_distance(np.array([x, y, z]), a, b, c).min())
+        over = np.sort(zc[crosses & (zc > z)])
+        probe = z
+        if len(over) % 2 == 0:
+            # point coupé hors de la pièce, pièce au-dessus (surplomb) : le corps de la fraise, vertical au-dessus
+            # de sa pointe, traverse la pièce. Pénétration prise au milieu de la première traversée.
+            if not len(over):
+                gh[i, j] = z
+                continue
+            probe = 0.5 * (over[0] + (over[1] if len(over) > 1 else over[0]))
+        d = float(_point_triangle_distance(np.array([x, y, probe]), a, b, c).min())
         if d < reach:
             gh[i, j] = z + min(d, v)
     return gh

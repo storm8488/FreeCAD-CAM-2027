@@ -12,6 +12,12 @@
   flèche, plus que la tolérance d'entaille (0,02 mm) : facettes 0,045 mm au-dessus du fond d'un bol (fausses
   entailles possibles) et 0,024 mm sous un dôme (entailles manquées). Triangulation à 0,01 mm
   (`sim.MODEL_DEFLECTION`) : écart au dessus exact de 0,011 mm au plus sur le bol et le dôme de test.
+- **[B2]** **Contrôle matière, fraise sous un surplomb** : la vérification 3D des entailles déclarait « rien » quand
+  le point coupé est hors de la pièce sous un surplomb, alors qu'une fraise verticale ne peut y être sans que son
+  corps traverse le surplomb (entaille manquée). La pénétration est maintenant prise au milieu de la première
+  traversée de la pièce au-dessus du point. C'est le cas de la finition 3D du chauffage (2 corps) : boule de 6 mm
+  à Z 3,9 sous le corps du dessus (pièce pleine de 0 à 3,9 et de 40 à 45 en X 69 Y 18,75) ; l'entaille de 41 mm
+  signalée vient des colonnes non vérifiées en 3D (182 258 candidates, 4 000 vérifiées) et est réelle.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

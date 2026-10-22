@@ -138,5 +138,21 @@ class TestCurvedParts(unittest.TestCase):
         self.assertLess(rep["gouge_max"], 0.02, rep)
 
 
+class TestOverhang(unittest.TestCase):
+    def test_tool_under_an_overhang_is_a_gouge(self):
+        """Fraise verticale sous un surplomb : son corps traverse le surplomb, c'est une entaille (avant : rien,
+        le point coupé étant hors de la pièce ; et au-delà de 4 000 colonnes la hauteur verticale restait)."""
+        part = Part.makeBox(50, 20, 2).fuse(Part.makeBox(10, 20, 2, V(30, 0, 4)))  # dalle 4..6 sur x 30..40
+        z = sim.ZMap(0, 0, 50, 20, 8.0, 0.5)
+        flat = sim.ToolProfile("flat", 6.0)
+        z.sweep((10, 2, 2.0), (10, 18, 2.0), flat)  # sur le dessus du socle, loin du surplomb : rien
+        self.assertLess(check(z, [part])["gouge_max"], 0.02)
+        z.sweep((35, 2, 3.0), (35, 18, 3.0), flat)  # sous la dalle
+        rep = check(z, [part])
+        self.assertGreater(rep["gouge_max"], 0.9, rep)  # au moins la demi-épaisseur de la dalle
+        x, _y, _z = rep["gouge_at"]
+        self.assertTrue(31.5 < x < 38.5, rep["gouge_at"])
+
+
 if __name__ == "__main__":
     unittest.main()

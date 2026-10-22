@@ -210,7 +210,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
   dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
   Chaque colonne signalée (les 4 000 plus profondes) est vérifiée en 3D sur la pièce triangulée : l'entaille
-  retenue est la distance du point coupé à la surface (nulle sous un surplomb), pas la hauteur de paroi
+  retenue est la distance du point coupé à la surface (sous un surplomb, que le corps de la fraise traverse : celle du
+  milieu de la première traversée de la pièce au-dessus), pas la hauteur de paroi
   qu'une fraise tangente fait perdre à la colonne ; une colonne sur le bord de la silhouette (pièce absente
   à 0,05 mm) n'est pas contrôlée.
   Balayage : fraise plate et boule exactes sur les pentes (disque et sphère balayés le long du segment 3D) ;

@@ -174,7 +174,8 @@ class TestZMap(unittest.TestCase):
 
     def test_refine_gouges(self):
         """Vérification 3D des entailles : fraise tangente à une paroi raide (0,05 mm dedans) = 0,05 mm, pas la
-        hauteur de la paroi ; sous un surplomb = rien ; vraie plongée dans la pièce = sa profondeur."""
+        hauteur de la paroi ; sous un surplomb = la fraise traverse la dalle (demi-épaisseur) ; vraie plongée dans
+        la pièce = sa profondeur."""
         V = FreeCAD.Vector
         # marche : dessus à 10 pour x < 10, à 2 au-delà ; surplomb : dalle 4..6 au-dessus de x 30..40, vide dessous
         part = Part.makeBox(10, 20, 10).fuse(Part.makeBox(30, 20, 2)).fuse(Part.makeBox(10, 20, 2, V(30, 0, 4)))
@@ -196,7 +197,10 @@ class TestZMap(unittest.TestCase):
         self.assertTrue(wall)
         self.assertTrue(all(fixed[i, j] - z.top[i, j] < 0.06 for i, j in wall))  # paroi : 0,05 au plus
         under = [(i, j) for i in range(z.nx) for j in range(z.ny) if 31 < z.xs[i] < 39 and 3 < z.ys[j] < 17]
-        self.assertTrue(all(fixed[i, j] - z.top[i, j] <= 1e-9 for i, j in under))  # sous le surplomb : rien
+        # sous le surplomb : le corps de la fraise traverse la dalle 4..6 (B2 jour 3 : « rien » avant)
+        cut = [(i, j) for i, j in under if 32 < z.xs[i] < 38]  # colonnes sous la fraise (axe x 35, rayon 3)
+        self.assertTrue(cut)
+        self.assertTrue(all(abs(fixed[i, j] - z.top[i, j] - 1.0) < 0.01 for i, j in cut))
 
     def test_model_heights_vectorized(self):
         """Dessus de la pièce rastérisé par groupes = valeurs attendues (boîte, sphère, parois, hors pièce)."""
