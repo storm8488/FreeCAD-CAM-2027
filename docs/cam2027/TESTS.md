@@ -147,3 +147,25 @@ poche 3D.
 
 Corpus prévu (jalon F) : poche aluminium avec îlots, contour avec attaches, incrustation en V, relief 3D,
 pièce indexée, parcours rotatif, cas XYZA ; mesures de temps/mémoire à précision géométrique constante.
+
+### Intégration des flux de nuit du 2026-10-22 (avant `6c80b77` / après `f33be8e`)
+
+FreeCADCmd 1.1.4, un processus à la fois, fraise plate ou boule de 6 mm, brut boîte +2 mm en XY et +1 mm au-dessus,
+réglages par défaut de l'interface (`default_params`). Aucun ralentissement (écarts ±3 %, mêmes commandes au bruit
+près de l'adaptative, même volume enlevé).
+
+| Pièce | Opération | Commandes | Calcul avant / après | Contrôle avant / après | Entaille |
+|---|---|---|---|---|---|
+| plateau | finition 3D | 190 027 | 18,6 / 18,7 s | 6,2 / 6,5 s | 0 |
+| plateau | adaptative (fonds) | 270 146 / 270 173 | 8,1 / 8,0 s | 6,1 / 6,2 s | 0 |
+| plateau | ébauche 3D | 293 868 | 12,7 / 12,6 s | 6,6 / 6,4 s | 0 |
+| plateau | poche (fonds) | 21 545 | 5,8 / 6,0 s | 0,9 / 0,9 s | 0 |
+| plateau | Z constant | 232 212 | 5,8 / 5,7 s | 12,7 / 12,9 s | 0 |
+| chauffage (2 corps) | finition 3D | 145 378 | 85,9 / 85,8 s | 9,1 / 9,4 s | **41,1 mm (avant et après, non analysé)** |
+| chauffage | ébauche 3D | 347 112 / 346 911 | 20,0 / 19,8 s | 16,5 / 17,0 s | 0 |
+| chauffage | adaptative (fonds) | 27 680 / 27 602 | 8,5 / 8,5 s | 3,1 / 3,1 s | 0 |
+
+Suite complète après intégration : 150 tests sur 1.1.4 et 1.0.2 (2 ignorés sur 1.0), 34 scénarios d'interface sans
+problème, smoke 1.0, matrice 15 stratégies × 6 pièces (90 cas) : 6 cas signalés, tous des collisions de longueur
+de coupe ou de porte-outil (chauffage de 45 mm de haut, finitions du plateau et de l'ER16 avec la fraise par
+défaut), aucune entaille, plantage ni dépassement de temps.
