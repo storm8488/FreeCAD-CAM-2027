@@ -86,8 +86,32 @@ def postprocess(job, post_name=None, post_args=None):
     for name, gcode in sections:
         if not isinstance(gcode, str):
             gcode = str(gcode)
-        out.append((name, gcode))
+        out.append((name, tool_change_stops(gcode)[0]))
     return out
+
+
+#: M6 mis en commentaire par le postprocesseur ``grbl`` (GRBL 1.1 refuse M6 : error:20)
+_COMMENTED_M6 = re.compile(r"^\s*(?:N\d+\s+)?\(\s*M0?6\s+T(\d+)\s*\)\s*$", re.IGNORECASE)
+
+
+def tool_change_stops(gcode):
+    """Changement d'outil manuel : le postprocesseur ``grbl`` met M6 en commentaire et le programme enchaînait
+    l'opération suivante avec l'outil précédent (fraise plus grosse = entaille). Chaque M6 commenté qui change
+    de numéro d'outil devient broche arrêtée (M5) + pause (M0, reprise par Départ cycle ; CNCjs suspend aussi
+    l'envoi) ; le premier outil est celui de la fiche. Retourne ``(gcode, nombre de pauses)``."""
+    out, stops, current = [], 0, None
+    for line in gcode.splitlines(True):
+        m = _COMMENTED_M6.match(line)
+        if m is None:
+            out.append(line)
+            continue
+        number = int(m.group(1))
+        out.append(line)
+        if current is not None and number != current:
+            out.append("M5\n(Tool change: load T%d, then resume)\nM0\n" % number)
+            stops += 1
+        current = number
+    return "".join(out), stops
 
 
 def write_gcode(sections, path):
@@ -117,6 +141,7 @@ def analyze_gcode(text):
     fixtures = set()
     lines = 0
     tool_changes = 0
+    pauses = 0  # M0 (changements d'outil manuels)
     max_feed = 0.0
     spindle = set()
     motion = None  # mode de déplacement modal (G0 / G1 / G2 / G3)
@@ -179,6 +204,8 @@ def analyze_gcode(text):
                     fixtures.add(code)
                 elif code == "M6":
                     tool_changes += 1
+                elif code == "M0":
+                    pauses += 1
             elif letter in ("X", "Y", "Z", "A", "B", "C"):
                 axes.add(letter)
                 v = float(number)
@@ -196,6 +223,7 @@ def analyze_gcode(text):
         "fixtures": sorted(fixtures),
         "bbox": bbox,
         "tool_changes": tool_changes,
+        "pauses": pauses,
         "max_feed": max_feed,
         "spindle_speeds": sorted(spindle),
         "a_feed_lines": a_feed_lines,
@@ -371,8 +399,9 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
         if axis in analysis["bbox"]:
             lo, hi = analysis["bbox"][axis]
             lines.append("- %s: %.3f .. %.3f" % (axis, lo, hi))
-    lines.append("- Max feed: F%.0f, spindle: %s, tool changes (M6): %d" % (
-        analysis["max_feed"], ", ".join("S%.0f" % s for s in analysis["spindle_speeds"]), analysis["tool_changes"]))
+    lines.append("- Max feed: F%.0f, spindle: %s, tool changes (M6): %d, pauses (M0): %d" % (
+        analysis["max_feed"], ", ".join("S%.0f" % s for s in analysis["spindle_speeds"]), analysis["tool_changes"],
+        analysis.get("pauses", 0)))
     lines.append("")
     lines.append("## Checks")
     lines.append("")
