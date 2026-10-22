@@ -38,7 +38,8 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |
 | Alésage hélicoïdal | disponible | `Path.Op.Helix` | auto (`test_helix_and_engrave`) | — |
 | Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
-| Attaches, rampes, dogbones | disponible | habillages FreeCAD `Path.Dressup.Tags`, `RampEntry`, `DogboneII` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`, `test_dogbones`) + visuel | entrées/sorties en arc (LeadInOut), positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
+| Attaches, rampes, dogbones | disponible | habillages FreeCAD `Path.Dressup.Tags`, `RampEntry`, `DogboneII` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`, `test_dogbones`) + visuel | positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
+| Entrées / sorties en arc (horizontal, vertical, droite) | disponible | habillage `LeadInOut` (1.0 et 1.1) via `project/leads.py`, contrôle de collision et départ déplacé (1.1) | auto (`test_nuit_s2.TestLeads` : arc R3 tangent, aucune entaille, 1.0 / 1.1) + scénario `s2-leads` | arc vertical et balayage ≠ 90° sur 1.0 |
 
 ## Opérations 3D
 

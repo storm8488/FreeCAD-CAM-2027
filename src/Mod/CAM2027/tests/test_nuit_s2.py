@@ -1,0 +1,203 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Nuit 2, flux S2 : entrées/sorties en arc, motifs de parcours, perçage intelligent, palpage de l'origine."""
+
+import math
+import os
+import tempfile
+import unittest
+
+import FreeCAD
+
+from cam2027 import compat
+from cam2027.i18n import UserError
+from cam2027.tools.library import starter_library
+from cam2027.project.project import Project
+from cam2027.project.machine import MachineProfile
+from tests.test_pipeline import make_part
+
+V11 = compat.freecad_version() >= (1, 1)
+
+
+def machine(**kw):
+    return MachineProfile("test", controller="grbl", post_processor="grbl",
+                          post_processor_args="--no-show-editor --precision=3", **kw)
+
+
+def feed_moves(path):
+    """Mouvements d'avance horizontaux : (nom, début, fin, centre XY ou None)."""
+    from cam2027.project import leads
+
+    return leads._moves(path.Commands)
+
+
+def pocket_floor(clone, z=4.0):
+    for i, f in enumerate(clone.Shape.Faces, 1):
+        bb = f.BoundBox
+        if f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMax - z) < 1e-6 and abs(bb.ZMin - z) < 1e-6:
+            return "Face%d" % i
+    return None
+
+
+class _PlateCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s2-")
+        cls.step = os.path.join(cls.tmp, "plate.step")
+        make_part(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def project(self, name, **mkw):
+        lib = starter_library()
+        proj = Project.create(name, lib, machine(**mkw))
+        part = proj.import_model(self.step, label="Plate").objects[0]
+        job = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        self.addCleanup(proj.close)
+        return proj, lib, job.Model.Group[0]
+
+    def tool(self, lib, name="6 mm flat end mill"):
+        t = lib.search(name)[0]
+        return lib.assemblies_for_tool(t.id)[0].id, t.presets[0].id
+
+
+class TestLeads(_PlateCase):
+    def _contour(self, proj, lib, clone):
+        asm, pre = self.tool(lib)
+        op, _rec = proj.add_operation("profile", "Contour", asm, pre, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        return op
+
+    def test_arc_lead_on_contour(self):
+        """Contour extérieur, arcs de R3 : le premier mouvement de coupe de chaque passe est un arc de R3 tangent au
+        contour, aucune entaille ni rapide dans la matière, un arc de sortie par passe ; retrait = parcours nu."""
+        proj, lib, clone = self.project("Leads")
+        op = self._contour(proj, lib, clone)
+        proj.compute()
+        base_moves = feed_moves(op.Path)
+        base_first = base_moves[0]
+        lead, ignored = proj.add_dressup(op, "leads", params={"RadiusIn": 3.0, "RadiusOut": 3.0})
+        self.assertEqual(ignored, [])
+        self.assertEqual([o.Name for o in proj.operations()], [lead.Name])
+        self.assertEqual(proj.registry[op.Name]["dressups"][0]["kind"], "leads")
+        proj.compute()
+        moves = feed_moves(lead.Path)
+        first = moves[0]
+        self.assertIn(first[0], ("G2", "G3"), first)
+        centre = first[3]
+        self.assertAlmostEqual(math.dist(first[1][:2], centre), 3.0, places=3)
+        self.assertAlmostEqual(math.dist(first[2][:2], centre), 3.0, places=3)
+        # fin de l'arc = début du contour nu, à la même profondeur
+        self.assertAlmostEqual(math.dist(first[2], base_first[1]), 0.0, places=3)
+        # tangence : la direction du mouvement suivant est perpendiculaire au rayon en fin d'arc
+        nxt = moves[1]
+        rx, ry = first[2][0] - centre[0], first[2][1] - centre[1]
+        if nxt[3] is None:
+            dx, dy = nxt[2][0] - nxt[1][0], nxt[2][1] - nxt[1][1]
+        else:  # arc : tangente au départ perpendiculaire à son propre rayon
+            ux, uy = nxt[1][0] - nxt[3][0], nxt[1][1] - nxt[3][1]
+            dx, dy = -uy, ux
+        self.assertLess(abs(rx * dx + ry * dy) / (math.hypot(rx, ry) * math.hypot(dx, dy)), 1e-3)
+        # une entrée et une sortie par passe : 2 arcs de R3 de plus que le parcours nu par passe
+        r3 = [m for m in moves if m[3] is not None and abs(math.dist(m[1][:2], m[3]) - 3.0) < 1e-3]
+        r3_base = [m for m in base_moves if m[3] is not None and abs(math.dist(m[1][:2], m[3]) - 3.0) < 1e-3]
+        passes = len(set(round(m[1][2], 3) for m in base_moves))
+        self.assertGreaterEqual(passes, 2)
+        self.assertEqual(len(r3) - len(r3_base), 2 * passes)
+        # matière : aucune entaille, aucun rapide dans la matière
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        self.assertEqual(rep["rapid_hits"], 0, rep)
+        # export : arcs dans le G-code GRBL, une seule occurrence de l'opération
+        from cam2027.project import export as exportmod
+
+        text = "\n".join(g for _n, g in exportmod.postprocess(proj.job))
+        self.assertEqual(text.count("(Begin operation: %s)" % lead.Label), 1)
+        self.assertEqual(text.count("(Begin operation: %s)" % op.Label), 0)
+        # retrait
+        proj.remove_dressup(op, "leads")
+        self.assertEqual([o.Name for o in proj.operations()], [op.Name])
+
+    def test_pocket_wall_profile(self):
+        """Passe de profil d'une poche (intérieur, îlot) : sur 1.1, départ déplacé le long de la paroi tant que
+        l'arc toucherait la pièce, aucune entaille ; sur 1.0 (pas de déplacement possible) : refus avec la position."""
+        proj, lib, clone = self.project("Leads pocket")
+        asm, pre = self.tool(lib)
+        op, _rec = proj.add_operation("profile", "Pocket wall", asm, pre, base=[(clone, [pocket_floor(clone)])],
+                                      params={"Side": "Inside", "FinalDepth": 4.0, "StepDown": 3.0})
+        proj.compute()
+        if not V11:
+            with self.assertRaises(UserError) as ctx:
+                proj.add_dressup(op, "leads", params={"RadiusIn": 3.0, "RadiusOut": 3.0})
+            self.assertIn("hits the part", str(ctx.exception))
+            self.assertEqual([o.Name for o in proj.operations()], [op.Name])
+            return
+        lead, _ign = proj.add_dressup(op, "leads", params={"RadiusIn": 3.0, "RadiusOut": 3.0})
+        self.assertGreater(float(lead.OffsetIn), 0.0)
+        proj.compute()
+        first = feed_moves(lead.Path)[0]
+        self.assertIn(first[0], ("G2", "G3"))
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+
+    def test_versions_and_styles(self):
+        """Paramètres traduits pour 1.0 / 1.1 : angle de balayage (1.1) ou ignoré (1.0), arc vertical (1.1) ou refus."""
+        from cam2027.project import leads
+
+        proj, lib, clone = self.project("Leads styles")
+        op = self._contour(proj, lib, clone)
+        proj.compute()
+        lead, ignored = proj.add_dressup(op, "leads", params={"RadiusIn": 4.0, "AngleIn": 45.0, "RadiusOut": 2.0})
+        values = leads.read_params(lead)
+        self.assertAlmostEqual(values["RadiusIn"], 4.0)
+        self.assertAlmostEqual(values["RadiusOut"], 2.0)
+        proj.compute()
+        first = feed_moves(lead.Path)[0]
+        a = math.atan2(first[1][1] - first[3][1], first[1][0] - first[3][0])
+        b = math.atan2(first[2][1] - first[3][1], first[2][0] - first[3][0])
+        sweep = abs(math.degrees((b - a + math.pi) % (2 * math.pi) - math.pi))
+        if V11:
+            self.assertEqual(ignored, [])
+            self.assertAlmostEqual(values["AngleIn"], 45.0)
+            self.assertAlmostEqual(sweep, 45.0, delta=0.1)
+        else:
+            self.assertEqual(ignored, ["AngleIn"])
+            self.assertAlmostEqual(sweep, 90.0, delta=0.1)
+        proj.remove_dressup(op, "leads")
+        if not V11:
+            with self.assertRaises(UserError):
+                proj.add_dressup(op, "leads", params={"StyleIn": "ArcZ"})
+            self.assertEqual([o.Name for o in proj.operations()], [op.Name])
+            return
+        lead, _ign = proj.add_dressup(op, "leads", params={"StyleIn": "ArcZ", "StyleOut": "ArcZ", "RadiusIn": 3.0,
+                                                           "RadiusOut": 3.0})
+        proj.compute()
+        moves = feed_moves(lead.Path)
+        # arc vertical : descente progressive jusqu'à la passe, Z décroissant, rayon 3 dans le plan vertical
+        descent = []
+        for m in moves:
+            if m[2][2] >= m[1][2] - 1e-9:
+                break
+            descent.append(m)
+        self.assertGreater(len(descent), 5)
+        self.assertAlmostEqual(descent[0][1][2] - descent[-1][2][2], 3.0, delta=0.01)
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+
+    def test_tags_under_leads(self):
+        """Attaches ajoutées après les entrées/sorties : insérées dessous (contour fermé), entrées toujours en haut."""
+        proj, lib, clone = self.project("Leads tags")
+        op = self._contour(proj, lib, clone)
+        proj.compute()
+        lead, _ign = proj.add_dressup(op, "leads", params={"RadiusIn": 3.0, "RadiusOut": 3.0})
+        tags, _ign = proj.add_dressup(op, "tags", params={"Height": 4.0, "Width": 8.0}, count=4)
+        self.assertEqual([o.Name for o in proj.operations()], [lead.Name])
+        self.assertIs(lead.Base, tags)
+        self.assertIs(tags.Base, op)
+        proj.compute()
+        self.assertIn(feed_moves(lead.Path)[0][0], ("G2", "G3"))
+        proj.remove_dressup(op, "tags")
+        self.assertIs(lead.Base, op)
+        self.assertEqual([o.Name for o in proj.operations()], [lead.Name])
+
+
+if __name__ == "__main__":
+    unittest.main()

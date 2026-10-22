@@ -128,8 +128,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   indexé par son nom. Positions des attaches réparties automatiquement (nombre, largeur,
   hauteur, angle, rayon réglables ; déplacement individuel = panneau FreeCAD « Holding
   Tags » dans l'atelier CAM standard). Dogbones : angles détectés sur le parcours calculé
-  (styles dogbone / T-bone, longueur adaptative, fixe ou personnalisée). Pas d'entrées/sorties
-  en arc (LeadInOut : propriétés différentes entre 1.0 et 1.1, non exposé), pas de rampe sur
+  (styles dogbone / T-bone, longueur adaptative, fixe ou personnalisée). Entrées/sorties en arc
+  (`project/leads.py`, habillage `LeadInOut`) : contours et rainures seulement (pas la poche en zigzag :
+  FreeCAD poserait un arc à chaque segment, dans les parois) ; sur 1.0, arc horizontal d'un quart de tour
+  seulement (angle de balayage ignoré et signalé, arc vertical refusé) et pas de déplacement du point de départ
+  (un arc qui toucherait la pièce est refusé, avec la position) ; contrôle des collisions fait à l'ajout et à la
+  modification de l'habillage, pas quand l'opération de base change ensuite (le contrôle matière le voit) ;
+  arc vertical d'une rainure : prolonge la rainure du rayon à chaque bout (comme Fusion). Pas de rampe sur
   perçage/hélice/filetage. Dupliquer une opération ne copie
   pas ses habillages.
 

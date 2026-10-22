@@ -2,6 +2,17 @@
 
 ## Non publié
 
+- **[S2]** **Entrées et sorties en arc** (Fusion : rayon horizontal, angle de balayage, arc vertical) : nouvelle
+  case « Entrée et sortie » dans l'onglet « Entrée, sortie et attaches » des contours et rainures (et de la
+  passe de profil d'une poche = contour intérieur sur le fond). Type d'entrée / de sortie (arc horizontal, arc
+  vertical, droite tangente ou perpendiculaire), rayon, angle de balayage. Habillage `LeadInOut` de FreeCAD,
+  encapsulé dans `project/leads.py` (propriétés 1.1 `StyleIn/RadiusIn/AngleIn`, traduites en `StyleOn/Length`
+  sur 1.0 ; arc vertical et angle ≠ 90° demandent 1.1). Les entrées restent au-dessus des attaches et de la
+  rampe. Contrôle des collisions : chaque mouvement ajouté est vérifié contre la pièce (axe de la fraise à au
+  moins un rayon d'outil des solides au-dessus de la pointe) ; sur 1.1, le point de départ est déplacé le long
+  du parcours avec recouvrement (`OffsetIn/OffsetOut`) tant qu'un arc toucherait la pièce, sinon refus avec la
+  position. La poche en zigzag n'en a pas (arcs dans les parois : entaille de 4,2 mm mesurée). Plaque de test,
+  contour R3 : premier mouvement de coupe = arc de R3 tangent au contour à chaque passe, aucune entaille.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

@@ -1008,5 +1008,21 @@
   "No tool of the right type for this strategy: click Select... to choose one or create a new one.": "Aucun outil adapté à cette stratégie : cliquez sur Sélectionner... pour en choisir un ou en créer un nouveau.",
   "Length below the holder (mm)": "Longueur sous le porte-outil (mm)",
   "Apply": "Appliquer",
-  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre outil ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés)."
+  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre outil ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés).",
+  "Lead-in and lead-out": "Entrée et sortie",
+  "Arc (horizontal radius and sweep angle) or vertical arc entering and leaving the cut tangentially, at every step-down; profile, slot and pocket paths. Vertical arcs and sweep angles other than 90° need FreeCAD 1.1.": "Arc (rayon horizontal et angle de balayage) ou arc vertical pour entrer dans la coupe et en sortir tangentiellement, à chaque passe ; contour, rainure et passe de profil d'une poche. Les arcs verticaux et les angles de balayage autres que 90° demandent FreeCAD 1.1.",
+  "Lead-in style": "Type d'entrée",
+  "Lead-in radius": "Rayon d'entrée",
+  "Lead-in sweep angle": "Angle de balayage d'entrée",
+  "Lead-out style": "Type de sortie",
+  "Lead-out radius": "Rayon de sortie",
+  "Lead-out sweep angle": "Angle de balayage de sortie",
+  "Arc": "Arc horizontal",
+  "ArcZ": "Arc vertical",
+  "Tangent": "Droite tangente",
+  "Perpendicular": "Droite perpendiculaire",
+  "Unknown lead style: {style}": "Type d'entrée inconnu : {style}",
+  "The lead radius must be positive.": "Le rayon d'entrée doit être positif.",
+  "Vertical arc leads need FreeCAD 1.1.": "Les entrées en arc vertical demandent FreeCAD 1.1.",
+  "The lead-in or lead-out hits the part at X{x:.1f} Y{y:.1f} Z{z:.1f}: reduce the radius or use a vertical arc.": "L'entrée ou la sortie touche la pièce en X{x:.1f} Y{y:.1f} Z{z:.1f} : réduisez le rayon ou utilisez un arc vertical."
 }
