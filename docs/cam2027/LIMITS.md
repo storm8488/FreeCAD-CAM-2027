@@ -284,3 +284,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   grille peut être manqué, jamais entaillé (hauteurs finales par OpenCamLib). Chaque passe part de la hauteur de
   sécurité (pas de liaison au contact). Contre-dépouilles non vues (carte de hauteur). Le pas suit la pente ; sur
   un congé vertical d'angle de poche, une fine bande peut rester contre la paroi (20 mm³ sur l'essai).
+- **Limiter à une zone** (`project/trim.py`) : zone dans le plan XY seulement (pas de limite en Z), un seul
+  contour (le plus grand de la sélection) ; un bord est trouvé à 0,2 mm près puis affiné par dichotomie ; les arcs
+  coupés deviennent des segments ; entrée de chaque morceau par plongée verticale (pas d'hélice ni de rampe) ; les
+  liaisons recalculées passent par la hauteur de dégagement.
+

@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
+  « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
+  (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
+  les arcs entièrement gardés restent des arcs, les rapides d'origine sont gardés entre deux morceaux continus ;
+  ailleurs remontée à la hauteur de dégagement, rapide, descente à la hauteur de sécurité, plongée en avance
+  verticale. `Path.Dressup.Boundary` de FreeCAD (booléens avec un solide, différent entre 1.0 et 1.1) n'est pas
+  utilisé. Contour de la plaque coupé par un rectangle : aucune coupe au-delà du bord (coupé pile au bord),
+  aucun rapide en XY sous la hauteur de sécurité, complément exact en « garder dehors », opération non recalculée.
 - **[S1]** **Reprise des angles** (stratégie `pencil`, Fusion « Pencil », fraise boule) : angles intérieurs où une
   boule de référence (diamètre de la finition précédente, 3 fois l'outil par défaut) ne descend pas et où la
   boule de reprise descend plus bas (`project/pencil.py` : carte de hauteur fine de la pièce, profils de boule par

@@ -321,5 +321,75 @@ class TestPencil(unittest.TestCase):
             pencil.pencil_passes([Part.makeBox(10, 10, 10)], 4.0, 3.0, 1.0)
 
 
+class TestTrim(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s1t-")
+        cls.step = os.path.join(cls.tmp, "grooved.step")
+        make_grooved_plate(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def test_contour_cut_by_rectangle(self):
+        """Contour extérieur coupé en deux par un rectangle : aucune coupe hors zone, retraits propres, sans recalcul."""
+        from cam2027.project import trim
+
+        lib = starter_library()
+        proj = Project.create("Trim test", lib, _machine())
+        part = proj.import_model(self.step, label="Grooved").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 4.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        e6 = lib.search("6 mm flat end mill")[0]
+        op, _r = proj.add_operation("profile", "Contour", lib.assemblies_for_tool(e6.id)[0].id, e6.presets[0].id,
+                                    base=[(clone, [])], params={"FinalDepth": 0.0, "StepDown": 5.0, "Side": "Outside"})
+        proj.compute()
+        full = cut_points(op.Path)
+        self.assertTrue(any(p[0] > 40 for p in full) and any(p[0] < 20 for p in full))
+        gcode_before = op.Path.toGCode()
+        dress = trim.set_limit(proj, op, trim.rectangle(-20, -20, 30, 60), inside=True, source="rectangle")
+        proj.compute()
+        self.assertEqual(op.Path.toGCode(), gcode_before)  # l'opération n'est pas recalculée autrement
+        kept = cut_points(dress.Path)
+        self.assertTrue(kept)
+        self.assertTrue(all(p[0] <= 30 + 1e-3 for p in kept), max(p[0] for p in kept))
+        self.assertTrue(any(abs(p[0] - 30) < 1e-3 for p in kept))  # coupé pile au bord
+        # longueur de coupe : les deux côtés gauches et la moitié des côtés haut / bas, à chaque passe
+        clear, safe = op.ClearanceHeight.Value, op.SafeHeight.Value
+        z = None
+        for c in dress.Path.Commands:
+            p = c.Parameters
+            if c.Name == "G0" and ("X" in p or "Y" in p) and "Z" not in p:
+                self.assertGreaterEqual(z, safe - 1e-6, "rapid in XY below the safe height")
+            if "Z" in p:
+                z = p["Z"]
+        # dehors : le complément exact
+        out = trim.set_limit(proj, op, trim.rectangle(-20, -20, 30, 60), inside=False)
+        proj.compute()
+        kept_out = cut_points(out.Path)
+        self.assertTrue(all(p[0] >= 30 - 1e-3 for p in kept_out))
+        rep = proj.material_check()
+        self.assertLess(rep["gouge_max"], 0.03, rep)
+        self.assertEqual(rep["rapid_hits"], 0, rep)
+        trim.set_limit(proj, op, None)
+        self.assertIsNone(trim.find_dressup(proj, op, trim.SUFFIX))
+        self.assertIs(proj.job.Operations.Group[-1], op)
+        proj.close()
+
+    def test_trim_engine(self):
+        """Moteur seul : segment qui traverse un carré, arc coupé, liaisons."""
+        import Path
+        from cam2027.project import trim
+
+        cmds = [Path.Command("G0", {"X": -5, "Y": 5, "Z": 10}), Path.Command("G0", {"Z": 1}),
+                Path.Command("G1", {"X": -5, "Y": 5, "Z": -1, "F": 5}),
+                Path.Command("G1", {"X": 15, "Y": 5, "Z": -1, "F": 10}),
+                Path.Command("G2", {"X": 15, "Y": -5, "Z": -1, "I": 0, "J": -5, "F": 10}),
+                Path.Command("G1", {"X": -5, "Y": -5, "Z": -1, "F": 10})]
+        out, stats = trim.trim_commands(cmds, trim.polygon_keep(trim.rectangle(0, -10, 10, 10)), 10.0, 3.0, 2.0)
+        pts = [(c.Parameters.get("X"), c.Parameters.get("Y")) for c in out if c.Name == "G1"]
+        self.assertTrue(all(x is None or -1e-6 <= x <= 10 + 1e-6 for x, _y in pts), pts)
+        self.assertAlmostEqual(stats["cut_out"], 20.0, places=3)  # 10 mm à l'aller, 10 au retour
+        self.assertEqual(stats["links"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
