@@ -497,6 +497,41 @@ def dressupmod_base(obj):
     return dressups.base_operation(obj)
 
 
+class TestLibraryFile(unittest.TestCase):
+    def test_unreadable_library_is_set_aside(self):
+        """Bibliothèque utilisateur illisible (fichier abîmé, ou écrite par une version plus récente) :
+        ``state.library()`` levait l'exception à chaque appel, « Importer » et les autres commandes échouaient
+        sans message (B5-17). Le fichier est mis de côté intact, la bibliothèque de démarrage prend le relais
+        et l'avertissement dit où est la copie."""
+        from cam2027.tools.library import ToolLibrary, load_or_recover
+
+        tmp = tempfile.mkdtemp(prefix="cam2027-b5-")
+        path = os.path.join(tmp, "library.cam2027tools")
+        good = starter_library()
+        good.save(path)
+        lib, warning = load_or_recover(path)
+        self.assertIsNone(warning)
+        self.assertEqual(lib.summary()["tools"], good.summary()["tools"])
+        for data in (b'{"format": "cam2027-tool-library", "tools": [', b"\x00\xff garbage",
+                     b'{"format": "cam2027-tool-library", "data_version": 999, "tools": []}'):
+            with open(path, "wb") as fp:
+                fp.write(data)
+            lib, warning = load_or_recover(path)
+            self.assertIsInstance(lib, ToolLibrary)
+            self.assertGreater(lib.summary()["tools"], 0)
+            self.assertIsNotNone(warning)
+            kept = [n for n in os.listdir(tmp) if n.startswith("library.cam2027tools.unreadable")]
+            self.assertTrue(kept, os.listdir(tmp))
+            backup = os.path.join(tmp, sorted(kept)[-1])
+            with open(backup, "rb") as fp:
+                self.assertEqual(fp.read(), data)
+            self.assertIn(os.path.basename(backup), str(warning))
+            self.assertTrue(os.path.isfile(path))  # nouvelle bibliothèque enregistrée à sa place
+            ToolLibrary.load(path)
+            for n in kept:
+                os.remove(os.path.join(tmp, n))
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
