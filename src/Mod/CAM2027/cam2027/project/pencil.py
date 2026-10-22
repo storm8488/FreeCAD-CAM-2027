@@ -57,29 +57,51 @@ def ball_kernel(radius, res):
     return foot, prof
 
 
-def tip_heights(H, radius, res):
-    """Hauteur de la pointe d'une boule posée sur la carte ``H`` au-dessus de chaque colonne."""
+def _ball_filter(H, radius, res, dilate):
+    """Dilatation (érosion) de ``H`` par le profil de la boule, une ligne du noyau à la fois : même résultat que
+    ``grey_dilation`` avec le noyau 2D entier, qui monte à 6,5 Go pour une boule de référence de 18 mm sur une
+    grille de 540 x 781 (disque WobbleRing ; 0,12 Go ici)."""
     from scipy import ndimage
 
+    np = _np()
     foot, prof = ball_kernel(radius, res)
-    return ndimage.grey_dilation(H, footprint=foot, structure=prof, mode="nearest")
+    n = foot.shape[0] // 2
+    pad = np.pad(H, ((n, n), (0, 0)), mode="edge")
+    rows = H.shape[0]
+    out = None
+    for k in range(foot.shape[0]):
+        if not foot[k].any():
+            continue
+        if dilate:
+            r = ndimage.grey_dilation(pad[k:k + rows], footprint=foot[k][None, :], structure=prof[k][None, :],
+                                      mode="nearest")
+            out = r if out is None else np.maximum(out, r, out=out)
+        else:
+            r = ndimage.grey_erosion(pad[2 * n - k:2 * n - k + rows], footprint=foot[k][None, :],
+                                     structure=prof[k][None, :], mode="nearest")
+            out = r if out is None else np.minimum(out, r, out=out)
+    return out
+
+
+def tip_heights(H, radius, res):
+    """Hauteur de la pointe d'une boule posée sur la carte ``H`` au-dessus de chaque colonne."""
+    return _ball_filter(H, radius, res, True)
 
 
 def envelope(tips, radius, res):
     """Surface la plus basse atteinte par une boule dont la pointe suit ``tips`` (matière laissée)."""
-    from scipy import ndimage
-
-    foot, prof = ball_kernel(radius, res)
-    return ndimage.grey_erosion(tips, footprint=foot, structure=prof, mode="nearest")
+    return _ball_filter(tips, radius, res, False)
 
 
-def corner_zone(H, res, ref_radius, radius, threshold=0.02, max_slope_deg=90.0, inside=None):
-    """Zone utile (booléens) et matière reprise (mm) au centre de chaque colonne."""
+def corner_zone(H, res, ref_radius, radius, threshold=0.02, max_slope_deg=90.0, inside=None, tips=None):
+    """Zone utile (booléens) et matière reprise (mm) au centre de chaque colonne ; ``tips`` : hauteurs de pointe
+    de la boule de reprise si déjà calculées."""
     from scipy import ndimage
 
     np = _np()
     left = envelope(tip_heights(H, ref_radius, res), ref_radius, res)
-    tips = tip_heights(H, radius, res)
+    if tips is None:
+        tips = tip_heights(H, radius, res)
     gain = left - tips
     zone = gain > threshold
     if inside is not None:
@@ -242,8 +264,8 @@ def pencil_passes(shapes, diameter, ref_diameter, stepover, threshold=0.02, max_
     H = sim.model_heights(grid, shapes)
     inside = np.isfinite(H)
     H = np.where(inside, H, bb.ZMin)
-    zone, gain = corner_zone(H, res, ref_diameter / 2.0, diameter / 2.0, threshold, max_slope_deg, inside)
     tips = tip_heights(H, diameter / 2.0, res)
+    zone, gain = corner_zone(H, res, ref_diameter / 2.0, diameter / 2.0, threshold, max_slope_deg, inside, tips)
     lines = [_resample(l, 0.5) for l in pass_lines(zone, grid.xs, grid.ys, stepover, tips)]
     passes = drop_ball(shapes, lines, diameter, bb.ZMin - 1.0) if lines else []
     info = {"cells": int(zone.sum()), "gain_max": float(gain[zone].max()) if zone.any() else 0.0,

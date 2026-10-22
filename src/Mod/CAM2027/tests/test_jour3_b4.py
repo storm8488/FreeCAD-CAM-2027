@@ -428,6 +428,24 @@ class TestScallopOrder(unittest.TestCase):
                 self.assertTrue(np.array_equal(a, b))
 
 
+class TestPencilFilter(unittest.TestCase):
+    def test_rows_equal_full_kernel(self):
+        """Dilatation / érosion par le profil de la boule, ligne par ligne = noyau 2D de scipy (6,5 Go sur le disque
+        WobbleRing avec la boule de référence de 18 mm), sur une carte au hasard avec des marches."""
+        import numpy as np
+        from scipy import ndimage
+        from cam2027.project import pencil
+
+        rng = np.random.default_rng(3)
+        H = np.cumsum(rng.normal(size=(90, 70)), axis=0) * 0.05 + np.where(rng.random((90, 70)) < 0.02, 3.0, 0.0)
+        for radius in (0.75, 2.0):
+            foot, prof = pencil.ball_kernel(radius, 0.1)
+            full = ndimage.grey_dilation(H, footprint=foot, structure=prof, mode="nearest")
+            self.assertTrue(np.array_equal(pencil.tip_heights(H, radius, 0.1), full))
+            self.assertTrue(np.array_equal(pencil.envelope(full, radius, 0.1),
+                                           ndimage.grey_erosion(full, footprint=foot, structure=prof, mode="nearest")))
+
+
 class TestRotarySpiral(unittest.TestCase):
     """Finition 3D rotative en spirale (A tourne sans arrêt, X avance d'un pas par tour)."""
 

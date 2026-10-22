@@ -71,6 +71,12 @@
   point le plus haut du bord du bas (un peu de matière reste du côté bas plutôt qu'une entaille). Chauffage, perçage
   intelligent sur tous les corps : entaille 2,3 → 0 mm, rapides dans la matière 12 → 0 (avec les correctifs
   précédents).
+- **[B4]** Optimisation (mémoire) : **reprise des angles (`pencil`) à 6,5 Go**. Le profil de la boule de référence
+  (18 mm par défaut) était appliqué à la carte de hauteur en une fois (`grey_dilation` de scipy avec un noyau 2D :
+  6,5 Go de pointe sur le disque WobbleRing comme sur le chauffage Vz330 ; arrêté à 6,5 Go sur 1.0.2) ; il l'est
+  maintenant ligne par ligne du noyau (résultat identique, comparé dans un test), et la hauteur de pointe de la
+  boule de reprise n'est plus calculée deux fois. Disque : 27,5 s → 17,4 s, pointe 6,5 Go → 0,23 Go ; chauffage :
+  74,7 s → 65,6 s, 6,5 Go → 0,41 Go ; mêmes commandes (676 et 19 344).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
