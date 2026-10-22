@@ -103,6 +103,12 @@ def import_file(doc, path, label=None):
     for o in objects:  # STEP écrit par OpenCascade sans nom de produit : le nom du fichier, pas celui du traducteur
         if o.Label.startswith("Open CASCADE STEP translator"):
             o.Label = os.path.splitext(os.path.basename(path))[0]
+    if kind == "vector":
+        for o in objects:  # texte SVG / DXF : objet sans arête, ignoré en silence par le panneau
+            shape = getattr(o, "Shape", None)
+            if not hasattr(o, "Group") and (shape is None or shape.isNull() or not shape.Edges):  # groupes, calques : non
+                warnings.append(Msg("{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program",
+                                    name=o.Label))
     if kind == "mesh":
         objects, mesh_warnings = meshes_to_solids(doc, objects)
         warnings.extend(mesh_warnings)

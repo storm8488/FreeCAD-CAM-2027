@@ -285,6 +285,16 @@ class TestModelImport(unittest.TestCase):
         res = self.proj.import_model(path)
         self.assertEqual([o.Label for o in res.objects if o.TypeId.startswith("Part::")], ["Bracket v2"])
 
+    def test_svg_text_without_geometry(self):
+        """Texte SVG (``<text>``) : objet « Text » sans géométrie, ignoré en silence par le panneau (« Importé : - »
+        puis « aucun dessin 2D ») ; maintenant signalé, avec quoi faire (B5-21)."""
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50">'
+               '<text x="10" y="20">Hello</text><rect x="5" y="5" width="20" height="10" fill="none" stroke="black"/></svg>')
+        res = self.proj.import_model(self.write("text.svg", svg.encode("utf-8")))
+        self.assertEqual(res.kind, "vector")
+        self.assertTrue(any("no geometry" in str(w) and "Text" in str(w) for w in res.warnings), res.warnings)
+        self.assertTrue(any(getattr(o, "Shape", None) is not None and o.Shape.Edges for o in res.objects))
+
     def test_3mf_imported(self):
         """3MF (format des trancheuses) : lu par le module Mesh de FreeCAD 1.0 et 1.1, refusé « unsupported
         format » par CAM2027 (bug B5-7) ; boîte fermée -> solide comme un STL."""
