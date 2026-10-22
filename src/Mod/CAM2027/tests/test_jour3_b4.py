@@ -251,6 +251,34 @@ class TestHoleRecognition(unittest.TestCase):
         self.assertLess(rep["gouge_max"], 0.05, rep)
 
 
+    def test_blind_hole_with_slanted_bottom(self):
+        """Trou borgne Ø4,15 dont le fond est en pente (fond à Z 5 ± 1,04 : alésage d'entretoise du chauffage Vz330, qui
+        débouche sur une surface inclinée). La fraise ne descend qu'au point le plus haut du fond. Avant : jusqu'au
+        point le plus bas, sur tout le diamètre (1,05 mm d'entaille sur le chauffage)."""
+        from cam2027.project import holes
+
+        cx, cy = 20.0, 20.0
+        half = Part.makeBox(100, 100, 100, V(-50, -50, 0))
+        half.rotate(V(0, 0, 0), V(0, 1, 0), -math.degrees(math.atan(0.5)))
+        half.translate(V(cx, cy, 5.0))
+        tool = Part.makeCylinder(2.075, 30.0, V(cx, cy, -5.0)).common(half)
+        lib = starter_library()
+        proj = Project.create("B4 slanted", lib, machine())
+        o = proj.doc.addObject("Part::Feature", "Block")
+        o.Shape = Part.makeBox(40, 40, 20).cut(tool)
+        proj.doc.recompute()
+        proj.create_job([o], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        found = holes.find_job_holes(proj)
+        self.assertEqual(len(found), 1)
+        self.assertFalse(found[0].through)
+        self.assertAlmostEqual(found[0].bottom, 5.0 + 0.5 * 2.075, delta=0.02)
+        steps, _notes = holes.plan(lib, found)
+        holes.apply_plan(proj, proj.job.Model.Group[0], steps)
+        proj.compute()
+        rep = proj.material_check(resolution=0.25)
+        self.assertLess(rep["gouge_max"], 0.05, rep)
+
+
 def ball_penetration(commands, boxes, radius, step=0.01):
     """Pénétration maximale (mm, distance normale) d'une boule de rayon ``radius`` (pointe = point du parcours) dans
     une union de boîtes ``(xmin, ymin, zmin, xmax, ymax, zmax)`` le long des mouvements de coupe (calcul exact)."""

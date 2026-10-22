@@ -66,6 +66,11 @@
   intelligent. Le test « centre vide » tombait dans l'alésage du tube : l'alésage hélicoïdal Ø10 usinait
   l'entretoise (entaille de 2,3 mm sur les quatre entretoises du chauffage Vz330 de l'utilisateur). La matière est
   maintenant cherchée aussi juste à l'intérieur du rayon (8 points à 0,95 R) : seul l'alésage du tube reste un trou.
+- **[B4]** Correctif : **trou borgne à fond en pente percé jusqu'à son point le plus bas** (alésage d'entretoise du
+  chauffage Vz330 qui débouche sur une surface inclinée : 1,05 mm d'entaille). Le fond utilisé est maintenant le
+  point le plus haut du bord du bas (un peu de matière reste du côté bas plutôt qu'une entaille). Chauffage, perçage
+  intelligent sur tous les corps : entaille 2,3 → 0 mm, rapides dans la matière 12 → 0 (avec les correctifs
+  précédents).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

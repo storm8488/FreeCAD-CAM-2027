@@ -122,6 +122,14 @@ def find_holes(obj, tol=1e-4):
                 for a in (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi)]
         through = bottom <= bb.ZMin + 1e-6 or not any(shape.isInside(v, tol, True)
                                                        for v in [FreeCAD.Vector(cx, cy, bottom - 0.05)] + ring)
+        if not through:
+            # fond en pente (alésage qui débouche sur une surface inclinée) : le fond utilisable est le point le plus
+            # haut du bord du bas, sinon la fraise descend au point le plus bas sur tout le diamètre
+            lows = [ed.BoundBox.ZMax for name in e["faces"] if shape.getElement(name).Surface.__class__.__name__ == "Cylinder"
+                    for ed in shape.getElement(name).Edges
+                    if ed.BoundBox.ZMax < top - 1e-3]  # bords du bas (la couture verticale monte jusqu'en haut)
+            if lows and max(lows) > bottom + 0.01:
+                bottom = max(lows)
         holes.append(Hole(cx, cy, 2.0 * r, top, bottom, through, e["faces"], chamfer_d, chamfer_angle, obj=obj))
     holes.sort(key=lambda h: (h.diameter, h.y, h.x))
     return holes
