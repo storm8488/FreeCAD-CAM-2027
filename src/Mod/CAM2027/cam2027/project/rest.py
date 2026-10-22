@@ -171,6 +171,9 @@ class RestDressup(object):
         cmds, stats = trim.trim_commands(obj.Base.Path.Commands, rest_keep(zmap, reach, ignore), clearance, safe, vfeed,
                                          step=min(trim.SAMPLE_STEP, zmap.res / 2.0))
         obj.Path = Path.Path(cmds)
+        from .patterns import _avoid_keepout
+
+        _avoid_keepout(obj)  # liaisons recalculées : à la hauteur de dégagement, peut-être sous une zone interdite
         obj.Report = "cut %.0f of %.0f mm, %d links, %d previous operation(s), %.1f s" % (
             stats["cut_out"], stats["cut_in"], stats["links"], len(tops), time.time() - t0)
 
