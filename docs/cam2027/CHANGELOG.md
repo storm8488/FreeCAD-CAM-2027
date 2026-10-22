@@ -171,6 +171,36 @@
   un autre dessin : vecteurs du même calque (calque Inkscape ou groupe SVG, calque DXF), sinon du même nom,
   puis calcul. Une opération sans cible ou sans outil est rapportée et non créée. Les calques SVG sont lus à
   l'import (propriété `CAM2027Layer` des vecteurs).
+- **[S4]** **Projeter sur la pièce** (Usiner > Projeter sur la pièce, `project/projection.py`, comme Fusion
+  « Project ») : une gravure, un contour ou un V-carving calculés à plat sont reportés sur la surface 3D,
+  chaque point de coupe à `S(x, y) - (Zref - z)` (surface lue par OpenCamLib sous l'axe de l'outil, `Zref` =
+  profondeur de départ de l'opération : la profondeur demandée, variable en V-carving, est gardée sous la
+  surface) ; pas réduit là où la surface s'écarte de la corde de plus de 0,005 mm ; rapides au-dessus du
+  point le plus haut de la pièce. Habillage qui remplace l'opération dans le job, retiré par le même
+  dialogue. Texte « S4 » gravé à 0,5 mm au V-bit 90° sur le dôme : chaque point à 0,5 mm sous la surface
+  (± 0,01), profondeur mesurée sur la carte de hauteur 0,499 à 0,522 mm le long de tout le texte, rien
+  d'enlevé hors de la portée du V-bit.
+- **[S4]** **Usinage rotatif continu** (Usiner > Usinage rotatif, `project/rotary.py`) : contour et poche
+  enroulés d'un dessin déroulé, la compensation du rayon d'outil faite au rayon de chaque niveau (dessin
+  ramené au plan réel `Y × r / R`, décalé, puis redéroulé), et finition 3D rotative comme Fusion « Rotary
+  parallel » : une ligne le long de l'axe par angle, pièce tournée à cet angle et hauteur de la pointe par
+  OpenCamLib (fraise pointée vers l'axe), niveaux d'ébauche radiaux optionnels. X, Z et A simultanés en G93
+  (avance réelle au rayon de coupe), aperçu 3D du trajet réel. Cylindre R20 avec une poche (fond R18) et une
+  bosse sphérique, brut R21, boule 6 puis plate 3 : carte radiale déroulée simulée = pièce à ± 0,05 mm (fond
+  de poche, cylindre, bosse), aucune entaille, vitesse réelle = avance à 2 %, export vérifié sans erreur ;
+  finition 3D 6,7 s, poche 0,2 s.
+- **[S4]** **Finition 3D à crête constante, pentu / peu incliné** (stratégie `scallop`, comme Fusion
+  « Scallop » et « Steep and Shallow ») : « Hauteur de crête maximale » -> pas 3D déduit du rayon de la boule
+  (`2 sqrt(h (2R - h))`, plus la partie plate d'une torique) ; hauteurs de la pointe par OpenCamLib
+  (`BatchDropCutter`, comme `surface3d`) sur une grille, passes = courbes de niveau de la distance
+  géodésique depuis la limite le long de la surface du centre de l'outil (décalages successifs, pas 3D
+  constant), passes ajoutées sur les lignes de crête restées à plus d'un demi-pas, chaque point final
+  recalculé par OpenCamLib (aucune hauteur interpolée), liaisons courtes le long de la surface. Mode pentu /
+  peu incliné : Z constant au-dessus de l'angle limite (défaut 45°, pas vertical `s sin(angle)`), crête
+  constante en dessous, dans la même opération. Dôme, boule 6 mm, crête 0,02 mm : crête mesurée (carte de
+  hauteur à 0,05 mm, normale à la sphère) 0,017-0,018 mm sur le dôme, 0,020 mm sur le plat, aucune entaille,
+  7,2 s (finition 3D de FreeCAD aux réglages par défaut : 6,4 s). Utilise `scipy` et `contourpy`, fournis
+  avec FreeCAD 1.0 et 1.1.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

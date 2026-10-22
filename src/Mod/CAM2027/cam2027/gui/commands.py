@@ -121,6 +121,7 @@ STRATEGY_ICONS = {
     "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "adaptive": "pocket", "drilling": "drill",
     "millface": "surface", "engrave": "engrave", "vcarve": "engrave", "chamfer": "engrave", "helix": "drill",
     "slot": "contour", "threadmill": "drill", "surface3d": "surface", "waterline": "surface", "rough3d": "pocket",
+    "scallop": "surface",
 }
 
 
@@ -642,12 +643,61 @@ class WrapEngrave(_Base):
         open_wrap_dialog(proj)
 
 
-def open_wrap_dialog(proj, op=None):
-    """Création ou modification d'une gravure enroulée ; retourne l'opération ou None."""
+class RotaryMachining(_Base):
+    atelier = "axis-a"
+    text = "Rotary machining (A axis)"
+    tooltip = "Wrapped contour or pocket of an unrolled drawing, or rotary 3D finishing of the part: X, Z and A move together (continuous 4th axis, G93)"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        open_wrap_dialog(proj, rotary=True)
+
+
+class ProjectOnPart(_Base):
+    atelier = "surface"
+    text = "Project on the part"
+    tooltip = "Carry an engraving, contour or V-carving computed flat onto the 3D part surface, at the same depth below it"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from .projectiondlg import ProjectionDialog
+
+        dlg = ProjectionDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            dlg.apply()
+            proj.compute()
+        except Exception as exc:
+            _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
+        _after_change()
+
+
+def open_wrap_dialog(proj, op=None, rotary=False):
+    """Création ou modification d'une gravure enroulée (``rotary`` : contour, poche ou finition 3D rotatifs) ;
+    retourne l'opération ou None."""
     from .wrapdlg import WrapDialog
+    from ..project import rotary as rotarymod
 
     selected = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
-    dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
+    if rotary or (op is not None and proj.registry.get(op.Name, {}).get("kind") in rotarymod.KINDS):
+        from .rotarydlg import RotaryDialog
+
+        dlg = RotaryDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
+    else:
+        dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
     if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
         return None
     try:
@@ -782,6 +832,8 @@ def default_params(kind, tool, values):
         params.pop("StepDown", None)  # passe unique de finition par défaut
     if kind == "waterline":
         params.update({"LayerMode": "Multi-pass", "SampleInterval": 0.5})
+    if kind == "scallop":
+        params.pop("StepDown", None)  # finition : crête maximale, pas de passe axiale
     if kind == "chamfer":
         params["Width"] = 1.0
     if kind == "flat3d":
@@ -1429,6 +1481,8 @@ COMMANDS = [
     ("CAM2027_StockFixture", StockFixture),
     ("CAM2027_AddOperation", AddOperation),
     ("CAM2027_WrapEngrave", WrapEngrave),
+    ("CAM2027_RotaryMachining", RotaryMachining),
+    ("CAM2027_ProjectOnPart", ProjectOnPart),
     ("CAM2027_FlatDepth", FlatDepth),
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
@@ -1462,7 +1516,7 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "CAM2027_BulkEdit", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
-                   "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
+                   "CAM2027_RotaryMachining", "CAM2027_ProjectOnPart", "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"] + aspirecmds.EXPORT_MENU),
 )

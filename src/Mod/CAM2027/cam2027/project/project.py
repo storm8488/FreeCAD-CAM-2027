@@ -36,7 +36,7 @@ PENDING_SEGMENTS = 4096
 #: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
 LEVEL_BATCH_MIN = 64
 #: strategies qui acceptent une surface 3D issue d'un maillage (pas un solide)
-SURFACE_STRATEGIES = ("surface3d", "waterline", "millface")  # surfaçage : le dessus du brut (voir commands)
+SURFACE_STRATEGIES = ("surface3d", "waterline", "millface", "scallop")  # surfaçage : le dessus du brut (voir commands)
 from .machine import MachineProfile, lunyee_4040_nova
 
 
@@ -425,6 +425,9 @@ class Project(object):
         """(Re)calcule le G-code enroulé depuis le dessin, le brut rond et le profil machine."""
         reg = self.registry
         rec = reg[op.Name]
+        if rec["kind"] != wrapmod.KIND:  # contour, poche et finition 3D enroulés
+            from . import rotary
+            return rotary.generate(self, op)[0]
         p = rec["params"]
         cy, cz, sign = indexing.check_machine(self.machine)
         radius = wrapmod.radius_of_stock(self.job)
