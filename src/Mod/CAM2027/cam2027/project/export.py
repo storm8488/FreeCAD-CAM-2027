@@ -19,6 +19,7 @@ from .. import compat
 from ..i18n import Msg
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
+_COMMENT = re.compile(r"\(.*?\)")
 
 # codes acceptés par défaut pour un contrôleur GRBL (v1.1)
 GRBL_ALLOWED = {
@@ -137,6 +138,9 @@ def write_gcode(sections, path):
 #: G dont les mots d'axe ne sont pas une position de travail : G10 / G92 (décalages), G28 / G30 (point
 #: intermédiaire, souvent en G91), G53 (repère machine)
 _NOT_POSITION_G = ("10", "28", "30", "53", "92")
+_AXES = frozenset("XYZABC")
+#: (lettre, nombre écrit) -> code normalisé (« G01 » -> « G1 », « G38.20 » -> « G38.2 »)
+_CODES = {}
 
 
 #: plan d'arc -> (axe 1, axe 2, mot de centre 1, mot de centre 2)
@@ -195,100 +199,120 @@ def analyze_gcode(text):
     spindle_on = False
     program_end = False  # M2 / M30 rencontré
     max_arc_error = 0.0
+    fs = []  # mots F de la ligne
     for raw in text.splitlines():
-        line = raw.split(";")[0]
-        line = re.sub(r"\(.*?\)", "", line).strip()
+        if ";" in raw:
+            raw = raw.split(";")[0]
+        if "(" in raw:
+            raw = _COMMENT.sub("", raw)
+        line = raw.strip()
         if not line:
             continue
         lines += 1
         words = _WORD.findall(line)
         not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
         was_inverse = inverse_time
+        values = {}  # un seul passage sur les mots : dernière valeur de chaque lettre
+        gm = []  # codes G / M de la ligne, dans l'ordre
+        coords = []  # mots d'axe (lettre, valeur), dans l'ordre
         for letter, number in words:
-            if letter.upper() == "G":
-                g = str(int(float(number))) if float(number).is_integer() else number
-                if g in ("0", "1", "2", "3"):
-                    motion = "G" + g
-                elif g == "93":
-                    inverse_time = True
-                elif g == "94":
-                    inverse_time = False
-                elif g == "91":
-                    relative = True
-                elif g == "90":
-                    relative = False
-                elif g in ("17", "18", "19"):
-                    plane = g
-                elif g in _NOT_POSITION_G or g.startswith("38."):
-                    not_position = g
-        has_axis = any(letter.upper() in "XYZABC" for letter, _n in words)
-        values = {}
-        for letter, number in words:
-            values[letter.upper()] = float(number)
+            letter = letter.upper()
+            v = values[letter] = float(number)
+            if letter in _AXES:
+                coords.append((letter, v))
+            elif letter == "G" or letter == "M":
+                code = _CODES.get((letter, number))
+                if code is None:
+                    code = _CODES[(letter, number)] = letter + (number.rstrip("0").rstrip(".") if "." in number
+                                                                else str(int(v)))
+                gm.append(code)
+                if letter == "G":
+                    g = str(int(v)) if v.is_integer() else code[1:]
+                    if g in ("0", "1", "2", "3"):
+                        motion = code
+                    elif g == "93":
+                        inverse_time = True
+                    elif g == "94":
+                        inverse_time = False
+                    elif g == "91":
+                        relative = True
+                    elif g == "90":
+                        relative = False
+                    elif g in ("17", "18", "19"):
+                        plane = g
+                    elif g in _NOT_POSITION_G or g.startswith("38."):
+                        not_position = g
+            elif letter == "F":
+                fs.append(v)
+            elif letter == "S":
+                spindle.add(v)
+        has_axis = "X" in values or "Y" in values or "Z" in values or "A" in values or "B" in values or "C" in values
+        cutting = motion in ("G1", "G2", "G3")
         if was_inverse and not inverse_time:
             feed_defined = "F" in values
         elif "F" in values and not inverse_time:
             feed_defined = True
-        if motion in ("G1", "G2", "G3") and not inverse_time and not not_position and not feed_defined                 and any(k in values for k in "XYZABC"):
+        if cutting and not inverse_time and not not_position and not feed_defined and has_axis:
             undefined_feed += 1
-        if motion in ("G2", "G3") and not inverse_time and not relative and not not_position                 and any(k in values for k in "XYZIJKR"):
+        if motion in ("G2", "G3") and not inverse_time and not relative and not not_position and (
+                "X" in values or "Y" in values or "Z" in values or "I" in values or "J" in values or "K" in values
+                or "R" in values):
             err = _arc_error(pos, values, plane)
             if err is not None and err > 0.0:
                 bad_arcs += 1
                 if err != float("inf"):  # arc sans centre : compté, sans écart
                     max_arc_error = max(max_arc_error, err)
-        f_words = [float(n) for letter, n in words if letter.upper() == "F"]
-        if inverse_time and motion in ("G1", "G2", "G3") and has_axis:
-            if not f_words:
+        if inverse_time and cutting and has_axis:
+            if "F" not in values:
                 g93_missing_f += 1
             if motion in ("G2", "G3"):
                 g93_arcs += 1
-        if any(letter.upper() == "A" for letter, _n in words):
-            a_value = [float(n) for letter, n in words if letter.upper() == "A"][-1]
-            if motion in ("G1", "G2", "G3"):
+        if "A" in values:
+            a_value = values["A"]
+            if cutting:
                 if a_current is not None:
                     max_a_step = max(max_a_step, abs(a_value - a_current))
                 if inverse_time:
                     a_wrap_lines += 1
-                    if a_current is not None and f_words:
-                        max_a_rate = max(max_a_rate, abs(a_value - a_current) * f_words[-1])
+                    if a_current is not None and "F" in values:
+                        max_a_rate = max(max_a_rate, abs(a_value - a_current) * values["F"])
                 else:
                     a_feed_lines += 1
             else:
                 a_positions.append(a_value)
             a_current = a_value
-        for letter, number in words:
-            letter = letter.upper()
-            if letter in ("G", "M"):
-                code = letter + (number.rstrip("0").rstrip(".") if "." in number else str(int(float(number))))
-                codes.add(code)
-                if code == "G20":
-                    units = "inch"
-                elif code == "G21":
-                    units = "mm"
-                elif code in ("G54", "G55", "G56", "G57", "G58", "G59"):
-                    fixtures.add(code)
-                elif code == "M6":
-                    tool_changes += 1
-                elif code == "M0":
-                    pauses += 1
-                elif code in ("M3", "M4"):
-                    spindle_on, program_end = True, False
-                elif code == "M5":
-                    spindle_on = False
-                elif code in ("M2", "M30"):
-                    spindle_on, program_end = False, True
-            elif letter in ("X", "Y", "Z", "A", "B", "C"):
-                axes.add(letter)
-                if relative or not_position:
-                    continue
-                v = float(number)
-                lo, hi = bbox.get(letter, (v, v))
-                bbox[letter] = (min(lo, v), max(hi, v))
-            elif letter == "F" and not inverse_time:  # en G93, F n'est pas une vitesse en mm/min
-                max_feed = max(max_feed, float(number))
-            elif letter == "S":
-                spindle.add(float(number))
+        for code in gm:
+            codes.add(code)
+            if code == "G20":
+                units = "inch"
+            elif code == "G21":
+                units = "mm"
+            elif code in ("G54", "G55", "G56", "G57", "G58", "G59"):
+                fixtures.add(code)
+            elif code == "M6":
+                tool_changes += 1
+            elif code == "M0":
+                pauses += 1
+            elif code in ("M3", "M4"):
+                spindle_on, program_end = True, False
+            elif code == "M5":
+                spindle_on = False
+            elif code in ("M2", "M30"):
+                spindle_on, program_end = False, True
+        for letter, v in coords:
+            axes.add(letter)
+            if relative or not_position:
+                continue
+            span = bbox.get(letter)
+            if span is None:
+                bbox[letter] = (v, v)
+            elif v < span[0]:
+                bbox[letter] = (v, span[1])
+            elif v > span[1]:
+                bbox[letter] = (span[0], v)
+        if fs and not inverse_time:  # en G93, F n'est pas une vitesse en mm/min
+            max_feed = max(max_feed, max(fs))
+        del fs[:]
         for axis in "XYZ":
             if axis not in values:
                 continue
