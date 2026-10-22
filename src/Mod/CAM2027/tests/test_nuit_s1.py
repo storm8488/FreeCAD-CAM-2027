@@ -244,5 +244,82 @@ class TestFlatFinishing(unittest.TestCase):
         proj.close()
 
 
+def make_filleted_pocket(path):
+    """Boîte 60x40x20, poche 40x24 de 10 mm, congés intérieurs R2 (fond et angles verticaux)."""
+    box = Part.makeBox(60, 40, 20)
+    shape = box.cut(Part.makeBox(40, 24, 10, FreeCAD.Vector(10, 8, 10)))
+    edges = [e for e in shape.Edges if 10 - 1e-6 <= e.BoundBox.XMin and e.BoundBox.XMax <= 50 + 1e-6
+             and 8 - 1e-6 <= e.BoundBox.YMin and e.BoundBox.YMax <= 32 + 1e-6 and e.BoundBox.ZMax < 20 - 1e-6]
+    shape = shape.makeFillet(2.0, edges)
+    shape.exportStep(path)
+    return shape
+
+
+class TestPencil(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s1p-")
+        cls.step = os.path.join(cls.tmp, "fillets.step")
+        make_filleted_pocket(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def test_pencil_after_ball(self):
+        """Boule Ø8 puis reprise des angles boule Ø2 : matière dans les congés R2 réduite de plus de 80 %."""
+        import numpy as np
+        from cam2027.project import sim
+
+        lib = starter_library()
+        b8, a8 = add_tool(lib, "8 mm ball end mill", "ballend", 8.0, feed=1500)
+        b2, a2 = add_tool(lib, "2 mm ball end mill", "ballend", 2.0, feed=800)
+        proj = Project.create("Pencil test", lib, _machine())
+        part = proj.import_model(self.step, label="Fillets").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        # finition boule 8 limitée à la poche : le dessus (Z 20) est déjà au brut
+        fin, _r = proj.add_operation("surface3d", "Ball 8", a8, b8.presets[0].id, base=[(clone, [])],
+                                     params={"CutPattern": "ZigZag", "StepOver": 8, "SampleInterval": 0.1,
+                                             "BoundBox": "BaseBoundBox", "FinalDepth": 10.0})
+        pen, rec = proj.add_operation("pencil", "Pencil 2", a2, b2.presets[0].id,
+                                      params={"ReferenceDiameter": 8.0, "StepOver": 25})
+        self.assertEqual(rec["ignored_params"], [])
+        t0 = time.time()
+        res = {r["name"]: r for r in proj.compute()}
+        elapsed = time.time() - t0
+        self.assertTrue(res["Pencil 2"]["valid"] and res["Pencil 2"]["commands"] > 20, res)
+        self.assertEqual(proj.operation_state(pen), "computed")
+        pts = cut_points(pen.Path)
+        # les passes restent dans les congés (près des parois de la poche, sous le dessus)
+        for x, y, z in pts:
+            near_wall = min(x - 10, 50 - x, y - 8, 32 - y) < 3.0 or z < 12.5
+            self.assertTrue(10 - 1e-3 <= x <= 50 + 1e-3 and 8 - 1e-3 <= y <= 32 + 1e-3 and near_wall, (x, y, z))
+
+        def fillet_rest():
+            rep = proj.material_check(resolution=0.2)
+            zmap = proj.last_zmap
+            H = sim.model_heights(zmap, [clone.Shape])
+            X, Y = np.meshgrid(zmap.xs, zmap.ys, indexing="ij")
+            wall = np.minimum(np.minimum(X - 10, 50 - X), np.minimum(Y - 8, 32 - Y))
+            band = (wall > 0.1) & (wall < 2.0) & np.isfinite(H)
+            return rep, float(np.maximum(zmap.top - H, 0)[band].sum() * zmap.res ** 2)
+
+        proj.set_operation_active(pen, False)
+        rep0, before = fillet_rest()
+        proj.set_operation_active(pen, True)
+        rep1, after = fillet_rest()
+        self.assertLess(rep1["gouge_max"], 0.03, rep1)
+        self.assertGreater(before, 1.0)
+        self.assertLess(after, 0.2 * before, (before, after))
+        print("pencil: %d cut points, compute %.1f s, fillet rest %.2f -> %.2f mm3 (%.0f %%), %s" % (
+            len(pts), elapsed, before, after, 100.0 * (1 - after / before), pen.Report))
+        proj.close()
+
+    def test_pencil_needs_larger_reference(self):
+        from cam2027.project import pencil
+        from cam2027.i18n import UserError
+
+        with self.assertRaises(UserError):
+            pencil.pencil_passes([Part.makeBox(10, 10, 10)], 4.0, 3.0, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

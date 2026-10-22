@@ -1041,5 +1041,14 @@
   "3D flat areas finishing (offset passes at each flat height)": "Finition 3D des zones plates (passes décalées à chaque hauteur de plat)",
   "Horizontal flat faces reachable from above (part top, pocket floors), each at its exact height, tool kept inside the flat area; run it after roughing (plunges straight down at the start of each area).": "Faces planes horizontales accessibles par le dessus (dessus de la pièce, fonds de poche), chacune à sa hauteur exacte, fraise contenue dans la zone plate ; à lancer après l'ébauche (plongée verticale au début de chaque zone).",
   "This operation is set in the CAM2027 operation editor (double-click it in the Project panel).": "Cette opération se règle dans l'éditeur d'opération de CAM2027 (double-clic dans le panneau Projet).",
-  "flat finishing: no flat horizontal area reachable from above on the part (nothing to do)": "finition des zones plates : aucune zone plate horizontale accessible par le dessus sur la pièce (rien à faire)"
+  "flat finishing: no flat horizontal area reachable from above on the part (nothing to do)": "finition des zones plates : aucune zone plate horizontale accessible par le dessus sur la pièce (rien à faire)",
+  "pencil: the reference tool ({ref} mm) must be larger than the pencil tool ({d} mm)": "reprise des angles : l'outil de référence ({ref} mm) doit être plus grand que l'outil de reprise ({d} mm)",
+  "3D corner rest finishing (pencil, ball end mill)": "Reprise 3D des angles (crayon, fraise boule)",
+  "Passes along the inner corners left by a larger reference ball (fillets smaller than its radius), heights by OpenCamLib on the triangulated part; every pass starts from the safe height.": "Passes le long des angles intérieurs laissés par une boule de référence plus grande (congés plus petits que son rayon), hauteurs par OpenCamLib sur la pièce triangulée ; chaque passe part de la hauteur de sécurité.",
+  "Reference tool diameter": "Diamètre de l'outil de référence",
+  "Ball of the previous finishing: corners it cannot reach are taken again (0 = 3 x this tool).": "Boule de la finition précédente : les angles qu'elle n'atteint pas sont repris (0 = 3 fois cet outil).",
+  "Ignore corners leaving less than": "Ignorer les angles laissant moins de",
+  "Material left by the reference tool below which a corner is skipped.": "Matière laissée par l'outil de référence en dessous de laquelle un angle est sauté.",
+  "Maximum slope (deg)": "Pente maximale (°)",
+  "Corners on a steeper surface are skipped (90 = all).": "Les angles sur une surface plus raide sont sautés (90 = tous)."
 }

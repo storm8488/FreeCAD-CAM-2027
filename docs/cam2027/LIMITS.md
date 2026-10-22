@@ -278,4 +278,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   dans chaque zone : plongée verticale à la hauteur du plat (à lancer après l'ébauche) ; passage d'une passe à
   la suivante en restant en bas quand le milieu du trajet reste dans la zone, sinon remontée. Contours
   discrétisés à 0,01 mm. Le panneau de tâches de FreeCAD (double-clic dans l'arbre) renvoie à l'éditeur CAM2027.
-
+- **Reprise des angles** (`pencil`, `project/pencil.py`) : fraise boule seulement ; l'outil de référence est vu
+  comme une boule (une finition précédente à la fraise plate ou torique n'est pas modélisée) ; zones calculées sur
+  une carte de hauteur de la pièce (0,1 mm, agrandie au-delà de 2 millions de cellules) : un angle plus fin que la
+  grille peut être manqué, jamais entaillé (hauteurs finales par OpenCamLib). Chaque passe part de la hauteur de
+  sécurité (pas de liaison au contact). Contre-dépouilles non vues (carte de hauteur). Le pas suit la pente ; sur
+  un congé vertical d'angle de poche, une fine bande peut rester contre la paroi (20 mm³ sur l'essai).

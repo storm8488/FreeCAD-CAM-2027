@@ -49,6 +49,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
 | Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
 | Finition des zones plates (Flat) | disponible | stratégie `flat3d` (`project/flatfinish.py`) : plats accessibles trouvés seuls, passes décalées à la hauteur exacte de chaque plat, fraise contenue | auto (`test_nuit_s1` : 3 hauteurs à ±0,02 mm, fraise contenue, fond percé, dôme sans plat) + scénario `s1-flat` + disque WobbleRing (0,00 mm, aucune entaille) | type Parallel, entrées en rampe, plats inclinés |
+| Reprise des angles (Pencil) | disponible | stratégie `pencil` (`project/pencil.py`) : zones laissées par une boule de référence, passes le long des angles, pas réduit sur les pentes, hauteurs OpenCamLib | auto (`test_nuit_s1` : congés R2, boule Ø8 puis Ø2, -97 %, aucune entaille) + scénario `s1-pencil` | angles laissés par une fraise plate ou torique de référence, passe unique « crayon » seule |
 
 ## Dessin et fonctions Aspire
 

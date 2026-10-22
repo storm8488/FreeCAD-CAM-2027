@@ -172,7 +172,38 @@ def scenario_flat(g, scenario, files):
     g.pump(0.3)
 
 
+def scenario_pencil(g, scenario, files):
+    """Reprise des angles avec la boule de 6 mm (référence 18 mm par défaut) : angles des alvéoles du plateau."""
+    proj = g.new_project(scenario, "S1 pencil")
+    if proj is None:
+        return
+    g.driver.open_files.append(files["step"])
+    g.run_command(scenario, "CAM2027_ImportModel")
+    g.run_command(scenario, "CAM2027_StockFixture")
+    ed = _add_operation(g, scenario, "pencil", "6 mm ball end mill 2F")
+    if ed is None:
+        return
+    op = ed.op
+    ed.accept()
+    g.pump(0.3)
+    proj = g.project()
+    g.run_command(scenario, "CAM2027_Compute")
+    state = proj.operation_state(op)
+    pts = _cut_points(op.Path)
+    g.log("  pencil: state %s, %d cut points, %s" % (state, len(pts), op.Report))
+    if state != "computed" or not pts:
+        g.problem(scenario, "pencil: state %s, %d cut points" % (state, len(pts)))
+    g.run_command(scenario, "CAM2027_MaterialCheck")
+    rep = proj.last_check()
+    if rep is None or rep.get("gouge_max", 1) > 0.03:
+        g.problem(scenario, "gouge after pencil: %s" % (rep and rep.get("gouge_max")))
+    g.check_docks(scenario)
+    FreeCAD.closeDocument(proj.doc.Name)
+    g.pump(0.3)
+
+
 def scenarios(g, files, tmp):
     """Entrées pour la liste de ``gui_scenarios.main``."""
     return (("s1-rest-area", lambda: scenario_rest_and_area(g, "s1-rest-area", files)),
-            ("s1-flat", lambda: scenario_flat(g, "s1-flat", files)))
+            ("s1-flat", lambda: scenario_flat(g, "s1-flat", files)),
+            ("s1-pencil", lambda: scenario_pencil(g, "s1-pencil", files)))

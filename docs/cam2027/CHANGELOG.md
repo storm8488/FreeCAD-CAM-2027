@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **[S1]** **Reprise des angles** (stratégie `pencil`, Fusion « Pencil », fraise boule) : angles intérieurs où une
+  boule de référence (diamètre de la finition précédente, 3 fois l'outil par défaut) ne descend pas et où la
+  boule de reprise descend plus bas (`project/pencil.py` : carte de hauteur fine de la pièce, profils de boule par
+  `scipy.ndimage`, passes = courbes de niveau de la distance au bord de la zone par `contourpy`, hauteurs exactes
+  par OpenCamLib sur la pièce triangulée). Pas mesuré le long de la surface (réduit du cosinus de la pente) : une
+  boule ne touche un congé qu'en un point, et un pas constant en XY laissait 307 mm³ sur la partie raide des
+  congés. Poche à congés R2 finie à la boule Ø8 puis reprise boule Ø2 : matière dans les congés 626 -> 20 mm³
+  (-97 %), aucune entaille, 3,5 s ; plateau de test (angles vifs, boule Ø6) : 72 passes, aucune entaille.
 - **[S1]** **Finition des zones plates** (stratégie `flat3d`, Fusion « Flat », type Offset, plusieurs
   profondeurs) : faces planes horizontales accessibles par le dessus (dessus de la pièce, fonds de poche dégagés)
   trouvées seules, regroupées par hauteur, une série de passes décalées par hauteur à la hauteur exacte du plat,

@@ -147,6 +147,13 @@ STRATEGIES = {
                   "tool kept inside the flat area; run it after roughing (plunges straight down at the start of "
                   "each area).",
     },
+    "pencil": {
+        "module": "cam2027.project.pencil",
+        "label": "3D corner rest finishing (pencil, ball end mill)",
+        "params": ("ReferenceDiameter", "StepOver", "Threshold", "MaxSlope", "ClearanceHeight", "SafeHeight"),
+        "limits": "Passes along the inner corners left by a larger reference ball (fillets smaller than its "
+                  "radius), heights by OpenCamLib on the triangulated part; every pass starts from the safe height.",
+    },
 }
 
 #: valeurs par défaut de FreeCAD pour un filet sans type explicite
@@ -179,6 +186,7 @@ TOOLS_FOR = {
     "vcarve": ("vbit", "engrave", "chamfer"), "engrave": ("vbit", "engrave", "chamfer", "ballend", "endmill"),
     "chamfer": ("chamfer", "vbit", "engrave"),
     "flat3d": ("endmill", "bullnose", "facemill"),
+    "pencil": ("ballend",),
 }
 
 
