@@ -659,6 +659,32 @@ class RotaryMachining(_Base):
         open_wrap_dialog(proj, rotary=True)
 
 
+class ProjectOnPart(_Base):
+    atelier = "surface"
+    text = "Project on the part"
+    tooltip = "Carry an engraving, contour or V-carving computed flat onto the 3D part surface, at the same depth below it"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from .projectiondlg import ProjectionDialog
+
+        dlg = ProjectionDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            dlg.apply()
+            proj.compute()
+        except Exception as exc:
+            _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
+        _after_change()
+
+
 def open_wrap_dialog(proj, op=None, rotary=False):
     """Création ou modification d'une gravure enroulée (``rotary`` : contour, poche ou finition 3D rotatifs) ;
     retourne l'opération ou None."""
@@ -1352,6 +1378,7 @@ COMMANDS = [
     ("CAM2027_AddOperation", AddOperation),
     ("CAM2027_WrapEngrave", WrapEngrave),
     ("CAM2027_RotaryMachining", RotaryMachining),
+    ("CAM2027_ProjectOnPart", ProjectOnPart),
     ("CAM2027_FlatDepth", FlatDepth),
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
@@ -1377,6 +1404,7 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave", "CAM2027_RotaryMachining",
+                   "CAM2027_ProjectOnPart",
                    "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),

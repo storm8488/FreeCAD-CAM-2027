@@ -730,6 +730,56 @@ def scenario_scallop(scenario, tmp):
     scenario_solid(scenario, path, tmp, "scallop")
 
 
+def scenario_projection(scenario, tmp):
+    """[S4] Gravure d'un carré dessiné au-dessus d'un dôme (Ajouter une opération), puis Usiner > Projeter sur la
+    pièce : l'habillage projeté remplace la gravure, recalcul, contrôle, puis retour à plat par le même dialogue."""
+    import Part
+
+    V = FreeCAD.Vector
+    dome = Part.makeSphere(25.0, V(30, 20, -15)).common(Part.makeBox(60, 40, 30, V(0, 0, 5)))
+    path = os.path.join(tmp, "dome-proj.step")
+    Part.makeBox(60, 40, 5).fuse(dome).removeSplitter().exportStep(path)
+    proj = new_project(scenario, "Projection")
+    driver.open_files.append(path)
+    run_command(scenario, "CAM2027_ImportModel")
+    run_command(scenario, "CAM2027_StockFixture")
+    proj = project()
+    if not proj.has_job:
+        problem(scenario, "Stock & fixture did not create the job")
+        return
+    sq = proj.doc.addObject("Part::Feature", "Square")
+    sq.Shape = Part.makePolygon([V(22, 14, 10), V(38, 14, 10), V(38, 26, 10), V(22, 26, 10), V(22, 14, 10)])
+    proj.doc.recompute()
+    FreeCADGui.Selection.clearSelection()
+    for i in range(len(sq.Shape.Edges)):
+        FreeCADGui.Selection.addSelection(sq, "Edge%d" % (i + 1))
+    driver.handlers[tr("Add operation")] = lambda dlg: (combo_select(find_combo_with(dlg, "engrave"), "engrave"), True)[1]
+    run_command(scenario, "CAM2027_AddOperation")
+    accept_open_editors(scenario)
+    proj = project()
+    if not proj.operations():
+        problem(scenario, "engraving of the square not created")
+        return
+    driver.handlers[tr("Project on the part")] = lambda dlg: True
+    run_command(scenario, "CAM2027_ProjectOnPart")
+    from cam2027.project import projection
+
+    proj = project()
+    projected = [o for o in proj.job.Operations.Group if projection.is_projection(o)]
+    if len(projected) != 1:
+        problem(scenario, "Project on the part created no projected operation")
+        return
+    zs = [c.Parameters["Z"] for c in projected[0].Path.Commands if c.Name == "G1" and "Z" in c.Parameters]
+    log("  projected: %d moves, Z %.3f..%.3f" % (len(zs), min(zs) if zs else 0, max(zs) if zs else 0))
+    if not zs or max(zs) - min(zs) < 0.5:
+        problem(scenario, "projected engraving does not follow the dome (Z %s)" % (sorted(set(round(z, 2) for z in zs))[:5],))
+    run_command(scenario, "CAM2027_ProjectOnPart")  # même dialogue : remet l'opération à plat
+    if any(projection.is_projection(o) for o in project().job.Operations.Group):
+        problem(scenario, "second Project on the part did not put the operation back flat")
+    FreeCAD.closeDocument(proj.doc.Name)
+    pump(0.3)
+
+
 def scenario_import_twice(scenario, path):
     """Le plantage signalé : le même fichier importé deux fois, puis « Brut et montage »."""
     proj = new_project(scenario, "Twice")
@@ -788,6 +838,7 @@ def main():
             ("machine-wrap", lambda: scenario_machine_and_wrap("machine-wrap", files)),
             ("inlay", lambda: scenario_inlay("inlay", files)),
             ("scallop-dome", lambda: scenario_scallop("scallop-dome", tmp)),
+            ("projection-dome", lambda: scenario_projection("projection-dome", tmp)),
             ("import-twice", lambda: scenario_import_twice("import-twice", next(
                 (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
     ) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))

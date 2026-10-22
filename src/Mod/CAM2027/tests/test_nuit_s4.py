@@ -352,5 +352,168 @@ class TestRotary(unittest.TestCase):
         proj.close()
 
 
+FONT = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "arial.ttf")
+
+
+def dome_z(x, y):
+    """Hauteur exacte de la pièce « dôme sur plaque » (``make_dome``)."""
+    import numpy as np
+
+    cx, cy, cz, r = DOME
+    d2 = (np.asarray(x) - cx) ** 2 + (np.asarray(y) - cy) ** 2
+    return np.maximum(5.0, np.where(d2 < r * r, cz + np.sqrt(np.maximum(r * r - d2, 0.0)), -1e9))
+
+
+class TestProjection(unittest.TestCase):
+    """Projection d'un parcours 2D sur la pièce : texte gravé à 0,5 mm sur un dôme."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s4p-")
+        cls.step = os.path.join(cls.tmp, "dome.step")
+        make_dome(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _engraving(self, name, text_wires, kind="engrave", params=None):
+        lib = starter_library()
+        proj = Project.create(name, lib, MachineProfile("test", controller="grbl", post_processor="grbl",
+                                                        post_processor_args="--no-show-editor --precision=4"))
+        part = proj.import_model(self.step, label="Dome").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        drawing = proj.doc.addObject("Part::Feature", "Text")
+        drawing.Shape = Part.Compound(text_wires)
+        proj.doc.recompute()
+        vbit = [t for t in lib.search("V-bit") if t.geometry.tip_included_angle_deg == 90.0][0]
+        edges = ["Edge%d" % (i + 1) for i in range(len(drawing.Shape.Edges))]
+        op, rec = proj.add_operation(kind, name, lib.assemblies_for_tool(vbit.id)[0].id, vbit.presets[0].id,
+                                     base=[(drawing, edges)], params=params)
+        return proj, op, vbit
+
+    def test_text_on_dome(self):
+        """Texte « S4 » gravé à 0,5 mm (V-bit 90°) projeté sur le dôme : chaque point de coupe à 0,5 mm sous la
+        surface, profondeur mesurée sur la carte de hauteur 0,5 ± 0,05 mm le long de tout le texte, rien
+        d'enlevé hors de la portée du V-bit, export sans erreur."""
+        import numpy as np
+        from scipy.spatial import cKDTree
+        from cam2027.project import projection
+
+        if not os.path.isfile(FONT):
+            self.skipTest("arial.ttf absent")
+        chars = Part.makeWireString("S4", os.path.dirname(FONT) + os.sep, os.path.basename(FONT), 14.0, 0.0)
+        wires = []
+        for char in chars:
+            for w in char:
+                w.translate(FreeCAD.Vector(19.0, 13.0, 10.0))
+                wires.append(w)
+        depth = 0.5
+        proj, op, vbit = self._engraving("Text", wires, params={"StartDepth": 10.0, "FinalDepth": 10.0 - depth,
+                                                                "StepDown": depth})
+        t0 = time.time()
+        dressup = projection.add_projection(proj, op)
+        proj.compute()
+        t_proj = time.time() - t0
+        self.assertEqual(proj.operation_state(op), "computed")
+        self.assertIn(dressup, proj.job.Operations.Group)
+        self.assertNotIn(op, proj.job.Operations.Group)
+        cuts = np.array([[c.Parameters[k] for k in "XYZ"] for c in dressup.Path.Commands
+                         if c.Name == "G1" and all(k in c.Parameters for k in "XYZ")])
+        surf = dome_z(cuts[:, 0], cuts[:, 1])
+        on_text = cuts[:, 2] < surf - 0.25  # points de coupe (pas les approches)
+        self.assertGreater(int(on_text.sum()), 300)
+        self.assertLess(float(np.abs(cuts[on_text, 2] - (surf[on_text] - depth)).max()), 0.01)
+        self.assertGreater(float(cuts[on_text, 2].max() - cuts[on_text, 2].min()), 1.0)  # le texte suit la courbure
+        # carte de hauteur fine sur le texte : profondeur sous la surface le long du tracé
+        bb = Part.Compound(wires).BoundBox
+        zm = sim.ZMap(bb.XMin - 2, bb.YMin - 2, bb.XMax + 2, bb.YMax + 2, 11.0, 0.05)
+        segs, _pos = sim.path_segments(dressup.Path.Commands)
+        P0 = np.array([s[1] for s in segs if not s[0]], dtype=float)
+        P1 = np.array([s[2] for s in segs if not s[0]], dtype=float)
+        profile, _note = sim.ToolProfile.from_library_tool(vbit)
+        zm.sweep_arrays(P0, P1, profile)
+        X, Y = np.meshgrid(zm.xs, zm.ys, indexing="ij")
+        cut = dome_z(X, Y) - np.minimum(zm.top, dome_z(X, Y))
+        # profondeur au droit du tracé : la plus grande dans 0,05 mm autour de chaque point de coupe
+        tree = cKDTree(np.column_stack([X.ravel(), Y.ravel()]))
+        depths = [max(cut.ravel()[k] for k in tree.query_ball_point(p[:2], 0.05)) for p in cuts[on_text][::3]]
+        self.assertGreater(min(depths), depth - 0.05, min(depths))
+        self.assertLess(max(depths), depth + 0.05, max(depths))
+        # rien d'enlevé hors de la portée du V-bit autour du tracé : demi-largeur d / tan(45°) à plat, d / (1 - pente)
+        # côté montée (le cône rencontre plus loin une surface qui monte vers lui)
+        tp = cuts[on_text]
+        e = 1e-3
+        slope = np.hypot(dome_z(tp[:, 0] + e, tp[:, 1]) - dome_z(tp[:, 0] - e, tp[:, 1]),
+                         dome_z(tp[:, 0], tp[:, 1] + e) - dome_z(tp[:, 0], tp[:, 1] - e)) / (2 * e)
+        self.assertLess(float(slope.max()), 0.9)
+        reach = depth / (1.0 - slope)
+        path_tree = cKDTree(tp[:, :2])
+        removed = np.argwhere(cut > 0.02)
+        pts = np.column_stack([zm.xs[removed[:, 0]], zm.ys[removed[:, 1]]])
+        near = path_tree.query_ball_point(pts, float(reach.max()) + 0.1)
+        for p, idx in zip(pts, near):
+            ok = any(math.hypot(*(p - tp[k, :2])) <= reach[k] + 0.1 for k in idx)
+            self.assertTrue(ok, p)
+        _t, _a, issues = proj.preview_gcode()
+        self.assertNotIn("error", [lvl for lvl, _m in issues], issues)
+        FreeCAD.Console.PrintMessage("projection %.1f s, depth %.3f..%.3f\n" % (t_proj, min(depths), max(depths)))
+        # retour à plat
+        projection.remove_projection(proj, op)
+        self.assertIn(op, proj.job.Operations.Group)
+        proj.close()
+
+    def test_vcarve_and_contour_projected(self):
+        """V-carving (profondeur variable) et contour projetés : profondeur sous la surface identique à celle
+        sous le plan de référence à plat, pour chaque point."""
+        import numpy as np
+        from cam2027.project import projection
+
+        V = FreeCAD.Vector
+        wire = Part.makePolygon([V(22, 14, 10), V(38, 14, 10), V(38, 26, 10), V(22, 26, 10), V(22, 14, 10)])
+        proj, vop, vbit = self._engraving("Square", [wire], kind="profile",
+                                          params={"StartDepth": 10.0, "FinalDepth": 9.7, "Side": "Outside"})
+        lib = proj.library
+        face = proj.doc.addObject("Part::Feature", "SquareFace")
+        face.Shape = Part.Face(wire)
+        proj.doc.recompute()
+        cop, _r = proj.add_operation("vcarve", "VCarve", lib.assemblies_for_tool(vbit.id)[0].id, vbit.presets[0].id,
+                                     base=[(face, ["Face1"])], params={"StartDepth": 10.0, "FinalDepth": 8.0})
+        proj.compute()
+        flat = {}
+        for op in (vop, cop):
+            flat[op.Name] = sorted(round(10.0 - c.Parameters["Z"], 3) for c in op.Path.Commands
+                                   if c.Name in ("G1", "G2", "G3") and "Z" in c.Parameters and c.Parameters["Z"] < 10.0 - 1e-6)
+            self.assertTrue(flat[op.Name], op.Label)
+            d = projection.add_projection(proj, op)
+            proj.compute()
+            cuts = np.array([[c.Parameters[k] for k in "XYZ"] for c in d.Path.Commands
+                             if c.Name == "G1" and all(k in c.Parameters for k in "XYZ")])
+            below = dome_z(cuts[:, 0], cuts[:, 1]) - cuts[:, 2]
+            cutting = below > 1e-3
+            self.assertGreater(int(cutting.sum()), 20, op.Label)
+            # profondeur sous la surface dans la plage des profondeurs à plat (0,3 pour le contour, 0..2 en V-carving)
+            self.assertLess(float(below[cutting].max()), max(flat[op.Name]) + 0.01, op.Label)
+            self.assertGreater(float(below[cutting].max()), max(flat[op.Name]) - 0.01, op.Label)
+            if op is vop:
+                self.assertLess(float(np.abs(below[below > 0.25] - 0.3).max()), 0.01)
+        proj.close()
+
+    def test_projection_refused(self):
+        """Seules gravure, contour, V-carving (et poche 2D, rainure, chanfrein) se projettent ; pas deux fois."""
+        from cam2027.project import projection
+
+        V = FreeCAD.Vector
+        square = [Part.makePolygon([V(25, 15, 10), V(35, 15, 10), V(35, 25, 10), V(25, 25, 10), V(25, 15, 10)])]
+        proj, op, _vbit = self._engraving("Square", square, params={"StartDepth": 10.0, "FinalDepth": 9.7})
+        projection.add_projection(proj, op)
+        with self.assertRaises(Exception):
+            projection.add_projection(proj, op)
+        lib = proj.library
+        ball = lib.search("6 mm ball end mill")[0]
+        sop, _r = proj.add_operation("surface3d", "Surface", lib.assemblies_for_tool(ball.id)[0].id, ball.presets[0].id,
+                                     base=[(proj.job.Model.Group[0], [])], params={"SampleInterval": 0.5, "StepOver": 50})
+        with self.assertRaises(Exception):
+            projection.add_projection(proj, sop)
+        proj.close()
+
+
 if __name__ == "__main__":
     unittest.main()

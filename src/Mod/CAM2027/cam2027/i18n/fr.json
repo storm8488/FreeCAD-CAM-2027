@@ -1055,5 +1055,17 @@
   "wrapped pocket: the drawing has no closed contour": "poche enroulée : le dessin n'a aucun contour fermé",
   "wrapped pocket: the stepover must be between 0 and the tool diameter": "poche enroulée : le pas doit être compris entre 0 et le diamètre de l'outil",
   "wrapped pocket: the tool does not fit inside the pocket": "poche enroulée : l'outil ne tient pas dans la poche",
-  "{op}: no toolpath (nothing to cut)": "{op} : aucun parcours (rien à usiner)"
+  "{op}: no toolpath (nothing to cut)": "{op} : aucun parcours (rien à usiner)",
+  "Project on the part": "Projeter sur la pièce",
+  "Carry an engraving, contour or V-carving computed flat onto the 3D part surface, at the same depth below it": "Reporte une gravure, un contour ou un V-carving calculés à plat sur la surface 3D de la pièce, à la même profondeur sous elle",
+  "{name} (projected)": "{name} (projetée)",
+  "Tolerance (mm)": "Tolérance (mm)",
+  "No engraving, contour or V-carving to project: add one first (it is computed flat, its start depth standing for the part surface).": "Aucune gravure, aucun contour ni V-carving à projeter : ajoutez-en un d'abord (il est calculé à plat, sa profondeur de départ représentant la surface de la pièce).",
+  "This operation is projected on the part: OK puts it back flat.": "Cette opération est projetée sur la pièce : OK la remet à plat.",
+  "Each cut point goes to the part surface (OpenCamLib) minus the depth of the operation below its start depth; steps get finer where the surface bends.": "Chaque point de coupe est reporté sur la surface de la pièce (OpenCamLib), moins la profondeur de l'opération sous sa profondeur de départ ; le pas se resserre là où la surface se courbe.",
+  "projection: the job has no part to project on": "projection : le job n'a aucune pièce sur laquelle projeter",
+  "projection on the part: only engraving, contour, V-carving, 2D pocket, slot and chamfer can be projected": "projection sur la pièce : seuls la gravure, le contour, le V-carving, la poche 2D, la rainure et le chanfrein peuvent être projetés",
+  "projection on the part: not available on an indexed operation": "projection sur la pièce : impossible sur une opération indexée",
+  "{op} is already projected on the part": "{op} est déjà projetée sur la pièce",
+  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce"
 }

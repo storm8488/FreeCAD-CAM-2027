@@ -69,6 +69,15 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   brut (pas de silhouette ni de sélection). Angle limite par défaut 45° (Fusion : défaut non documenté,
   30-45° conseillés). Le calcul utilise `scipy` (distance géodésique) et `contourpy` (courbes de niveau),
   livrés avec FreeCAD 1.0.2 et 1.1.4.
+- **[S4] Projection sur la pièce** : gravure, contour, V-carving, poche 2D, rainure et chanfrein ; la
+  profondeur est mesurée **verticalement** sous la surface au droit de l'axe de l'outil (pas normalement à
+  la surface) : sur une pente, un V-bit élargit la gravure côté montée (`d / (1 - pente)` pour 90°) et la
+  creuse plus que demandé quand la pente dépasse celle du cône (au-delà de 45° pour un V-bit 90°, non
+  signalé) ; la forme du contour n'est pas recalculée sur la surface (décalage d'outil fait à plat, en XY) ;
+  aucun contrôle des collisions de la queue avec la pièce autour ; un point hors de la pièce est relevé au
+  niveau du haut de la pièce ; arcs découpés en segments. L'opération de base reste à plat dans le document
+  (l'éditeur la modifie, la projection suit au recalcul). Le contrôle matière compte la gravure comme une
+  entaille (elle est voulue sous la surface de la pièce).
 - Ébauche 3D (mode « modèle ») et adaptatives à plusieurs régions : calculées dans des processus Python de
   FreeCAD (`bin/python.exe`, au plus 12 ; `CAM2027_PARALLEL_LEVELS=0` / `CAM2027_PARALLEL_ADAPTIVE=0` pour les
   garder dans FreeCAD). L'adaptative de FreeCAD n'est **pas déterministe** : deux calculs identiques ne

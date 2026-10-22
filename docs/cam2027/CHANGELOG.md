@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **[S4]** **Projeter sur la pièce** (Usiner > Projeter sur la pièce, `project/projection.py`, comme Fusion
+  « Project ») : une gravure, un contour ou un V-carving calculés à plat sont reportés sur la surface 3D,
+  chaque point de coupe à `S(x, y) - (Zref - z)` (surface lue par OpenCamLib sous l'axe de l'outil, `Zref` =
+  profondeur de départ de l'opération : la profondeur demandée, variable en V-carving, est gardée sous la
+  surface) ; pas réduit là où la surface s'écarte de la corde de plus de 0,005 mm ; rapides au-dessus du
+  point le plus haut de la pièce. Habillage qui remplace l'opération dans le job, retiré par le même
+  dialogue. Texte « S4 » gravé à 0,5 mm au V-bit 90° sur le dôme : chaque point à 0,5 mm sous la surface
+  (± 0,01), profondeur mesurée sur la carte de hauteur 0,499 à 0,522 mm le long de tout le texte, rien
+  d'enlevé hors de la portée du V-bit.
 - **[S4]** **Usinage rotatif continu** (Usiner > Usinage rotatif, `project/rotary.py`) : contour et poche
   enroulés d'un dessin déroulé, la compensation du rayon d'outil faite au rayon de chaque niveau (dessin
   ramené au plan réel `Y × r / R`, décalé, puis redéroulé), et finition 3D rotative comme Fusion « Rotary
