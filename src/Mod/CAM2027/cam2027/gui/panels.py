@@ -1063,7 +1063,8 @@ class ProjectPanel(QtWidgets.QWidget):
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
         self.side_bar.refresh(proj)
-        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES
+        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES, compute_state
+        from ..project import indexing
         from .opeditor import extra_label  # gravure enroulée, angles vifs, palpage, Photo V-Carve, décors
 
         if proj.has_job:
@@ -1099,7 +1100,8 @@ class ProjectPanel(QtWidgets.QWidget):
             if tc is not None:
                 v = bridge.tool_controller_values(tc)
                 tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
-            op_state = proj.operation_state(op)
+            # registre déjà lu : ``operation_state`` le relisait (JSON) pour chaque ligne
+            op_state = proj.operation_state(op) if indexing.is_index_op(op) else compute_state(op, base, rec or None)
             valid = op_state not in ("failed",)
             if not valid:
                 bad += 1

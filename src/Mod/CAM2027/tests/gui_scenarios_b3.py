@@ -695,12 +695,19 @@ def scenario_long_session(scenario, files):
             panels.refresh_project_panel()
         prof.disable()
         out = io.StringIO()
-        pstats.Stats(prof, stream=out).sort_stats("cumulative").print_stats(14)
+        pstats.Stats(prof, stream=out).strip_dirs().sort_stats("cumulative").print_stats(14)
         G.log("  B3 profile of 10 panel refreshes (%d ops):\n%s" % (p.tree.topLevelItemCount(), out.getvalue()[-3500:]))
     t0 = time.time()
     for _r in range(10):
         panels.refresh_project_panel()
     G.log("  B3 panel refresh with %d operations: %.1f ms" % (p.tree.topLevelItemCount(), (time.time() - t0) * 100))
+    from cam2027.project.operations import COMPUTE_STATES
+
+    shown = [p.tree.topLevelItem(i).text(1) for i in range(p.tree.topLevelItemCount())]
+    real = [G.tr(COMPUTE_STATES[proj.operation_state(o)][0]) for o in proj.operations()]
+    if shown != real:
+        G.problem(scenario, "B3 panel states %s differ from the project %s" % (shown[:5], real[:5]))
+    G.log("  B3 panel states: %s" % sorted(set(shown)))
     gc.collect()
     mem1 = memory_mb()
     dlg1 = len(live_dialogs())

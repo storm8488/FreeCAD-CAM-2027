@@ -27,6 +27,10 @@
 - **[B3]** Correctif : projet rouvert (dôme, reprise de matière) : le fournisseur de vue du job restait non attaché
   (erreurs `'ViewProvider' object has no attribute 'obj'`) et la page de tâches d'une opération ne s'ouvrait pas ;
   attaché à l'activation du projet. Scénarios `b3-reopen-dome`, `b3-reopen-dome-undo`.
+- **[B3]** Rapidité : rafraîchissement du **panneau Projet** à 50 opérations 72 -> 41 ms (médianes de 4 mesures,
+  même machine, mêmes états affichés) : le registre des opérations n'est plus relu (JSON) pour chaque ligne et les
+  icônes d'état sont gardées en mémoire au lieu d'être relues sur le disque. Le panneau est rafraîchi après chaque
+  commande, Ctrl+Z et changement de document.
 - **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
   d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
 

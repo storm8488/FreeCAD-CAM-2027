@@ -103,10 +103,16 @@ def icon_path(name, theme=None):
     return path
 
 
+_icons = {}  # (nom, thème effectif) -> QIcon : le panneau Projet en demande trois par opération à chaque rafraîchissement
+
+
 def icon(name, theme=None):
     from .qt import QtGui
 
-    return QtGui.QIcon(icon_path(name, theme))
+    key = (name, resolve(theme))
+    if key not in _icons:
+        _icons[key] = QtGui.QIcon(icon_path(name, key[1]))
+    return _icons[key]
 
 
 # -- feuille de style ----------------------------------------------------------------
