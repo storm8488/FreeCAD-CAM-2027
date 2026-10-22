@@ -558,6 +558,39 @@ class _ModalWatch(object):
 
 
 _watch = None
+_layout_seen = set()
+
+
+def check_layout(dlg):
+    """Dialogue affiché par un scénario : texte de bouton, case ou libellé (sans retour à la ligne) plus large que
+    son widget (texte coupé), ou mot anglais (texte non traduit). Une fois par titre de dialogue."""
+    title = dlg.windowTitle()
+    if title in _layout_seen:
+        return
+    _layout_seen.add(title)
+    G.pump(0.1)
+    cut, english = [], []
+    for w in dlg.findChildren(QtWidgets.QWidget):
+        if not w.isVisible():
+            continue
+        if isinstance(w, (QtWidgets.QPushButton, QtWidgets.QCheckBox, QtWidgets.QRadioButton)):
+            text = w.text().replace("&", "")
+        elif isinstance(w, QtWidgets.QLabel) and not w.wordWrap() and "<" not in w.text():
+            text = w.text()
+        else:
+            continue
+        if not text.strip():
+            continue
+        need = w.sizeHint().width()  # largeur que Qt demande pour tout afficher (case, icône, marges comprises)
+        if need > w.width() + 4:  # 3 px de moins que demandé : texte encore entier à l'écran (captures vérifiées)
+            cut.append("%r (%d > %d px)" % (text[:40], need, w.width()))
+        low = " %s " % text.lower()
+        if any(m in low for m in G.ENGLISH_MARKERS):
+            english.append(text[:60])
+    if cut:
+        G.problem(_current(), "B3 dialog %r: text cut %s" % (title, cut[:4]))
+    if english:
+        G.problem(_current(), "B3 dialog %r: English text %s" % (title, english[:4]))
 
 
 def install(gs, tmp):
@@ -578,6 +611,21 @@ def install(gs, tmp):
         trace.write(str(msg) + "\n")
         trace.flush()
     G.log = log
+    if os.environ.get("CAM2027_B3_LAYOUT"):
+        plain_exec = G.driver.exec_dialog
+
+        def exec_dialog(dlg):
+            dlg.show()
+            try:
+                check_layout(dlg)
+            except Exception:
+                G.problem(_current(), "B3 layout check crashed:\n%s" % traceback.format_exc())
+            return plain_exec(dlg)
+        G.driver.exec_dialog = exec_dialog
+        from cam2027.gui import commands, panels
+
+        for mod in (commands, panels):
+            mod.exec_dialog = exec_dialog
     _tmp = tmp
     if not os.environ.get("CAM2027_B3_AUDIT"):
         return
@@ -697,6 +745,12 @@ def scenario_panel_undo(scenario, files):
     def edit():
         ed = opeditor.open_editor(proj, op)
         G.pump(0.2)
+        if os.environ.get("CAM2027_B3_LAYOUT"):
+            for i in range(ed.tabs.count()):  # chaque onglet de l'éditeur
+                ed.tabs.setCurrentIndex(i)
+                _layout_seen.discard(ed.windowTitle())
+                check_layout(ed)
+            ed.tabs.setCurrentIndex(0)
         for n, (_k, w) in ed.widgets.items():
             if n == "StepDown" and isinstance(w, QtWidgets.QDoubleSpinBox):
                 w.setValue(w.value() / 2 or 1.0)
