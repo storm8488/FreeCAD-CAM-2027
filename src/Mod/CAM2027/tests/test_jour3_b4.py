@@ -130,6 +130,65 @@ class TestKeepOutPattern(unittest.TestCase):
         self.assertEqual(keepout.issues(proj), [])
 
 
+class TestRotarySpiral(unittest.TestCase):
+    """Finition 3D rotative en spirale (A tourne sans arrêt, X avance d'un pas par tour)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests import test_nuit_s4
+
+        test_nuit_s4.TestRotary.setUpClass.__func__(cls)  # même pièce : cylindre R20, poche R18, bosse
+
+    _project = __import__("tests.test_nuit_s4", fromlist=["x"]).TestRotary._project
+    _speeds = __import__("tests.test_nuit_s4", fromlist=["x"]).TestRotary._speeds
+
+    def test_spiral_finishing(self):
+        """Spirale : refusée si l'axe A a une course limitée trop courte ; sinon une seule passe continue (A croissant
+        sur les mouvements de coupe, presque aucun rapide), carte radiale = pièce à ± 0,05 mm, aucune entaille,
+        vitesse réelle = avance à 2 %, export sans erreur."""
+        import numpy as np
+        from cam2027.i18n import UserError
+        from cam2027.project import rotary
+        from tests.test_nuit_s4 import ROT_STOCK, ROT_POCKET_HALF, rotary_part_radius
+
+        proj, lib = self._project("Rotary spiral")
+        ball = lib.search("6 mm ball end mill")[0]
+        asm = lib.assemblies_for_tool(ball.id)[0]
+        params = {"stepover": 0.5, "sample": 0.25, "spiral": True}
+        with self.assertRaises(UserError) as ctx:  # A de -720 à 720° : 162 tours n'y tiennent pas
+            rotary.add_operation(proj, "rotary3d", "Spiral", asm.id, ball.presets[0].id, params=params)
+        self.assertIn("spiral", str(ctx.exception))
+        machine = proj.machine
+        machine.rotary.min_deg, machine.rotary.max_deg = -100000.0, 100000.0
+        proj.set_machine(machine)
+        op, rec = rotary.add_operation(proj, "rotary3d", "Spiral", asm.id, ball.presets[0].id, params=params)
+        self.assertEqual(rec["info"]["levels"], 1)
+        _l, moves = rotary.generate(proj, op)
+        cuts = [m for m in moves if m[0] == "cut"]
+        self.assertLess(sum(1 for m in moves if m[0] == "rapid"), 10)
+        ys = np.array([m[2] for m in cuts])
+        self.assertTrue((np.diff(ys) >= -1e-9).all())  # A ne revient jamais en arrière
+        self.assertGreater(ys[-1] / (2 * math.pi * ROT_STOCK), 160)  # 80 mm / 0,5 mm par tour
+        text, analysis, issues = proj.preview_gcode()
+        self.assertNotIn("error", [lvl for lvl, _m in issues], issues)
+        self.assertGreater(self._speeds(text, {"Spiral": (rec["values"]["feed_mm_min"], rec["values"]["plunge_feed_mm_min"])}), 1000)
+        for window in ((14.0, 26.0, math.pi - 1.0, math.pi + 1.0), (52.0, 68.0, -0.45, 0.45)):
+            x0, x1, t0, t1 = window
+            rmap = rotary.RadialMap(x0, x1, t0, t1, ROT_STOCK, res_x=0.1)
+            rmap.sweep_moves(moves, ROT_STOCK, "ball", 3.0)
+            X, T = np.meshgrid(rmap.xs, rmap.ts, indexing="ij")
+            part = rotary_part_radius(X, T)
+            err = rmap.r - part
+            dist_wall = np.abs(np.abs(np.mod(T, 2 * math.pi) - math.pi) - ROT_POCKET_HALF) * 18.0
+            pocket_floor = (part < 18.5) & (dist_wall > 3.5) & (X > 13.5) & (X < 26.5)
+            cylinder = (np.abs(part - 20.0) < 1e-9) & (dist_wall > 3.5) & (np.hypot(X - 60, T * 20) > 9.5)
+            for name, sel in (("pocket floor", pocket_floor), ("cylinder", cylinder)):
+                if sel.any():
+                    self.assertLess(float(np.abs(err[sel]).max()), 0.05, (name, window, float(np.abs(err[sel]).max())))
+            self.assertGreater(float(err.min()), -0.05, window)
+        proj.close()
+
+
 def run_probe(lines, start, boxes, tip):
     """GRBL simplifié : exécute un programme de palpage depuis ``start`` (position machine de la pointe : centre en
     XY, bas en Z) contre des boîtes pleines ``(xmin, ymin, zmin, xmax, ymax, zmax)`` ; retourne l'origine (repère

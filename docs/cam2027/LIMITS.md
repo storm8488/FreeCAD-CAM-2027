@@ -301,7 +301,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   angles de la poche au rayon de la fraise. Contour : extérieur / intérieur / sur le trait, pas d'entrée en
   arc ni d'attaches ; poche : anneaux décalés du centre vers les parois, plongée verticale (pas de rampe ni
   d'hélice), liaisons à la profondeur seulement dans la zone déjà vidée. Finition 3D rotative : lignes le long
-  de l'axe (aller-retour) seulement, pas de spirale ni de passes circulaires ; une ligne par angle (pas
+  de l'axe (aller-retour) ou spirale **[B4]** (A sur autant de tours que de pas le long de X : refusée si la course
+  de l'axe A du profil machine est plus courte), pas de passes circulaires ; une ligne par angle (pas
   angulaire = pas / rayon maximal de la pièce), chaque ligne relevée à la hauteur de sécurité ; hauteurs par
   OpenCamLib sur la pièce tournée (exactes pour une fraise pointée vers l'axe) ; surépaisseur appliquée
   radialement (pas normale à la surface) ; niveaux d'ébauche radiaux optionnels depuis le brut rond, sans

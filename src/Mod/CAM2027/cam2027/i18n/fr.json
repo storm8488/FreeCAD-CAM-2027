@@ -1443,5 +1443,8 @@
   "projection on the part: not available on an indexed operation": "projection sur la pièce : impossible sur une opération indexée",
   "{op} is already projected on the part": "{op} est déjà projetée sur la pièce",
   "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce",
-  "inner corner (probe lowered into the pocket, 10 mm from both walls)": "coin intérieur (palpeur descendu dans la poche, à 10 mm des deux parois)"
+  "inner corner (probe lowered into the pocket, 10 mm from both walls)": "coin intérieur (palpeur descendu dans la poche, à 10 mm des deux parois)",
+  "Lines along the axis": "Lignes le long de l'axe",
+  "Spiral (A turns continuously)": "Spirale (A tourne sans arrêt)",
+  "rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis": "finition rotative : la spirale fait tourner l'axe A {t:.0f} fois ({d:.0f}°), plus que sa course ({a:g}° à {b:g}° dans le profil machine) : utilisez les lignes le long de l'axe"
 }

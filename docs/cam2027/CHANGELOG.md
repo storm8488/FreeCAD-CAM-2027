@@ -16,6 +16,12 @@
   compté), Z non touché, retour au point de départ. Test : programme exécuté par un GRBL simulé contre les parois
   d'une poche, origine exacte aux 4 coins en G10 L20 et en G92 (le coin extérieur, vérifié de la même façon, est
   exact aussi).
+- **[B4]** **Finition 3D rotative en spirale** : choix « Motif » du dialogue Usinage rotatif (lignes le long de l'axe
+  ou spirale). A tourne sans arrêt pendant que X avance d'un pas par tour (un tour à X constant à chaque bout) :
+  une seule passe continue, sans les remontées de fin de ligne ; niveaux d'ébauche parcourus dans un sens puis dans
+  l'autre (A ne revient pas en arrière). Refusée avec un message si la course de l'axe A du profil machine ne
+  contient pas tous les tours. Test : carte radiale = pièce à ± 0,05 mm, aucune entaille, A croissant, vitesse
+  réelle = avance à 2 %, export sans erreur.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
