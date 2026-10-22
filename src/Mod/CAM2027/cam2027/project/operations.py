@@ -138,6 +138,13 @@ STRATEGIES = {
         "params": ("Width", "ExtraDepth", "Direction", "EntryPoint", "StepDown", "ClearanceHeight", "SafeHeight"),
         "limits": "Selected edges or a flat face outline; depth derives from the tool angle (chamfer / V-bit); "
                   "no collision check with adjacent walls.",
+    },    "scallop": {
+        "module": "cam2027.project.scallop",
+        "label": "3D constant scallop finishing (steep and shallow, OpenCamLib)",
+        "params": ("ScallopHeight", "SteepShallow", "ThresholdAngle", "SampleInterval", "DepthOffset", "BoundBox",
+                   "LinearDeflection", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Ball or bull nose mill; passes offset along the surface from the boundary (constant 3D step); "
+                  "steep-and-shallow mode cuts at constant Z above the threshold angle; no rest machining.",
     },
 }
 
@@ -169,7 +176,7 @@ TOOLS_FOR = {
     "rough3d": ("endmill", "bullnose", "ballend"), "surface3d": ("ballend", "bullnose", "taperedball", "endmill"),
     "waterline": ("ballend", "bullnose", "endmill"), "drilling": ("drill", "endmill"), "threadmill": ("threadmill",),
     "vcarve": ("vbit", "engrave", "chamfer"), "engrave": ("vbit", "engrave", "chamfer", "ballend", "endmill"),
-    "chamfer": ("chamfer", "vbit", "engrave"),
+    "chamfer": ("chamfer", "vbit", "engrave"), "scallop": ("ballend", "bullnose"),
 }
 
 
@@ -874,8 +881,12 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         # même fournisseur de vue que l'atelier CAM (icône, panneau de tâches, affichage du parcours)
         import Path.Op.Gui.Base as PathOpGui
 
-        gui_mod = importlib.import_module(STRATEGIES[kind]["module"].replace("Path.Op.", "Path.Op.Gui."))
-        op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, gui_mod.Command.res)
+        module = STRATEGIES[kind]["module"]
+        if module.startswith("cam2027."):  # stratégie propre à CAM2027
+            res = importlib.import_module(module).gui_resources()
+        else:
+            res = importlib.import_module(module.replace("Path.Op.", "Path.Op.Gui.")).Command.res
+        op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, res)
         op.ViewObject.Visibility = True
     model_aware_objects = None
     if kind == "rough3d":

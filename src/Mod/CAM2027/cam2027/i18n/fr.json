@@ -1008,5 +1008,22 @@
   "No tool of the right type for this strategy: click Select... to choose one or create a new one.": "Aucun outil adapté à cette stratégie : cliquez sur Sélectionner... pour en choisir un ou en créer un nouveau.",
   "Length below the holder (mm)": "Longueur sous le porte-outil (mm)",
   "Apply": "Appliquer",
-  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre outil ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés)."
+  "Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept).": "Les valeurs sont figées à la création : une modification ultérieure de la bibliothèque ne change jamais cette opération. Choisir ici un autre outil ou préréglage puis appliquer copie les nouvelles valeurs (un autre coupant remplace le contrôleur d'outil ; les réglages de stratégie sont conservés).",
+  "3D constant scallop finishing (steep and shallow, OpenCamLib)": "Finition 3D à crête constante (pentu / peu incliné, OpenCamLib)",
+  "Ball or bull nose mill; passes offset along the surface from the boundary (constant 3D step); steep-and-shallow mode cuts at constant Z above the threshold angle; no rest machining.": "Fraise boule ou torique ; passes décalées le long de la surface depuis la limite (pas 3D constant) ; le mode pentu / peu incliné usine à Z constant au-dessus de l'angle limite ; pas de reprise de matière.",
+  "Constant-Z passes on slopes above the threshold angle, constant scallop below, in one operation.": "Passes à Z constant sur les pentes au-delà de l'angle limite, à crête constante en dessous, dans la même opération.",
+  "Height of the ridge left between two passes; the step along the surface is derived from it and the tool radius.": "Hauteur de la crête laissée entre deux passes ; le pas le long de la surface en est déduit avec le rayon de l'outil.",
+  "Maximum scallop height": "Hauteur de crête maximale",
+  "Slope separating steep areas (constant Z) from shallow areas (constant scallop).": "Pente séparant les zones raides (Z constant) des zones peu inclinées (crête constante).",
+  "Steep and shallow": "Pentu / peu incliné",
+  "Threshold angle (deg)": "Angle limite (°)",
+  "constant scallop finishing needs OpenCamLib (not found in this FreeCAD)": "la finition à crête constante exige OpenCamLib (absent de ce FreeCAD)",
+  "constant scallop finishing needs a ball or bull nose mill": "la finition à crête constante exige une fraise boule ou torique",
+  "constant scallop finishing needs a ball or bull nose mill (corner radius > 0)": "la finition à crête constante exige une fraise boule ou torique (rayon de bout > 0)",
+  "constant scallop finishing: no model to machine": "finition à crête constante : aucune pièce à usiner",
+  "constant scallop finishing: the tool finds no surface inside the boundary": "finition à crête constante : l'outil ne trouve aucune surface dans la limite",
+  "constant scallop finishing: {n} surface samples, increase the sample interval": "finition à crête constante : {n} points de surface, augmentez l'intervalle d'échantillonnage",
+  "the maximum scallop height must be positive": "la hauteur de crête maximale doit être positive",
+  "walls steeper than {a:g}° are not checked by the scallop computation: use steep and shallow mode": "les parois de plus de {a:g}° ne sont pas contrôlées par le calcul de crête : utilisez le mode pentu / peu incliné",
+  "{n} surface samples stay further than half a step from a pass (scallop may exceed the target there)": "{n} points de surface restent à plus d'un demi-pas d'une passe (la crête peut y dépasser la valeur demandée)"
 }

@@ -99,6 +99,9 @@ PARAM_SPECS = {
     "AngularDeflection": ("Angular deflection", "passes", "Angular mesh tolerance used to sample the model."),
     "Algorithm": ("Algorithm", "strategy", "OCL Dropcutter (reference) or FreeCAD experimental."),
     "ClearLastLayer": ("Clear last layer", "strategy", "Clear the flat area left at the final depth."),
+    "ScallopHeight": ("Maximum scallop height", "passes", "Height of the ridge left between two passes; the step along the surface is derived from it and the tool radius."),
+    "SteepShallow": ("Steep and shallow", "strategy", "Constant-Z passes on slopes above the threshold angle, constant scallop below, in one operation."),
+    "ThresholdAngle": ("Threshold angle (deg)", "strategy", "Slope separating steep areas (constant Z) from shallow areas (constant scallop)."),
     # filetage
     "ThreadOrientation": ("Thread orientation", "thread", "Right-hand or left-hand thread."),
     "ThreadType": ("Thread type", "thread", "Standard table (metric / imperial, internal / external) or custom."),

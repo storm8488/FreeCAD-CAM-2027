@@ -705,6 +705,17 @@ def scenario_inlay(scenario, files):
     pump(0.3)
 
 
+def scenario_scallop(scenario, tmp):
+    """[S4] Finition à crête constante d'un dôme par « Ajouter une opération » : recalcul, contrôle, export."""
+    import Part
+
+    V = FreeCAD.Vector
+    dome = Part.makeSphere(25.0, V(30, 20, -15)).common(Part.makeBox(60, 40, 30, V(0, 0, 5)))
+    path = os.path.join(tmp, "dome.step")
+    Part.makeBox(60, 40, 5).fuse(dome).removeSplitter().exportStep(path)
+    scenario_solid(scenario, path, tmp, "scallop")
+
+
 def scenario_import_twice(scenario, path):
     """Le plantage signalé : le même fichier importé deux fois, puis « Brut et montage »."""
     proj = new_project(scenario, "Twice")
@@ -762,6 +773,7 @@ def main():
             ("editor", lambda: scenario_editor("editor", files)),
             ("machine-wrap", lambda: scenario_machine_and_wrap("machine-wrap", files)),
             ("inlay", lambda: scenario_inlay("inlay", files)),
+            ("scallop-dome", lambda: scenario_scallop("scallop-dome", tmp)),
             ("import-twice", lambda: scenario_import_twice("import-twice", next(
                 (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
     ) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))

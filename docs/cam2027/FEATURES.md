@@ -47,7 +47,8 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Ébauche volumique | partiel | `Path.Op.Adaptive` autour des faces en relief (clé `rough3d`, faces choisies automatiquement si toute la pièce est sélectionnée) | auto (`test_3d_finishing` : niveaux, surépaisseur respectée) | marches entre niveaux (pas de reprise des marches), ébauche depuis le brut restant |
 | Reprise depuis le brut restant | absent | — | nécessite simulation matière (jalon F) |
 | Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
-| Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
+| Hauteur de crête, pentu/peu incliné **[S4]** | disponible | `project/scallop.py` (clé `scallop`) : passes à distance 3D constante le long de la surface depuis la limite (distance géodésique sur la grille OpenCamLib, courbes de niveau), crête maximale -> pas, lignes de crête complétées ; mode pentu / peu incliné (Z constant au-dessus de l'angle limite) dans la même opération ; comme Fusion « Scallop » / « Steep and Shallow » | auto (`test_nuit_s4` : crête mesurée sur la carte de hauteur <= demandée + 10 % sur le dôme et le plat, aucune entaille, temps <= 2 x `surface3d`) + scénario `scallop-dome` | creux concaves (crête plus grande), sens des passes, liaisons lissées, limite par silhouette |
+| Reprise des creux, guidé par courbes, ébavurage | absent | — | jalons C–F |
 
 ## Dessin et fonctions Aspire
 

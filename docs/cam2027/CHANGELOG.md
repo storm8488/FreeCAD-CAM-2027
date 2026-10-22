@@ -2,6 +2,18 @@
 
 ## Non publié
 
+- **[S4]** **Finition 3D à crête constante, pentu / peu incliné** (stratégie `scallop`, comme Fusion
+  « Scallop » et « Steep and Shallow ») : « Hauteur de crête maximale » -> pas 3D déduit du rayon de la boule
+  (`2 sqrt(h (2R - h))`, plus la partie plate d'une torique) ; hauteurs de la pointe par OpenCamLib
+  (`BatchDropCutter`, comme `surface3d`) sur une grille, passes = courbes de niveau de la distance
+  géodésique depuis la limite le long de la surface du centre de l'outil (décalages successifs, pas 3D
+  constant), passes ajoutées sur les lignes de crête restées à plus d'un demi-pas, chaque point final
+  recalculé par OpenCamLib (aucune hauteur interpolée), liaisons courtes le long de la surface. Mode pentu /
+  peu incliné : Z constant au-dessus de l'angle limite (défaut 45°, pas vertical `s sin(angle)`), crête
+  constante en dessous, dans la même opération. Dôme, boule 6 mm, crête 0,02 mm : crête mesurée (carte de
+  hauteur à 0,05 mm, normale à la sphère) 0,017-0,018 mm sur le dôme, 0,020 mm sur le plat, aucune entaille,
+  7,2 s (finition 3D de FreeCAD aux réglages par défaut : 6,4 s). Utilise `scipy` et `contourpy`, fournis
+  avec FreeCAD 1.0 et 1.1.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par
