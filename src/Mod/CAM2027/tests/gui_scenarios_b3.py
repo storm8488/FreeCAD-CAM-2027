@@ -511,6 +511,11 @@ def check_panel_edit(scenario, proj, kinds):
         else:
             seen[kind] = "nothing"
             msgs = G.driver.take()
+        failed = [t for k, t in msgs if G.tr("Operation failed: {error}", error="")[:12] in t]
+        if not failed and not _deleted(ed) and G.tr("Operation failed: {error}", error="")[:12] in ed.status.text():
+            failed = [ed.status.text()]
+        if failed:
+            G.problem(scenario, "B3 %s after Ctrl+Z: error shown: %s" % (button, failed[0][:150]))
             if not msgs:
                 G.problem(scenario, "B3 panel Edit on %s (%s) opens nothing" % (item.text(0), kind))
         G.pump(0.1)
@@ -715,6 +720,75 @@ def scenario_stock_undo(scenario, files):
     G.pump(0.3)
 
 
+def _deleted(widget):
+    """Widget Qt déjà détruit (``deleteLater`` traité)."""
+    try:
+        widget.isVisible()
+        return False
+    except RuntimeError:
+        return True
+
+
+def scenario_undo_while_editing(scenario, files):
+    """Ajouter une opération (l'éditeur s'ouvre), Ctrl+Z pendant que l'éditeur est ouvert, puis OK, puis la même
+    chose avec Annuler : pas d'exception, pas d'opération fantôme, panneau à jour, le reste du projet intact."""
+    from cam2027.gui import opeditor
+
+    proj = _tray_project(scenario, files, "B3 undo edit")
+    _add(scenario, "profile")  # une opération qui reste
+    proj = G.project()
+    doc = proj.doc
+    for button in ("accept", "reject"):
+        G.driver.handlers[G.tr("Add operation")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "pocket2d"), "pocket2d"), True)[1]
+        G.run_command(scenario, "CAM2027_AddOperation")
+        editors = list(opeditor._open_editors)
+        if not editors:
+            G.problem(scenario, "B3 no editor after Add operation")
+            return
+        ed = editors[-1]
+        name = ed.op.Name
+        before_undo = project_ops(doc)
+        _gui_undo(doc)  # Ctrl+Z, éditeur ouvert
+        G.pump(0.3)
+        after_undo = project_ops(doc)
+        if name not in (after_undo or []) and doc.getObject(name) is None and not _deleted(ed) and ed.isVisible():
+            G.problem(scenario, "B3 %s: the editor stays open on an operation removed by Ctrl+Z" % button)
+        try:
+            if button == "accept" and not _deleted(ed):
+                for n, (_k, w) in ed.widgets.items():  # une modification, sinon OK ne fait rien
+                    if n == "StepDown" and isinstance(w, QtWidgets.QDoubleSpinBox):
+                        w.setValue(w.value() / 2 or 1.0)
+            if not _deleted(ed) and ed.isVisible():
+                getattr(ed, button)()
+        except Exception:
+            G.problem(scenario, "B3 editor %s after Ctrl+Z raised:\n%s" % (button, traceback.format_exc()))
+        G.pump(0.3)
+        msgs = G.driver.take()
+        failed = [t for k, t in msgs if G.tr("Operation failed: {error}", error="")[:12] in t]
+        if not failed and not _deleted(ed) and G.tr("Operation failed: {error}", error="")[:12] in ed.status.text():
+            failed = [ed.status.text()]
+        if failed:
+            G.problem(scenario, "B3 %s after Ctrl+Z: error shown: %s" % (button, failed[0][:150]))
+        if not _deleted(ed) and ed in opeditor._open_editors and ed.isVisible():
+            G.log("  B3 editor still open after %s (status: %s)" % (button, ed.status.text()[:150]))
+            ed.on_close = None
+            ed.done(0)
+        ops = project_ops(doc)
+        G.log("  B3 undo while editing (%s): before Ctrl+Z %s, after %s, after %s %s, messages %s" % (
+            button, before_undo, after_undo, button, ops, [t[:100] for _k, t in msgs]))
+        reg = set(proj.registry)
+        if doc.getObject(name) is not None and name not in reg:
+            G.problem(scenario, "B3 %s: operation %s back in the document without its registry entry" % (button, name))
+        if name in reg and doc.getObject(name) is None:
+            G.problem(scenario, "B3 %s: registry entry %s without its operation" % (button, name))
+        if panel_ops() != ops:
+            G.problem(scenario, "B3 %s: Project panel %s, project %s" % (button, panel_ops(), ops))
+        if not ops or ops[0] != before_undo[0]:
+            G.problem(scenario, "B3 %s: the first operation was lost: %s" % (button, ops))
+    FreeCAD.closeDocument(doc.Name)
+    G.pump(0.3)
+
+
 def scenario_panel_undo(scenario, files):
     """Boutons du panneau Projet (cocher, monter, descendre, dupliquer, supprimer) et éditeur : Ctrl+Z / Ctrl+Y."""
     from cam2027.gui import opeditor
@@ -737,8 +811,14 @@ def scenario_panel_undo(scenario, files):
     _select_row(0)
     _undo_step(scenario, "panel Delete", doc, lambda: p.buttons["del"].click())
     item = p.tree.topLevelItem(0)
-    _undo_step(scenario, "panel check box", doc, lambda: item.setCheckState(
-        0, QtCore.Qt.Unchecked if item.checkState(0) == QtCore.Qt.Checked else QtCore.Qt.Checked))
+
+    def check():
+        item.setCheckState(0, QtCore.Qt.Unchecked if item.checkState(0) == QtCore.Qt.Checked else QtCore.Qt.Checked)
+        try:
+            item.text(0)  # l'élément coché existe encore au retour du signal
+        except RuntimeError:
+            G.problem(scenario, "B3 panel check box: the item was destroyed while Qt was checking it (crash risk)")
+    _undo_step(scenario, "panel check box", doc, check)
     _select_row(0)
     op = proj.base_operation(proj.operations()[0])
 
@@ -1037,7 +1117,8 @@ def entries(gs, files, tmp):
                 flush_live("end of %s" % name)
         return name, run
 
-    out = [named("b3-stock-undo", lambda: scenario_stock_undo("b3-stock-undo", files)),
+    out = [named("b3-undo-while-editing", lambda: scenario_undo_while_editing("b3-undo-while-editing", files)),
+           named("b3-stock-undo", lambda: scenario_stock_undo("b3-stock-undo", files)),
            named("b3-reopen-dome", lambda: scenario_reopen_dome("b3-reopen-dome", tmp)),
            named("b3-reopen-dome-undo", lambda: scenario_reopen_dome("b3-reopen-dome-undo", tmp, True)),
            named("b3-undo-redo-job", lambda: scenario_undo_redo_job("b3-undo-redo-job", files)),

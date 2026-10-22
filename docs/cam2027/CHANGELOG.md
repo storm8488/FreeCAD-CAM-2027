@@ -27,6 +27,13 @@
 - **[B3]** Correctif : projet rouvert (dôme, reprise de matière) : le fournisseur de vue du job restait non attaché
   (erreurs `'ViewProvider' object has no attribute 'obj'`) et la page de tâches d'une opération ne s'ouvrait pas ;
   attaché à l'activation du projet. Scénarios `b3-reopen-dome`, `b3-reopen-dome-undo`.
+- **[B3]** Correctif : **plantage** en cochant / décochant une opération dans le panneau Projet : la liste était
+  reconstruite pendant le signal de l'élément coché, détruit sous Qt (violation d'accès puis corruption du tas,
+  au hasard ; pile relevée par `faulthandler` pendant les scénarios). Traité après le signal. Scénario
+  `b3-panel-undo` (l'élément coché existe encore au retour du signal).
+- **[B3]** Correctif : **Ctrl+Z pendant que l'éditeur d'opération est ouvert** (juste après Ajouter) : l'éditeur
+  restait ouvert sur l'opération retirée ; OK affichait « Échec de l'opération : Access violation », Annuler une
+  erreur incompréhensible. L'éditeur se ferme quand son opération disparaît. Scénario `b3-undo-while-editing`.
 - **[B3]** Correctif (FreeCAD 1.0) : **Ctrl+Z** après Brut et montage, Ajouter une opération ou Dupliquer :
   la fabrique de ToolBit de l'interface 1.0 ouvre et valide sa propre transaction (« Create ToolBit ») au milieu de
   celle de l'action : 2 ou 3 étapes au lieu d'une, et après Brut et montage annulé un objet `Stock` restait dans

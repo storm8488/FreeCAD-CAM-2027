@@ -90,6 +90,7 @@ class OperationEditor(QtWidgets.QDialog):
         super(OperationEditor, self).__init__(parent or FreeCADGui.getMainWindow())
         self.proj = proj
         self.op = op
+        self.op_key = (proj.doc.Name, op.Name)  # lisible même quand l'objet n'existe plus
         self.rec = proj.registry.get(op.Name, {})
         self.kind = self.rec.get("kind", "?")
         self.on_close = on_close
@@ -568,7 +569,23 @@ _observer = None
 
 
 class _DocumentObserver(object):
-    """Ferme les éditeurs d'un document qui se ferme."""
+    """Ferme les éditeurs d'un document qui se ferme, et celui d'une opération qui disparaît (Ctrl+Z juste après
+    l'ajout, suppression) : OK sur l'opération retirée donnait « Access violation »."""
+
+    def slotDeletedObject(self, obj):
+        try:
+            key = (obj.Document.Name, obj.Name)
+        except Exception:
+            return
+        for ed in list(_open_editors):
+            if getattr(ed, "op_key", None) == key:
+                QtCore.QTimer.singleShot(0, lambda ed=ed: _close_orphan(ed))
+
+    def slotUndoDocument(self, doc):
+        # l'annulation retire l'objet sans signaler sa suppression
+        for ed in list(_open_editors):
+            if getattr(ed, "op_key", (None,))[0] == doc.Name:
+                QtCore.QTimer.singleShot(0, lambda ed=ed: _close_orphan(ed))
 
     def slotDeletedDocument(self, doc):
         for ed in list(_open_editors):
@@ -584,6 +601,23 @@ class _DocumentObserver(object):
                     ed.deleteLater()
                 except RuntimeError:
                     pass
+
+
+def _close_orphan(ed):
+    """Éditeur dont l'opération a été retirée du document : fermé sans rien appliquer ni rappeler ``on_close``
+    (l'ajout est déjà annulé). Rien si l'opération est revenue entre-temps (Ctrl+Y)."""
+    if ed not in _open_editors:
+        return
+    doc = FreeCAD.getDocument(ed.op_key[0]) if ed.op_key[0] in FreeCAD.listDocuments() else None
+    if doc is not None and doc.getObject(ed.op_key[1]) is not None:
+        return
+    ed.on_close = None
+    _open_editors.remove(ed)
+    try:
+        ed.done(0)
+        ed.deleteLater()
+    except RuntimeError:
+        pass
 
 
 def open_editor(proj, op, on_close=None, title=None):
