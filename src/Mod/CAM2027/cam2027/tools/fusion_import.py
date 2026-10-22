@@ -262,9 +262,13 @@ def _import_tool(raw, name, library, holder_cache, existing, numbers, report):
             material = p.get("material")
             if isinstance(material, dict):
                 material = material.get("query") or ("" if material.get("category") in (None, "all") else material.get("category"))
+            n, v_c, v_f, f_z = _num(p, "n"), _num(p, "v_c"), _num(p, "v_f"), _num(p, "f_z")
             presets.append(
                 CuttingPreset(
                     p.get("name") or "Fusion preset",
+                    # seule la vitesse de coupe ou l'avance par dent renseignée : S0 / « avance manquante » sinon
+                    rpm_source="vc" if not n and v_c else "rpm",
+                    feed_source="fz" if not v_f and f_z else "feed",
                     description=p.get("description", "") or "",
                     material=material or "",
                     spindle_rpm=_num(p, "n"),

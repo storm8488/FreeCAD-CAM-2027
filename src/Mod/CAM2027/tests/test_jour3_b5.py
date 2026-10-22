@@ -216,6 +216,31 @@ class TestFusionImport(unittest.TestCase):
         self.assertEqual(len(report.imported), 3, report.to_text())
         self.assertEqual(len(report.skipped), 3, report.to_text())
 
+    def test_preset_from_cutting_speed_and_chip_load(self):
+        """Préréglage Fusion sans vitesse de broche (``n`` absent ou 0) mais avec Vc, ou sans avance mais avec fz :
+        importé en mode « tr/min » / « avance » vides, l'outil donnait S0 (coupe broche arrêtée) ou « avance
+        manquante » à l'ajout d'une opération (B5-18). Les sources Vc / fz sont choisies quand elles seules sont
+        renseignées."""
+        import json
+        import math
+        from cam2027.tools.library import ToolLibrary
+        from cam2027.tools.fusion_import import import_fusion_library
+
+        tool = {"type": "flat end mill", "description": "Vc only", "unit": "millimeters",
+                "geometry": {"DC": 6.0, "OAL": 50.0, "LCF": 18.0, "NOF": 2, "SFDM": 6.0},
+                "post-process": {"number": 3},
+                "start-values": {"presets": [{"name": "vc", "n": 0, "v_c": 300.0, "v_f": 0, "f_z": 0.05}]}}
+        path = os.path.join(tempfile.mkdtemp(prefix="cam2027-b5-"), "vc.json")
+        with open(path, "w", encoding="utf-8") as fp:
+            json.dump({"data": [tool]}, fp)
+        lib = ToolLibrary("x")
+        report = import_fusion_library(path, lib)
+        self.assertEqual(len(report.imported), 1, report.to_text())
+        t = lib.search("Vc only")[0]
+        r = t.presets[0].resolve(t)
+        self.assertAlmostEqual(r["spindle_rpm"], 1000.0 * 300.0 / (math.pi * 6.0), places=3)
+        self.assertAlmostEqual(r["feed_mm_min"], r["spindle_rpm"] * 2 * 0.05, places=3)
+
     def test_report_message_is_true(self):
         """La fenêtre de rapport disait l'importateur « pas encore validé sur un export réel » alors qu'il l'est
         (fixture réelle ci-dessus, LIMITS.md) ; elle donne maintenant les nombres importés et ignorés."""
