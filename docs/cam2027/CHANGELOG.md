@@ -27,6 +27,13 @@
   les trous des autres corps étaient ignorés sans message. Les trous de tous les corps sont trouvés
   (`holes.find_job_holes`) et chaque opération prend les faces de chaque trou sur son propre corps ; le départ au-dessus
   du brut de l'alésage hélicoïdal vérifie la colonne du trou dans tous les corps.
+- **[B4]** Correctif : **entaille de la finition à crête constante (`scallop`) au bord des parois verticales**
+  (0,053 mm sur l'ER16 de l'utilisateur, non analysée cette nuit). Ce n'était pas une fausse alerte du contrôle :
+  deux points voisins d'une passe (0,1 mm en XY) sont l'un sur l'arête de la paroi (boule posée sur le bord),
+  l'autre 16 mm plus bas au pied de la paroi, et la droite qui les relie entre dans l'arête. Une coupe plus raide
+  que 2/1 dont le milieu passe sous la hauteur OpenCamLib devient une marche (palier à la plus haute des deux
+  hauteurs, puis verticale ; un seul lot OpenCamLib pour toutes). Test : marche de 10 mm, pénétration exacte de la
+  boule 0,0125 mm avant, < 0,005 mm après.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

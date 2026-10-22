@@ -39,6 +39,9 @@ STAY_DOWN_STEPS = 2.0
 #: pente au-delà de laquelle la grille ne représente plus la surface (parois) : non contrôlée en couverture
 WALL_DEG = 75.0
 MAX_GRID_POINTS = 4000000
+#: coupe remplacée par une marche : plus raide que cette pente (dz / dxy) et sous la surface de plus de REFINE_TOL
+STEEP_SLOPE = 2.0
+REFINE_TOL = 0.002
 _NO_HEIGHT = -1.0e6
 
 
@@ -433,7 +436,40 @@ def moves_for(surface, lines, step, safe_z, stay_down):
     if moves:
         last = moves[-1]
         moves.append(("rapid", last[1], last[2], float(safe_z)))
-    return moves
+    return refine_steep(surface, moves)
+
+
+def refine_steep(surface, moves, tol=REFINE_TOL):
+    """Marches à la place des coupes raides qui passent sous la surface du centre de l'outil.
+
+    Au bord d'une paroi verticale, deux points voisins d'une passe sont l'un sur l'arête (boule posée sur le bord),
+    l'autre au pied de la paroi : la droite qui les relie entre dans l'arête (jusqu'à l'écart entre les points :
+    0,053 mm mesurés sur l'ER16). Chaque coupe plus raide que ``STEEP_SLOPE`` dont le milieu est sous la hauteur
+    OpenCamLib (+ ``tol``, un seul lot pour toutes) devient une marche : palier à la plus haute des deux hauteurs,
+    puis montée ou descente verticale. Entre deux points voisins (au plus l'intervalle d'échantillonnage), la
+    surface ne dépasse pas la plus haute des deux de plus que la flèche de la boule (< 0,001 mm à 0,1 mm). Les
+    pentes douces ne sont pas touchées (flèche de corde < 0,002 mm au pas d'échantillonnage)."""
+    np = _np()
+    if len(moves) < 2:
+        return moves
+    kinds = np.array([m[0] for m in moves])
+    pts = np.array([m[1:] for m in moves], dtype=float)
+    a, b = pts[:-1], pts[1:]
+    dxy = np.hypot(b[:, 0] - a[:, 0], b[:, 1] - a[:, 1])
+    cand = np.nonzero((kinds[1:] == "cut") & (dxy > 1e-9) & (np.abs(b[:, 2] - a[:, 2]) > STEEP_SLOPE * dxy))[0]
+    if not len(cand):
+        return moves
+    mid = 0.5 * (a[cand] + b[cand])
+    z = surface.drop(mid[:, 0], mid[:, 1])
+    bad = cand[np.isfinite(z) & (z > mid[:, 2] + tol)]
+    if not len(bad):
+        return moves
+    a, b = pts[bad], pts[bad + 1]
+    corner = np.where((a[:, 2] >= b[:, 2])[:, None], np.column_stack([b[:, :2], a[:, 2]]),
+                      np.column_stack([a[:, :2], b[:, 2]]))
+    pts = np.insert(pts, bad + 1, corner, axis=0)
+    kinds = np.insert(kinds, bad + 1, "cut")
+    return [(str(k), float(x), float(y), float(z)) for k, (x, y, z) in zip(kinds.tolist(), pts)]
 
 
 def path_commands(moves, horiz_feed, vert_feed):
