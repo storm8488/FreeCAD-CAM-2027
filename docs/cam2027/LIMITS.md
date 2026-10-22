@@ -27,6 +27,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   (absents de cet export), sphérique/torique/tonneau/lentille/ogive/queue d'aronde/
   lollipop/rainurer/rayonner/tarauder/forets, unités pouces, autres versions de Fusion.
   Les `expressions` Fusion (formules liant les champs) ne sont pas importées.
+  Réimport : un outil de même nom, type et géométrie qu'un outil de la bibliothèque est ignoré (listé) ; un numéro
+  déjà pris est renuméroté après le plus grand. Bibliothèque en pouces : les valeurs des préréglages (avances,
+  Vc) ne sont pas converties (non vérifié sur un export réel en pouces).
 - Expressions entre paramètres : seulement les deux relations `n = 1000·Vc/(π·D)` et
   `Vf = n·z·fz` avec grandeur pilote déclarée. Pas de moteur d'expressions général,
   pas de détection de cycles (jalon C).
@@ -219,6 +222,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   l'état d'avant le paquet, repli séquentiel quand ils signalent quelque chose : même résultat qu'un à un).
   Ordre de grandeur : 10 à 20 000 commandes par seconde.
 - Fiche de préparation en Markdown (pas de PDF).
+- Changement d'outil (GRBL) : pause `M5` + `M0` à chaque changement de numéro d'outil, pas au premier outil
+  (chargé selon la fiche) ; pas de mesure de longueur d'outil (G43.1 / palpage après changement) : refaire le zéro Z
+  à la main après chaque pause si les longueurs diffèrent. Deux outils sous le même numéro : export refusé.
+- Contrôles GRBL 1.1 (voir CHANGELOG [B5]) : faits sur le texte du G-code, pas sur un contrôleur réel ; arcs vérifiés
+  quand la position de départ est connue (pas après un palpage ou en G91) ; longueur de ligne 80 caractères (GRBL
+  1.1 sur AVR, grblHAL accepte plus) ; M7 refusé sauf arrosage brouillard déclaré dans le profil.
+- 4e axe indexé : la remontée avant rotation couvre le brut balayé, pas le mandrin ni la contre-pointe (non modélisés).
 
 ## Interface
 
@@ -240,6 +250,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Import et pièce
 
+- 3MF : lu par le module Mesh de FreeCAD (testé sur un 3MF écrit par FreeCAD ; 3MF de trancheuse à plusieurs
+  objets ou transformations non vérifié).
 - Maillages (STL, OBJ...) : fermé et jusqu'à 200 000 triangles -> solide affiné ; ouvert ou plus gros ->
   **surface 3D** (faces du maillage, non cousues) : brut, surfaçage (dessus du brut jusqu'au haut de la pièce,
   limite = brut) et finitions 3D (surface, Z constant) seulement, avec `BoundBox = Stock` ; contour, poche, adaptative, ébauche 3D, perçage, gravure... refusés sur une
