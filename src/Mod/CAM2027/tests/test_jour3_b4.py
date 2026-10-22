@@ -301,6 +301,18 @@ class TestScallopWalls(unittest.TestCase):
         self.assertAlmostEqual(res["sample"], 0.1)
         self.assertGreater(len(res["shallow"]), 10)
         self.assertEqual(res["uncovered"], 0)
+        # parcours trop gros (plateau de l'utilisateur : plus de 10 Go) : refus clair avant de le construire
+        from cam2027.i18n import UserError
+
+        total = scallop.check_size(res["shallow"], res["sample"], 0.02)
+        saved = scallop.MAX_PATH_POINTS
+        scallop.MAX_PATH_POINTS = int(total / 2)
+        try:
+            with self.assertRaises(UserError) as ctx:
+                scallop.check_size(res["shallow"], res["sample"], 0.02)
+        finally:
+            scallop.MAX_PATH_POINTS = saved
+        self.assertIn("scallop height", str(ctx.exception))
 
 
 def order_passes_reference(lines):

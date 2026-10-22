@@ -57,6 +57,11 @@
   égalités que la recherche exhaustive d'avant, comparées dans un test). ER16 : 17,0 s → 0,23 s pour l'ordre (calcul
   complet 42–50 s → 25–29 s, mêmes 536 205 commandes, même volume enlevé), disque : 1,7 s → 0,04 s ; ordre identique sur les deux. Sur le plateau (34 000 passes)
   l'ancien ordre ne finissait pas en 25 minutes.
+- **[B4]** Garde-fou : **finition à crête constante refusée au-delà de 2,5 millions de points de parcours**, avec un
+  message qui dit quoi changer (crête, intervalle, zone). Mesuré : chauffage Vz330 2,2 millions de commandes, calcul
+  143 s, sous 6 Go ; plateau 220 × 220 mm à 0,02 mm de crête 4,3 millions, **8,6 Go à 86 s** (arrêté) — refusé
+  maintenant après 38 s. Avec la grande grille et l'ordre des passes ci-dessus, le chauffage, qui ne donnait aucun
+  résultat cette nuit (plus de 25 min), est calculé.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

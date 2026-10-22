@@ -39,6 +39,8 @@ STAY_DOWN_STEPS = 2.0
 #: pente au-delà de laquelle la grille ne représente plus la surface (parois) : non contrôlée en couverture
 WALL_DEG = 75.0
 MAX_GRID_POINTS = 4000000
+#: points du parcours au-delà desquels le calcul est refusé (chauffage Vz330 : 2,2 millions, < 6 Go ; plateau : 4,3 millions, 8,6 Go mesurés)
+MAX_PATH_POINTS = 2500000
 #: coupe remplacée par une marche : plus raide que cette pente (dz / dxy) et sous la surface de plus de REFINE_TOL
 STEEP_SLOPE = 2.0
 REFINE_TOL = 0.002
@@ -369,6 +371,23 @@ def _dilate(mask, n):
 # -- passes en 3D et liaisons -------------------------------------------------------------------------------
 
 
+def check_size(lines, sample, scallop):
+    """Refus clair quand le parcours dépasserait ``MAX_PATH_POINTS`` points (un point par intervalle
+    d'échantillonnage) : plateau 220 x 220 mm de l'utilisateur à 0,02 mm de crête, 4,3 millions de points, plus de
+    10 Go de mémoire avant la fin du calcul."""
+    np = _np()
+    total = 0
+    for l in lines:  # même compte que ``_resample`` : au moins un point par segment
+        if len(l) >= 2:
+            d = np.hypot(*np.diff(np.asarray(l)[:, :2], axis=0).T)
+            total += 1 + int(np.maximum(np.ceil(d / sample), 1).sum())
+    if total > MAX_PATH_POINTS:
+        raise UserError("constant scallop finishing: about {n} million points for this area at a {h} mm scallop height: "
+                        "increase the scallop height or the sample interval, or limit the area",
+                        n="%.1f" % (total / 1e6), h="%g" % scallop)
+    return total
+
+
 def order_passes(lines):
     """Ordre des passes : plus proche voisin (boucles tournées, lignes ouvertes retournées au besoin).
 
@@ -617,6 +636,7 @@ class ObjectScallop(PathOp.ObjectOp):
                              zmin=float(obj.FinalDepth.Value))
         opsmod.keep_gui_alive()
         obj.Stepover3D = res["stepover"]
+        check_size(res["steep"] + res["shallow"], res["sample"], float(obj.ScallopHeight.Value))
         lines = order_passes(res["steep"]) + order_passes(res["shallow"])
         moves = moves_for(surface, lines, res["sample"], float(obj.SafeHeight.Value),
                           STAY_DOWN_STEPS * res["stepover"])
