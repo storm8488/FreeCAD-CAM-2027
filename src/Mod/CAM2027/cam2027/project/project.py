@@ -28,6 +28,7 @@ from . import dressups as dressupmod
 from . import sheet as sheetmod
 from . import indexing
 from . import wrap as wrapmod
+from . import keepout  # zones interdites : complète le calcul de chaque opération (rapides relevés)
 #: mouvements de coupe balayés d'un coup par le contrôle matière (paquets vectorisés)
 PENDING_SEGMENTS = 4096
 #: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
@@ -654,7 +655,8 @@ class Project(object):
         simulated, skipped, approximations = [], [], []
         from . import stock as stockmod
 
-        boxes = [(c.Label, c.Shape.BoundBox) for c in stockmod.clamps(self.doc) if getattr(c, "Shape", None)]
+        boxes = [(c.Label, c.Shape.BoundBox) for c in stockmod.clamps(self.doc) if getattr(c, "Shape", None)] \
+            + keepout.zone_boxes(self.doc)
         events = []  # (type, opération, n° de commande, position, valeur)
         no_holder = []
         pos = None
@@ -1208,7 +1210,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self) \
-            + self.collision_issues()
+            + self.collision_issues() + keepout.issues(self)
         if any(level == "error" for level, _m in issues):
             raise ExportBlocked(issues, sections, analysis)
         written = exportmod.write_gcode(sections, path)
@@ -1234,7 +1236,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None) \
-            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else [])
+            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else []) + keepout.issues(self)
         return text, analysis, issues
 
     # -- sauvegarde -----------------------------------------------------------

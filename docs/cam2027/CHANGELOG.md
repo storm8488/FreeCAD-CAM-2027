@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **[S3]** **Zones interdites** (« keep-out zones » d'Aspire 12) : Préparer > Zones interdites dessine des boîtes
+  (vue de dessus + Z du dessus) ; option « les rapides évitent aussi les brides ». À la fin du calcul de chaque
+  opération, un rapide qui passerait au-dessus d'une zone plus bas que son dessus + marge (2 mm par défaut, outil
+  compris vu de dessus) monte, traverse et redescend ; le premier déplacement d'une opération (départ inconnu)
+  passe au-dessus de toutes les zones. Les coupes ne sont jamais modifiées : une coupe qui entre dans une zone est
+  une erreur bloquante à l'export (opération, n° de commande, position). Les zones comptent comme des brides au
+  contrôle de collision. Test : bride entre deux poches, rapides au travers avant, aucun après, coupes identiques,
+  contrôle des brides « OK ».
+
 - **[S3]** **Usinage recto-verso** (comme le « Double Sided » d'Aspire) : Préparer > Usinage recto-verso crée la
   face B, pièce retournée de 180° autour de X ou de Y par le centre du brut (même brut, même repère G54), dans un
   second job du document ; boutons « Face A / Face B » dans le panneau Projet (ajout, recalcul, aperçu et export

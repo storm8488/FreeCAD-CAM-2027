@@ -774,6 +774,7 @@ def main():
             ("import-twice", lambda: scenario_import_twice("import-twice", next(
                 (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
             ("two-sided", lambda: _s3().scenario_two_sided("two-sided", tmp)),
+            ("keep-out", lambda: _s3().scenario_keepout("keep-out", tmp)),
     ) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),

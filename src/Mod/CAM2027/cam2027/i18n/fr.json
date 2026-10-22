@@ -1040,5 +1040,22 @@
   "two-sided machining needs box stock (round stock is for the 4th axis)": "le recto-verso demande un brut parallélépipédique (le brut rond est pour le 4e axe)",
   "two-sided: the stock of side B differs from the stock of side A": "recto-verso : le brut de la face B diffère de celui de la face A",
   "Registration holes (dowels)": "Trous de repérage (goujons)",
-  "Machine the part on both sides: side B is the part turned over (flip about X or Y), with dowel pins or the same corner": "Usiner la pièce des deux côtés : la face B est la pièce retournée (autour de X ou de Y), repérée par goujons ou par le même coin"
+  "Machine the part on both sides: side B is the part turned over (flip about X or Y), with dowel pins or the same corner": "Usiner la pièce des deux côtés : la face B est la pièce retournée (autour de X ou de Y), repérée par goujons ou par le même coin",
+  "(new)": "(nouvelle)",
+  "Add zone": "Ajouter la zone",
+  "Clearance above and around a zone (mm)": "Marge au-dessus et autour d'une zone (mm)",
+  "Keep-out zones": "Zones interdites",
+  "New zone (box seen from above)": "Nouvelle zone (boîte vue de dessus)",
+  "Rapid moves also avoid the clamps": "Les rapides évitent aussi les brides",
+  "Rapid moves that would pass over a zone lower than its top + clearance go up, across and down again; the cuts are never changed: a cut that enters a zone blocks the export, with its position.": "Un rapide qui passerait au-dessus d'une zone plus bas que son dessus + la marge monte, traverse puis redescend ; les coupes ne sont jamais modifiées : une coupe qui entre dans une zone bloque l'export, avec sa position.",
+  "Remove the selected zone": "Retirer la zone sélectionnée",
+  "Top Z (mm)": "Z du dessus (mm)",
+  "X Y (mm)": "X Y (mm)",
+  "X from (mm)": "X de (mm)",
+  "X to (mm)": "X à (mm)",
+  "Y from (mm)": "Y de (mm)",
+  "Y to (mm)": "Y à (mm)",
+  "Zone": "Zone",
+  "{op}: a cut enters the keep-out zone {zone}, command {n}, tip at X{x} Y{y} Z{z}": "{op} : une coupe entre dans la zone interdite {zone}, commande {n}, pointe en X{x} Y{y} Z{z}",
+  "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export": "Boîtes que les rapides passent par-dessus (brides, zones dessinées) ; une coupe qui entre dans une zone bloque l'export"
 }

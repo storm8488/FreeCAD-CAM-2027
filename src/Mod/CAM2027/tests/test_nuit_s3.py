@@ -200,3 +200,146 @@ class TestTwoSided(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def make_two_pocket_part(path):
+    """Plaque 80 x 60 x 10 avec deux poches rectangulaires (X 10..30 et 50..70, Y 15..45, profondeur 4)."""
+    plate = Part.makeBox(80, 60, 10)
+    for x in (10.0, 50.0):
+        plate = plate.cut(Part.makeBox(20, 30, 4, FreeCAD.Vector(x, 15, 6)))
+    plate.exportStep(path)
+    return plate
+
+
+def moves(path):
+    """``[(nom, x, y, z)]`` des mouvements (positions modales)."""
+    pos, out = {}, []
+    for c in path.Commands:
+        if c.Name in ("G0", "G1", "G2", "G3"):
+            for k in "XYZ":
+                if k in c.Parameters:
+                    pos[k] = c.Parameters[k]
+            out.append((c.Name,) + tuple(round(pos.get(k, float("nan")), 6) for k in "XYZ") + (
+                tuple(round(c.Parameters.get(k, 0.0), 6) for k in "IJ") if c.Name in ("G2", "G3") else ()))
+    return out
+
+
+class TestKeepOut(unittest.TestCase):
+    #: bride entre les deux poches, plus haute que le plan de dégagement
+    CLAMP = (36.0, -10.0, 8.0, 80.0, 30.0)  # x, y, longueur, largeur, hauteur (posée sur la plaque à Z 10)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s3k-")
+        cls.step = os.path.join(cls.tmp, "two_pockets.step")
+        make_two_pocket_part(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _project(self, name):
+        lib = starter_library()
+        proj = Project.create(name, lib, machine())
+        part = proj.import_model(self.step, label="Plate").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        floors = [n for n in (planar_face_at(clone, 6.0, 600.0),) if n]
+        floors = ["Face%d" % i for i, f in enumerate(clone.Shape.Faces, 1)
+                  if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 6.0) < 1e-6
+                  and abs(f.BoundBox.ZMin - 6.0) < 1e-6]
+        self.assertEqual(len(floors), 2)
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        op, _r = proj.add_operation("pocket", "Two pockets", asm.id, endmill.presets[0].id, base=[(clone, floors)],
+                                    params={"StepDown": 2.0, "StepOver": 40})
+        op2, _r = proj.add_operation("pocket", "Right pocket again", asm.id, endmill.presets[0].id,
+                                     base=[(clone, [floors[0]])], params={"StepDown": 2.0, "StepOver": 40})
+        proj.compute()
+        return proj, lib, [op, op2]
+
+    def _crossing_rapids(self, proj, boxes):
+        from cam2027.project import sim, keepout
+
+        hits = []
+        pos = None
+        for op in proj.operations():
+            segs, pos = sim.path_segments(op.Path.Commands, pos)
+            r = keepout._tool_radius(op)
+            for rapid, p0, p1 in segs:
+                if rapid and keepout.blocking_top(p0, p1, boxes, r, 0.0) is not None:
+                    hits.append((op.Label, p0, p1))
+        return hits
+
+    def test_rapids_hop_over_clamp(self):
+        """Bride entre deux poches : sans zone, des rapides la traversent ; zone active : plus aucun, le contrôle de
+        collision des brides est OK et les mouvements de coupe sont identiques."""
+        from cam2027.project import keepout
+
+        proj, lib, ops = self._project("Keep-out clamp")
+        x, y, l, w, h = self.CLAMP
+        clamp = proj.add_clamp("Clamp middle", l, w, h, (x, y, 10.0))
+        boxes = [(clamp.Label, clamp.Shape.BoundBox)]
+        before = {op.Name: moves(op.Path) for op in ops}
+        crossing = self._crossing_rapids(proj, boxes)
+        self.assertTrue(crossing, "le cas d'essai doit avoir des rapides à travers la bride")
+        rep = proj.material_check()
+        self.assertEqual(rep["collisions"]["clamps"], "collision")
+        t0 = time.time()
+        keepout.configure(proj.doc, avoid_clamps=True)
+        proj.compute()
+        elapsed = time.time() - t0
+        self.assertEqual(self._crossing_rapids(proj, boxes), [])
+        for op in ops:
+            cuts_before = [m for m in before[op.Name] if m[0] != "G0"]
+            cuts_after = [m for m in moves(op.Path) if m[0] != "G0"]
+            self.assertEqual(cuts_before, cuts_after, op.Label)
+            self.assertEqual(list(getattr(op, keepout.VIOLATION_PROPERTY, [])), [])
+        rep = proj.material_check()
+        self.assertEqual(rep["collisions"]["clamps"], "ok", rep["collisions"]["events"])
+        self.assertEqual(rep["gouge_max"], 0.0)
+        self.assertEqual(rep["rapid_hits"], 0)
+        top = max(c.Parameters.get("Z", 0) for op in ops for c in op.Path.Commands)
+        self.assertGreaterEqual(top, 40.0 + keepout.DEFAULT_MARGIN - 1e-6)
+        self.assertFalse([m for lvl, m in keepout.issues(proj) if lvl == "error"])
+        print("keep-out: %d rapid(s) crossed the clamp before, recompute %.1f s" % (len(crossing), elapsed))
+        proj.close()
+
+    def test_drawn_zone_and_refused_cut(self):
+        """Zone dessinée sur la poche de droite : la coupe qui y entre est refusée avec sa position, export bloqué ;
+        zone retirée : plus d'erreur."""
+        from cam2027.project import keepout
+        from cam2027.project.project import ExportBlocked
+
+        proj, lib, ops = self._project("Keep-out zone")
+        zone = keepout.add_zone(proj.doc, 55.0, 25.0, 65.0, 35.0, 12.0, label="No-go")
+        proj.compute()
+        errs = keepout.issues(proj)
+        self.assertTrue(errs)
+        text = str(errs[0][1])
+        self.assertIn("No-go", text)
+        self.assertIn("Two pockets", text)
+        with self.assertRaises(ExportBlocked):
+            proj.export_gcode(os.path.join(self.tmp, "zone.nc"))
+        keepout.remove_zone(proj.doc, zone)
+        proj.compute()
+        self.assertEqual(keepout.issues(proj), [])
+        proj.close()
+
+    def test_reroute_unit(self):
+        """Rapide au ras d'une boîte : montée au dessus + marge, déplacement, descente ; départ inconnu relevé."""
+        import Path
+        from cam2027.project import keepout
+
+        bb = FreeCAD.BoundBox(10, -5, 0, 20, 5, 20)
+        cmds = [Path.Command("G0", {"Z": 5.0}), Path.Command("G0", {"X": 0.0, "Y": 0.0}),
+                Path.Command("G1", {"Z": 1.0}), Path.Command("G0", {"Z": 5.0}),
+                Path.Command("G0", {"X": 30.0, "Y": 0.0}), Path.Command("G1", {"Z": 1.0})]
+        out, hits = keepout.reroute(cmds, [("box", bb)], 3.0, 2.0)
+        self.assertEqual(hits, [])
+        self.assertEqual(out[0].Parameters["Z"], 22.0)  # départ inconnu : au-dessus de toutes les zones
+        names = [(c.Name, dict(c.Parameters)) for c in out]
+        self.assertIn(("G0", {"X": 30.0, "Y": 0.0, "Z": 22.0}), names)
+        self.assertEqual(out[-1].Name, "G1")
+        # coupe à travers la boîte : signalée, jamais modifiée
+        cmds = [Path.Command("G0", {"X": 0.0, "Y": 0.0, "Z": 5.0}), Path.Command("G1", {"X": 30.0, "Y": 0.0, "Z": 5.0})]
+        out, hits = keepout.reroute(cmds, [("box", bb)], 3.0, 2.0)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(hits[0][0], 2)

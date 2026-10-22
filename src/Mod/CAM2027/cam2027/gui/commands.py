@@ -816,6 +816,35 @@ class TwoSided(_Base):
         _info(tr("Side B created. Switch between side A and side B in the Project panel."))
 
 
+class KeepOut(_Base):
+    atelier = "stop"
+    text = "Keep-out zones"
+    tooltip = "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from . import keepout as kogui
+
+        dlg = kogui.KeepOutDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        with busy(tr("Computing the toolpaths...")):
+            dlg.apply()
+            proj.compute()
+        _after_change()
+        from ..project import keepout
+
+        errors = keepout.issues(proj)
+        if errors:
+            _warn("\n".join(tr_msg(m) for _lvl, m in errors))
+
+
 class Compute(_Base):
     icon = "cam2027-compute.svg"
     atelier = "recalculate"
@@ -1361,6 +1390,7 @@ COMMANDS = [
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
     ("CAM2027_TwoSided", TwoSided),
+    ("CAM2027_KeepOut", KeepOut),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -1380,7 +1410,7 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "Separator", "CAM2027_ToolLibrary",
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
                    "Separator", "CAM2027_Compute"]),

@@ -50,6 +50,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   Les brides sont communes aux deux faces. Goujons : trous par plongées avec débourrage (opération « Custom »,
   pas de G81 sous GRBL), outil de même diamètre que le goujon ; jeu non géré.
 
+- **Zones interdites** (S3) : boîtes rectangulaires vues de dessus seulement. La correction est faite à la fin
+  du calcul de chaque opération FreeCAD (`ObjectOp.execute` complété) : les habillages (attaches, rampes, entrées
+  et sorties) recalculés ensuite gardent leurs propres rapides tels quels (le contrôle de collision les voit). Le
+  rapide relevé passe au-dessus de la zone (Z du dessus + marge) avec l'outil seul en compte vu de dessus : un
+  porte-outil plus large que la fraise qui redescend contre le bord d'une zone n'est vu que par le contrôle de
+  collision. Le premier déplacement de chaque opération passe au-dessus de toutes les zones (sa position de départ
+  dépend de l'opération précédente). Les brides sont évitées seulement si l'option est cochée.
+
 ## Opérations
 
 - Stratégies exposées : contour, poche, adaptative 2D, perçage, surfaçage, gravure,

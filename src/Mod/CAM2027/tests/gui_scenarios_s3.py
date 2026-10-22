@@ -110,3 +110,78 @@ def scenario_two_sided(scenario, tmp):
         if not os.path.isfile(sheet) or "Two-sided machining - side %s" % side not in open(sheet, encoding="utf-8").read():
             G.problem(scenario, "setup sheet of side %s without the two-sided section" % side)
     G.check_docks(scenario)
+
+
+def _two_pocket_part(tmp):
+    import Part
+
+    plate = Part.makeBox(80, 60, 10)
+    for x in (10.0, 50.0):
+        plate = plate.cut(Part.makeBox(20, 30, 4, FreeCAD.Vector(x, 15, 6)))
+    path = os.path.join(tmp, "two_pockets.step")
+    plate.exportStep(path)
+    return path
+
+
+def scenario_keepout(scenario, tmp):
+    """Bride dessinée comme zone interdite entre deux poches, par le dialogue : plus aucun rapide au travers,
+    contrôle des brides OK, export possible."""
+    from cam2027.project import keepout, sim
+
+    G.new_project(scenario, "KeepOut")
+    G.driver.open_files.append(_two_pocket_part(tmp))
+    G.run_command(scenario, "CAM2027_ImportModel")
+    G.run_command(scenario, "CAM2027_StockFixture")
+    proj = G.project()
+    clone = proj.job.Model.Group[0]
+    floors = ["Face%d" % i for i, f in enumerate(clone.Shape.Faces, 1)
+              if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 6.0) < 1e-6 and abs(f.BoundBox.ZMin - 6.0) < 1e-6]
+    FreeCADGui.Selection.clearSelection()
+    for f in floors:
+        FreeCADGui.Selection.addSelection(clone, f)
+    G.driver.handlers[G.tr("Add operation")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "pocket"), "pocket"), True)[1]
+    G.run_command(scenario, "CAM2027_AddOperation")
+    G.accept_open_editors(scenario)
+    FreeCADGui.Selection.clearSelection()
+    G.run_command(scenario, "CAM2027_Compute")
+
+    def zone(dlg):
+        dlg.xmin.setValue(36.0)
+        dlg.xmax.setValue(44.0)
+        dlg.ymin.setValue(-10.0)
+        dlg.ymax.setValue(70.0)
+        dlg.ztop.setValue(40.0)
+        from cam2027.gui.qt import QtWidgets
+
+        for b in dlg.findChildren(QtWidgets.QPushButton):
+            if b.text() == G.tr("Add zone"):
+                b.click()
+        if dlg.table.rowCount() != 1:
+            G.problem(scenario, "the new zone is not listed in the dialog")
+        return True
+
+    G.driver.handlers[G.tr("Keep-out zones")] = zone
+    G.run_command(scenario, "CAM2027_KeepOut")
+    proj = G.project()
+    boxes = keepout.zone_boxes(proj.doc)
+    if len(boxes) != 1:
+        G.problem(scenario, "expected one keep-out zone, found %d" % len(boxes))
+        return
+    pos, crossing = None, 0
+    for op in proj.operations():
+        segs, pos = sim.path_segments(op.Path.Commands, pos)
+        r = keepout._tool_radius(op)
+        crossing += sum(1 for rapid, p0, p1 in segs if rapid and keepout.blocking_top(p0, p1, boxes, r, 0.0) is not None)
+    G.log("  rapids through the zone: %d" % crossing)
+    if crossing:
+        G.problem(scenario, "%d rapid move(s) still cross the keep-out zone" % crossing)
+    G.run_command(scenario, "CAM2027_MaterialCheck")
+    last = proj.last_check()
+    if last is None or last["status"]["clamps"] != "ok":
+        G.problem(scenario, "clamp / zone collision check not OK: %s" % (last and last["status"]))
+    out = os.path.join(tmp, "keepout.nc")
+    G.driver.handlers[G.tr("Export G-code")] = lambda dlg: G._export(dlg, out)
+    G.run_command(scenario, "CAM2027_Export")
+    if not os.path.isfile(out):
+        G.problem(scenario, "no G-code written with the keep-out zone")
+    G.check_docks(scenario)
