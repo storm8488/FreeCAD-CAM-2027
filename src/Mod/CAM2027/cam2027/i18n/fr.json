@@ -1450,5 +1450,6 @@
   "{n} cutting move(s) without a feed rate (GRBL error:22; after G93 -> G94 the feed must be given again)": "{n} mouvement(s) de coupe sans avance (GRBL error:22 ; après G93 -> G94, l'avance doit être redonnée)",
   "the spindle is still running at the end of the program (no M5)": "la broche tourne encore à la fin du programme (pas de M5)",
   "no program end (M2 / M30): the controller keeps the last modal state": "pas de fin de programme (M2 / M30) : le contrôleur garde le dernier état modal",
-  "{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)": "{n} ligne(s) avec du texte qui n'est pas du G-code hors des commentaires (GRBL error:1 ou error:2)"
+  "{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)": "{n} ligne(s) avec du texte qui n'est pas du G-code hors des commentaires (GRBL error:1 ou error:2)",
+  "{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)": "{n} mouvement(s) de coupe broche arrêtée (avant M3, après M5 ou à S0)"
 }

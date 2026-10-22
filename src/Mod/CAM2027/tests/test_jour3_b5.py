@@ -350,6 +350,17 @@ class TestGrblProgramState(unittest.TestCase):
         # M30 arrête aussi la broche (GRBL : fin de programme)
         self.assertFalse(any("still running" in m for m in self.msgs("G21\nG54\nM3 S1000\nG1 X1 F100\nM30\n")))
 
+    def test_cutting_with_spindle_stopped(self):
+        """Coupe broche arrêtée : avant M3, après M5 ou avec S0 (préréglage Fusion « n » = 0 accepté) ; la plage de
+        broche ne regardait que S > 0 (B5-16). Le palpage (G38.2, broche arrêtée exprès) n'est pas compté."""
+        head = "G21\nG90\nG54\n"
+        a = exportmod.analyze_gcode(head + "G0 X0 Y0 Z5\nG1 Z-1 F100\nM3 S12000\nG1 X10\nM5\nG1 X20\nM3 S0\nG1 X30\nM2\n")
+        self.assertEqual(a["cut_spindle_off"], 3)
+        errors = self.msgs(head + "G0 X0\nG1 X1 F100\nM2\n", "error")
+        self.assertTrue(any("spindle stopped" in e for e in errors), errors)
+        probe = head + "M5\nG91\nG38.2 Z-25 F100\nG10 L20 P1 Z0\nG0 Z2\nG90\nM3 S10000\nG1 X5 F300\nM5\nM2\n"
+        self.assertEqual(exportmod.analyze_gcode(probe)["cut_spindle_off"], 0)
+
     def test_mist_and_parking_codes(self):
         """M7 (brouillard) et M56 (forçage du parking) n'existent dans GRBL 1.1 qu'avec ENABLE_M7 /
         ENABLE_PARKING_OVERRIDE_CONTROL (désactivés par défaut) : error:20 sur la machine, alors que le contrôle

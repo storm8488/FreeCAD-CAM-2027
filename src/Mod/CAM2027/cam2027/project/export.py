@@ -219,6 +219,8 @@ def analyze_gcode(text):
     undefined_feed = 0
     spindle_on = False
     program_end = False  # M2 / M30 rencontré
+    speed = None  # dernier mot S (modal)
+    cut_spindle_off = 0  # coupes broche arrêtée (avant M3, après M5, S0)
     max_arc_error = 0.0
     bad_lines = 0  # lignes avec autre chose que des mots G-code hors commentaires
     fs = []  # mots F de la ligne
@@ -270,6 +272,7 @@ def analyze_gcode(text):
                 fs.append(v)
             elif letter == "S":
                 spindle.add(v)
+                speed = v
         has_axis = "X" in values or "Y" in values or "Z" in values or "A" in values or "B" in values or "C" in values
         cutting = motion in ("G1", "G2", "G3")
         if was_inverse and not inverse_time:
@@ -323,6 +326,8 @@ def analyze_gcode(text):
                 spindle_on = False
             elif code in ("M2", "M30"):
                 spindle_on, program_end = False, True
+        if cutting and has_axis and not not_position and not (spindle_on and speed):
+            cut_spindle_off += 1
         for letter, v in coords:
             axes.add(letter)
             if relative or not_position:
@@ -367,6 +372,7 @@ def analyze_gcode(text):
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
         "bad_arcs": bad_arcs,
+        "cut_spindle_off": cut_spindle_off,
         "bad_lines": bad_lines,
         "undefined_feed": undefined_feed,
         "spindle_on_at_end": spindle_on,
@@ -410,6 +416,9 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("g93_arcs"):
         issues.append(("error", Msg("{n} arc(s) in inverse-time mode (G93): not checked, not supported",
                                     n=analysis["g93_arcs"])))
+    if analysis.get("cut_spindle_off"):
+        issues.append(("error", Msg("{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)",
+                                    n=analysis["cut_spindle_off"])))
     if analysis.get("bad_lines"):
         issues.append(("error", Msg("{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)",
                                     n=analysis["bad_lines"])))
