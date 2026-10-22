@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **[B2]** **Contrôle matière, fraises torique et conique sur une pente** : le dessous de la fraise était pris au
+  point du segment le plus proche de la colonne, ce qui laissait jusqu'au dénivelé d'un morceau découpé (0,05 mm)
+  de matière en trop : des entailles de 0,02 à 0,05 mm (au-delà de la tolérance) n'étaient jamais vues sur les
+  rampes, hélices et pentes. Minimum exact sur la plage où le disque couvre la colonne (fonction convexe, section
+  dorée) : la carte = la fraise posée tous les 2 µm à 0,005 mm près (avant : 0,050 mm). Fraises plate et boule
+  inchangées (déjà exactes).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

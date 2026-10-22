@@ -27,6 +27,7 @@ MAX_CELLS = 2_000_000
 _ARC_STEP_MM = 0.25
 _SLOPE_STEP_MM = 0.5
 _SLOPE_DZ_MM = 0.05
+_GOLDEN_STEPS = 14  # section dorée des profils torique / conique sur pente : plage réduite à 0,1 %
 
 
 #: profondeur à partir de laquelle un rapide (G0) compte comme entrant dans la matière (mm)
@@ -303,7 +304,41 @@ class ZMap(object):
         else:
             z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * dz)
             z = z_tip + tool.lift(np.minimum(d, r))
+            if (dz != 0).any():
+                z = np.minimum(z, self._slope_bottom(X, Y, x0, y0, z0, dx, dy, dz, L2s, vertical, t_foot, tool))
         return i0, i1, j0, j1, np.where(inside, z, np.inf), vertical[:, 0, 0]
+
+    @staticmethod
+    def _slope_bottom(X, Y, x0, y0, z0, dx, dy, dz, L2s, vertical, t_foot, tool):
+        """Torique et conique sur une pente : plus bas dessous de la fraise sur la plage de paramètres où son
+        disque couvre la colonne. ``z(t) + lift(distance(t))`` est convexe (profil croissant et convexe de la
+        distance, elle-même convexe) : section dorée sur la plage, bornes comprises. Le point le plus proche
+        laissait jusqu'au dénivelé d'un morceau (0,05 mm) de matière en trop."""
+        np = _np()
+        r = tool.radius
+        d_perp = np.hypot(X - (x0 + t_foot * dx), Y - (y0 + t_foot * dy))
+        half = np.sqrt(np.maximum(r * r - d_perp * d_perp, 0.0)) / np.sqrt(L2s)
+        a = np.where(vertical, 0.0, np.maximum(t_foot - half, 0.0))
+        b = np.where(vertical, 1.0, np.minimum(t_foot + half, 1.0))
+        b = np.maximum(a, b)
+
+        def f(tt):
+            dd = np.hypot(X - (x0 + tt * dx), Y - (y0 + tt * dy))
+            return z0 + tt * dz + tool.lift(np.minimum(dd, r))
+
+        best = np.minimum(f(a), f(b))
+        g = (math.sqrt(5.0) - 1.0) / 2.0
+        c, e = b - g * (b - a), a + g * (b - a)
+        fc, fe = f(c), f(e)
+        for _k in range(_GOLDEN_STEPS):
+            left = fc < fe  # minimum dans [a, e]
+            b = np.where(left, e, b)
+            a = np.where(left, a, c)
+            new = np.where(left, b - g * (b - a), a + g * (b - a))
+            fn = f(new)
+            c, e, fc, fe = (np.where(left, new, e), np.where(left, c, new),
+                            np.where(left, fn, fe), np.where(left, fc, fn))
+        return np.minimum(best, np.minimum(fc, fe))
 
     def _sweep_chunk(self, P0, P1, tool, rapid=False):
         np = _np()
