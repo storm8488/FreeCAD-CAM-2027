@@ -40,6 +40,11 @@
   6 mm avec la boule de 6 (le test de la nuit ne regardait la carte radiale que loin des parois, sur une poche de
   2 mm). Deux points voisins plus écartés en hauteur que 2 fois leur distance sont maintenant reliés par une marche
   (palier à la plus haute des deux hauteurs, puis montée ou descente seule), en lignes comme en spirale.
+- **[B4]** Correctif : **finition à crête constante (`scallop`) refusée sur les grandes pièces** (plateau 220 × 220 mm
+  de l'utilisateur : « 4 840 801 points de surface, augmentez l'intervalle d'échantillonnage »). La grille ne porte
+  que la distance le long de la surface (chaque point des passes est recalculé par OpenCamLib à l'intervalle
+  demandé) : au-delà de 4 millions de points, elle grossit jusqu'à pas / 4 au lieu de refuser (correctif préparé
+  par S4 cette nuit, non vérifié alors).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

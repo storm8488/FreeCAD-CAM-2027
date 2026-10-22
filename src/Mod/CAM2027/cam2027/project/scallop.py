@@ -305,6 +305,11 @@ def compute_passes(surface, bounds, diameter, corner_radius, scallop, sample=DEF
     s = stepover(scallop, corner_radius, diameter)
     g = min(float(sample), s / GRID_PER_STEP)
     xmin, ymin, xmax, ymax = bounds
+    # la grille ne porte que la distance le long de la surface (chaque point final est recalculé par
+    # OpenCamLib) : sur une grande pièce elle peut grossir jusqu'à pas / 4
+    cells = ((xmax - xmin) / g + 1) * ((ymax - ymin) / g + 1)
+    if cells > MAX_GRID_POINTS:
+        g = max(g, min(s / GRID_PER_STEP, math.sqrt((xmax - xmin) * (ymax - ymin) / (0.9 * MAX_GRID_POINTS))))
     grid = Grid(surface, xmin, ymin, xmax, ymax, g, zmin=zmin)
     valid = grid.valid
     if not valid.any():
@@ -352,7 +357,7 @@ def compute_passes(surface, bounds, diameter, corner_radius, scallop, sample=DEF
         warnings.append(Msg("walls steeper than {a:g}° are not checked by the scallop computation: use steep and shallow mode",
                             a=WALL_DEG))
     return {"shallow": shallow_lines + extra, "steep": steep_lines, "stepover": s, "grid": grid,
-            "uncovered": int(todo.sum()), "warnings": warnings, "sample": g}
+            "uncovered": int(todo.sum()), "warnings": warnings, "grid_step": g, "sample": min(float(sample), g)}
 
 
 def _dilate(mask, n):

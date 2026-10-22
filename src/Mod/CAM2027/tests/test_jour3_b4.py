@@ -130,6 +130,120 @@ class TestKeepOutPattern(unittest.TestCase):
         self.assertEqual(keepout.issues(proj), [])
 
 
+class TestHolesBodies(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_holes_of_every_body(self):
+        """Pièce en deux corps (le chauffage de l'utilisateur en a deux), un trou Ø3 débouchant dans chacun : le
+        perçage intelligent les trouve et les perce tous les deux. Avant : seul le premier corps du job était lu."""
+        from cam2027.project import holes
+
+        lib = starter_library()
+        proj = Project.create("B4 holes bodies", lib, machine())
+        objs = []
+        for k, x in enumerate((0.0, 40.0)):
+            o = proj.doc.addObject("Part::Feature", "Body%d" % k)
+            o.Shape = Part.makeBox(30, 30, 10, V(x, 0, 0)).cut(Part.makeCylinder(1.5, 10, V(x + 15, 15, 0)))
+            objs.append(o)
+        proj.doc.recompute()
+        proj.create_job(objs, stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        found = holes.find_job_holes(proj)
+        self.assertEqual(sorted((round(h.x, 3), round(h.y, 3)) for h in found), [(15.0, 15.0), (55.0, 15.0)])
+        steps, notes = holes.plan(lib, found)
+        self.assertEqual(len(holes.groups(found)), 1)
+        ops = holes.apply_plan(proj, proj.job.Model.Group[0], steps)
+        res = {r["name"]: r for r in proj.compute()}
+        self.assertTrue(all(r["valid"] for r in res.values()), res)
+        rep = proj.material_check(resolution=0.25)
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        self.assertEqual(rep["rapid_hits"], 0, rep)
+        z = proj.last_zmap
+        for x in (15.0, 55.0):
+            top = float(z.top[int(round((x - z.xs[0]) / z.res)), int(round((15.0 - z.ys[0]) / z.res))])
+            self.assertLess(top, 0.0, x)  # percé jusqu'en dessous du fond
+
+
+def ball_penetration(commands, boxes, radius, step=0.01):
+    """Pénétration maximale (mm, distance normale) d'une boule de rayon ``radius`` (pointe = point du parcours) dans
+    une union de boîtes ``(xmin, ymin, zmin, xmax, ymax, zmax)`` le long des mouvements de coupe (calcul exact)."""
+    import numpy as np
+    from cam2027.project import sim
+
+    segs, _pos = sim.path_segments(commands)
+    P0 = np.array([s[1] for s in segs if not s[0]])
+    P1 = np.array([s[2] for s in segs if not s[0]])
+    worst, at = 0.0, None
+    n = np.maximum(1, np.ceil(np.linalg.norm(P1 - P0, axis=1) / step).astype(int))
+    idx = np.repeat(np.arange(len(P0)), n + 1)
+    t = np.concatenate([np.linspace(0, 1, k + 1) for k in n])
+    pts = P0[idx] + (P1[idx] - P0[idx]) * t[:, None]
+    centre = pts + np.array([0.0, 0.0, radius])
+    dist = np.full(len(pts), np.inf)
+    for b in boxes:
+        lo, hi = np.array(b[:3]), np.array(b[3:])
+        d = np.linalg.norm(np.maximum(np.maximum(lo - centre, 0.0), centre - hi), axis=1)
+        inside = np.all((centre > lo) & (centre < hi), axis=1)
+        dist = np.minimum(dist, np.where(inside, 0.0, d))
+    pen = radius - dist
+    k = int(np.argmax(pen))
+    return float(pen[k]), tuple(np.round(pts[k], 3))
+
+
+class TestScallopWalls(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_no_gouge_at_vertical_wall(self):
+        """Marche de 10 mm à paroi verticale : deux points voisins d'une passe (0,1 mm en XY) sont l'un sur l'arête
+        (boule posée sur le bord), l'autre au pied de la paroi ; la droite qui les relie entrait dans l'arête
+        (0,05 mm sur l'ER16 de l'utilisateur). Pénétration exacte de la boule dans la pièce <= 0,005 mm."""
+        import os
+        import tempfile
+        from cam2027.gui.commands import default_params
+
+        boxes = [(0.0, 0.0, 0.0, 40.0, 30.0, 5.0), (20.0, 0.0, 5.0, 40.0, 30.0, 15.0)]
+        path = os.path.join(tempfile.mkdtemp(prefix="cam2027-b4s-"), "step.step")
+        Part.makeBox(40, 30, 5).fuse(Part.makeBox(20, 30, 10, V(20, 0, 5))).removeSplitter().exportStep(path)
+        lib = starter_library()
+        proj = Project.create("B4 scallop wall", lib, machine())
+        part = proj.import_model(path, label="Step").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        ball = lib.search("6 mm ball end mill")[0]
+        op, _rec = proj.add_operation("scallop", "Scallop", lib.assemblies_for_tool(ball.id)[0].id, ball.presets[0].id,
+                                      base=[(proj.job.Model.Group[0], [])],
+                                      params=default_params("scallop", ball, ball.presets[0].resolve(ball)))
+        res = {r["name"]: r for r in proj.compute()}
+        self.assertTrue(res["Scallop"]["valid"], res)
+        pen, at = ball_penetration(op.Path.Commands, boxes, 3.0)
+        self.assertLess(pen, 0.005, (pen, at))
+
+
+    def test_large_part_coarser_grid(self):
+        """Grande pièce : la grille de distance dépasse la limite de points. Avant : refus (« augmentez l'intervalle
+        d'échantillonnage » sur le plateau 220 x 220 de l'utilisateur) ; maintenant la grille, qui ne porte que la
+        distance le long de la surface, grossit jusqu'à pas / 4, et les points des passes restent à l'intervalle
+        demandé (hauteurs OpenCamLib). Limite abaissée pour le test : mêmes rapports sur une petite pièce."""
+        from cam2027.project import scallop
+
+        shape = Part.makeBox(40, 30, 5).fuse(Part.makeBox(20, 30, 10, V(20, 0, 5))).removeSplitter()
+        surface = scallop.Surface([shape], 6.0, 3.0)
+        saved = scallop.MAX_GRID_POINTS
+        scallop.MAX_GRID_POINTS = 60000  # 40 x 30 mm à 0,1 mm : 121 000 points
+        try:
+            res = scallop.compute_passes(surface, (0.0, 0.0, 40.0, 30.0), 6.0, 3.0, 0.02, sample=0.1)
+        finally:
+            scallop.MAX_GRID_POINTS = saved
+        self.assertGreater(res["grid"].g, 0.1)
+        self.assertLessEqual(res["grid"].g, res["stepover"] / scallop.GRID_PER_STEP + 1e-9)
+        self.assertLessEqual(res["grid"].z.size, 60000)
+        self.assertAlmostEqual(res["sample"], 0.1)
+        self.assertGreater(len(res["shallow"]), 10)
+        self.assertEqual(res["uncovered"], 0)
+
+
 class TestRotarySpiral(unittest.TestCase):
     """Finition 3D rotative en spirale (A tourne sans arrêt, X avance d'un pas par tour)."""
 
@@ -141,6 +255,58 @@ class TestRotarySpiral(unittest.TestCase):
 
     _project = __import__("tests.test_nuit_s4", fromlist=["x"]).TestRotary._project
     _speeds = __import__("tests.test_nuit_s4", fromlist=["x"]).TestRotary._speeds
+
+    def test_no_gouge_at_deep_walls(self):
+        """Gorge annulaire (X 30..50) et poche en secteur (X 55..75, |A| <= 0,3 rad, parois radiales) de 6 mm de
+        profondeur, plus que le rayon de la boule : à la paroi, deux points voisins d'une passe (lignes le long de
+        l'axe : parois de la gorge ; spirale : parois du secteur) sont l'un sur l'arête, l'autre 6 mm plus bas, et la
+        droite qui les relie entrait dans l'arête (0,26 mm mesurés sur la gorge avant le correctif). Carte radiale fine : aucune entaille au-delà de 0,01 mm (flèche d'une corde de 0,25 mm
+        sur l'arc de la boule autour d'une arête : 0,003 mm)."""
+        import os
+        import tempfile
+        import numpy as np
+        from cam2027.project import rotary
+        from cam2027.project.machine import RotaryAxis
+
+        path = os.path.join(tempfile.mkdtemp(prefix="cam2027-b4r-"), "groove.step")
+        cyl = Part.makeCylinder(20.0, 80.0, V(0, 0, 0), V(1, 0, 0))
+        groove = Part.makeCylinder(21.0, 20.0, V(30, 0, 0), V(1, 0, 0)).cut(Part.makeCylinder(14.0, 20.0, V(30, 0, 0), V(1, 0, 0)))
+        ring = Part.makeCylinder(25.0, 20.0, V(55, 0, 0), V(1, 0, 0)).cut(Part.makeCylinder(14.0, 20.0, V(55, 0, 0), V(1, 0, 0)))
+        s, c = 30.0 * math.sin(0.3), 30.0 * math.cos(0.3)
+        wedge = Part.Face(Part.makePolygon([V(55, 0, 0), V(55, s, c), V(55, -s, c), V(55, 0, 0)])).extrude(V(20, 0, 0))
+        cyl.cut(groove).cut(ring.common(wedge)).removeSplitter().exportStep(path)
+
+        def part_radius(x, theta):
+            x, theta = np.broadcast_arrays(np.asarray(x, dtype=float), np.asarray(theta, dtype=float))
+            t = np.mod(theta + math.pi, 2 * math.pi) - math.pi
+            low = ((x >= 30) & (x <= 50)) | ((x >= 55) & (x <= 75) & (np.abs(t) <= 0.3))
+            return np.where(low, 14.0, 20.0)
+
+        lib = starter_library()
+        profile = machine()
+        profile.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0), positive_direction="right_hand",
+                                    min_deg=-100000.0, max_deg=100000.0)
+        proj = Project.create("Rotary deep walls", lib, profile)
+        part = proj.import_model(path, label="Groove").objects[0]
+        proj.create_job([part], stock={"kind": "cylinder_x", "radius": 21.0, "length": 84.0, "x_start": -2.0,
+                                       "center": (0.0, 0.0)})
+        ball = lib.search("6 mm ball end mill")[0]
+        asm = lib.assemblies_for_tool(ball.id)[0]
+        worst = []  # (motif, écart minimal, X, angle) par fenêtre
+        for spiral, windows in ((False, ((27.0, 33.0, -0.3, 0.3), (47.0, 53.0, 2.0, 2.6))),
+                                (True, ((60.0, 70.0, -0.6, 0.6),))):
+            op, _rec = rotary.add_operation(proj, "rotary3d", "Walls %s" % spiral, asm.id, ball.presets[0].id,
+                                            params={"stepover": 0.5, "sample": 0.25, "spiral": spiral})
+            _l, moves = rotary.generate(proj, op)
+            for x0, x1, t0, t1 in windows:
+                rmap = rotary.RadialMap(x0, x1, t0, t1, 21.0, res_x=0.02)
+                rmap.sweep_moves(moves, 21.0, "ball", 3.0)
+                X, T = np.meshgrid(rmap.xs, rmap.ts, indexing="ij")
+                err = rmap.r - part_radius(X, T)
+                k = np.unravel_index(int(np.argmin(err)), err.shape)
+                worst.append(("spiral" if spiral else "lines", round(float(err.min()), 4), float(X[k]), float(T[k])))
+        proj.close()
+        self.assertTrue(all(w[1] > -0.01 for w in worst), worst)
 
     def test_spiral_finishing(self):
         """Spirale : refusée si l'axe A a une course limitée trop courte ; sinon une seule passe continue (A croissant
