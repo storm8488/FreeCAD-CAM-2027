@@ -74,6 +74,21 @@ class TestMultiBodySurface(unittest.TestCase):
         report = proj.material_check()
         self.assertLess(report["gouge_max"] or 0.0, 0.05)
 
+    def test_auto_floors_ignore_floor_under_another_body(self):
+        """Le fond de la cavité du socle (Z 5) est sous le couvercle, un autre corps : la poche et l'adaptative
+        le vidaient à travers le couvercle."""
+        from cam2027.project import operations
+
+        lib = starter_library()
+        proj = Project.create("B1floors", lib)
+        proj.import_model(self.step)
+        proj.create_job(proj.model_candidates(), stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        models = list(proj.job.Model.Group)
+        for kind in ("pocket", "adaptive", "pocket2d"):
+            chosen = operations.auto_geometry(kind, models)
+            zs = [obj.Shape.getElement(sub).BoundBox.ZMin for obj, subs in chosen for sub in subs]
+            self.assertNotIn(5.0, [round(z, 3) for z in zs], kind)
+
 
 if __name__ == "__main__":
     unittest.main()

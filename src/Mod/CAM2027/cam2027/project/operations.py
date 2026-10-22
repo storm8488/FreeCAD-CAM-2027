@@ -221,20 +221,23 @@ def _horizontal_planes(shape, tol=1e-6):
             yield i, f
 
 
-def pocket_floor_faces(obj, tol=1e-6):
+def pocket_floor_faces(obj, tol=1e-6, others=()):
     """Fonds de poche d'un solide : faces planes horizontales strictement entre le dessous et le dessus, sans
     matière au-dessus d'elles. Un fond sous un surplomb n'est pas accessible par le dessus : la poche FreeCAD
-    l'extrude vers le haut et usine à travers le surplomb."""
+    l'extrude vers le haut et usine à travers le surplomb. ``others`` : formes des autres corps du job, dont la
+    matière compte aussi (cavité du socle du chauffage Vz330 fermée par le couvercle, un autre corps)."""
     import FreeCAD
 
     shape = obj.Shape
     bb = shape.BoundBox
+    shapes = [shape] + [o for o in others if o is not None and not o.isNull() and o.Solids]
+    top = max(s.BoundBox.ZMax for s in shapes)
     # Matière dans la colonne au-dessus du fond ⇔ une face non verticale de la pièce y entre (en montant depuis
     # un point de matière, on sort par une telle face, toujours dans la colonne). Le test face à face sur les
     # seules faces voisines (boîtes englobantes) écarte vite les fonds dégagés ; l'intersection complète avec
     # la pièce (lente : 1553 faces → 9 s pour 135 fonds) ne tranche plus que les fonds douteux.
     tilted = []
-    for g in shape.Faces:
+    for g in (g for s in shapes for g in s.Faces):
         try:
             vertical = g.Surface.__class__.__name__ == "Plane" and abs(g.normalAt(0, 0).z) < 1e-9
         except Exception:
@@ -247,8 +250,8 @@ def pocket_floor_faces(obj, tol=1e-6):
             continue
         above = f.copy()
         above.translate(FreeCAD.Vector(0, 0, 1e-3))
-        column = above.extrude(FreeCAD.Vector(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0))
-        if _column_touched(column, tilted) and column.common(shape).Volume > 1e-3:
+        column = above.extrude(FreeCAD.Vector(0, 0, top - f.BoundBox.ZMin + 1.0))
+        if _column_touched(column, tilted) and any(column.common(s).Volume > 1e-3 for s in shapes):
             continue
         out.append("Face%d" % i)
     return out
@@ -294,7 +297,10 @@ def auto_geometry(kind, models):
         shape = getattr(obj, "Shape", None)
         if shape is None or not shape.Solids:
             continue
-        subs = finder(obj)
+        if finder is pocket_floor_faces:
+            subs = finder(obj, others=[getattr(o, "Shape", None) for o in models if o is not obj])
+        else:
+            subs = finder(obj)
         if subs:
             out.append((obj, subs))
     return out
