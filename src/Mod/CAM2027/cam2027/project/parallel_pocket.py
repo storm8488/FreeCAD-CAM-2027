@@ -26,6 +26,8 @@ MAX_WORKERS = 12
 #: en dessous (volumes d'enveloppe, niveaux), en série : le démarrage des processus coûterait plus
 MIN_SOLIDS = 8
 MIN_HEIGHTS = 4
+#: poche 2D : en dessous (fonds), découpes en niveaux faites une à une dans FreeCAD
+MIN_FACES = 8
 
 
 def _brep(shape):
@@ -235,6 +237,101 @@ def build_path_area(area_mod, original, op, obj, baseobject, isHole, start, gets
         area_mod.Path = path
 
 
+def _area_params(params):
+    return {k: v for k, v in params.items() if isinstance(v, (bool, int, float, str))}
+
+
+def precompute_face_sections(op, obj, shapes):
+    """Poche 2D (``Path.Op.PocketShape``) sur de nombreux fonds : FreeCAD appelle ``_buildPathArea`` une fois par
+    fond, chaque appel découpant ses niveaux (``makeSections``) en série (6,5 s pour les 135 alvéoles d'un
+    plateau). Ici, avant ces appels, la zone ``Path.Area`` de chaque fond est préparée exactement comme dans
+    ``_buildPathArea`` et ses niveaux sont découpés dans des processus. Retourne ``{id(forme): (forme, réglages,
+    plan, niveaux, mode, projection, sections)}``, vide si le calcul parallèle n'a pas lieu."""
+    import FreeCAD
+    import Path
+    import PathScripts.PathUtils as PathUtils
+
+    if getattr(obj, "UseRestMachining", False) or not _enabled(len(shapes), MIN_FACES):
+        return {}
+    heights = [i for i in op.depthparams]
+    project = bool(op.areaOpUseProjection(obj))
+    jobs = []
+    for shp in shapes:
+        if not isinstance(shp, tuple):
+            return {}
+        shape, is_hole = shp[0], shp[1]
+        plane = PathUtils.makeWorkplane(shape)
+        circle = _circle(plane)
+        if circle is None:
+            return {}
+        area = Path.Area()  # mêmes réglages que _buildPathArea
+        area.setPlane(plane)
+        area.add(shape)
+        params = op.areaOpAreaParams(obj, is_hole)
+        params["SectionTolerance"] = FreeCAD.Base.Precision.confusion() * 10
+        area.setParams(**params)
+        jobs.append((shape, _area_params(area.getParams()), circle))
+    n = _workers(len(jobs))
+    chunks = [list(range(len(jobs)))[k::n] for k in range(n)]
+    tasks = [{"kind": "faces", "jobs": [{"shape": "f%d" % i, "plane": jobs[i][2], "params": jobs[i][1], "mode": 0,
+                                         "project": project, "heights": heights} for i in c]} for c in chunks]
+    out = _run(tasks, {"f%d" % i: job[0] for i, job in enumerate(jobs)})
+    if out is None:
+        return {}
+    cache = {}
+    for c, res in zip(chunks, out):
+        for i, secs in zip(c, res):
+            shape, params, circle = jobs[i]
+            cache[id(shape)] = (shape, params, circle, heights, 0, project,
+                                [_Section(_shape(topo), _shape(sec)) for topo, sec in secs])
+    return cache
+
+
+class _FaceArea(_HookedArea):
+    """Zone ``Path.Area`` d'un fond de poche 2D : ses niveaux viennent du précalcul s'il a été fait pour cette
+    forme avec exactement ces réglages, ce plan et ces niveaux ; sinon calcul normal."""
+
+    def __init__(self, area, cache):
+        _HookedArea.__init__(self, area)
+        self._cache = cache
+
+    def makeSections(self, mode=0, project=False, heights=None, **kwargs):
+        if not self._used and heights and not kwargs and len(self._shapes) == 1:
+            self._used = True
+            entry = self._cache.pop(id(self._shapes[0]), None)
+            if (entry is not None and entry[0] is self._shapes[0] and entry[1] == _area_params(self._area.getParams())
+                    and entry[2] == _circle(self._plane) and entry[3] == list(heights) and entry[4] == mode
+                    and entry[5] == bool(project)):
+                return entry[6]
+        return self._area.makeSections(mode=mode, project=project, heights=heights, **kwargs)
+
+
+class _FacePathModule(_PathModule):
+    def __init__(self, path, cache):
+        _PathModule.__init__(self, path)
+        self._cache = cache
+
+    def Area(self, *args, **kwargs):
+        area = self._path.Area(*args, **kwargs)
+        if self._first:
+            self._first = False
+            return _FaceArea(area, self._cache)
+        return area
+
+
+def build_face_path_area(area_mod, original, op, obj, baseobject, isHole, start, getsim):
+    """``_buildPathArea`` de FreeCAD pour un fond de poche 2D, niveaux repris du précalcul."""
+    cache = getattr(op, "_cam2027_face_sections", None)
+    if not cache:
+        return original(op, obj, baseobject, isHole, start, getsim)
+    path = area_mod.Path
+    area_mod.Path = _FacePathModule(path, cache)
+    try:
+        return original(op, obj, baseobject, isHole, start, getsim)
+    finally:
+        area_mod.Path = path
+
+
 def _worker(task, out):
     bindir = os.path.dirname(sys.executable)
     for d in (bindir, os.path.join(os.path.dirname(bindir), "lib")):
@@ -259,6 +356,18 @@ def _worker(task, out):
             # FreeCAD : env.cut(part), puis les volumes ayant une partie commune avec les fonds extrudés
             raw = solids[i].cut(part)
             result.append([_brep(s) for s in raw.Solids if s.common(common).Volume > 0.0])
+    elif t["kind"] == "faces":
+        import Path
+
+        result = []
+        for job in t["jobs"]:
+            radius, center, axis = job["plane"]
+            area = Path.Area()
+            area.setPlane(Part.makeCircle(radius, FreeCAD.Vector(*center), FreeCAD.Vector(*axis)))
+            area.add(shapes[job["shape"]])
+            area.setParams(**job["params"])
+            secs = area.makeSections(mode=job["mode"], project=job["project"], heights=job["heights"])
+            result.append([[_brep(s.toTopoShape()), _brep(s.getShape())] for s in secs])
     else:
         import Path
 

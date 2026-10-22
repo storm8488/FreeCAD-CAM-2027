@@ -619,7 +619,8 @@ class TestPipeline(unittest.TestCase):
             if f.Surface.__class__.__name__ == "Plane" and abs(f.BoundBox.ZMax - 4.0) < 1e-6 and abs(f.BoundBox.ZMin - 4.0) < 1e-6:
                 bottom = "Face%d" % i
         op, _rec = proj.add_operation("pocket", "Pocket", asm.id, endmill.presets[0].id, base=[(clone, [bottom])],
-                                      params={"StepDown": 2.0, "StepOver": 40, "FinalDepth": 4.0})
+                                      params={"StepDown": 2.0, "StepOver": 40, "FinalDepth": 4.0,
+                                              "OffsetPattern": "Offset", "ClearingPattern": "Offset"})  # zigzag : refusé
         r0 = proj.compute()[0]
         radius = endmill.geometry.diameter / 2.0
         self.assertAlmostEqual(r0["bbox"]["X"][0], 15.0 + radius, places=2)  # paroi de la poche à X = 15
@@ -628,10 +629,15 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(bones.Style, "Dogbone")
         r1 = proj.compute()[0]
         self.assertGreater(r1["commands"], r0["commands"])
-        # un os à 45° dans chaque angle : le centre dépasse le décalage d'environ r·(√2 − 1) ≈ 1,24 mm
-        self.assertLess(r1["bbox"]["X"][0], 15.0 + radius - 0.5)
-        self.assertGreater(r1["bbox"]["X"][0], 15.0)
-        self.assertGreater(r1["bbox"]["X"][1], 65.0 - radius + 0.5)
+        # un os à 45° dans chaque angle : le centre dépasse le décalage d'environ r·(√2 − 1) ≈ 1,24 mm ; mouvements
+        # de coupe dans la pièce seulement (FreeCAD 1.0 pose aussi un os en l'air à l'origine, à la hauteur de
+        # dégagement, sur le G0 vide du motif Décalage)
+        from cam2027.project import sim
+
+        xs = [p[0] for rapid, _p0, p in sim.path_segments(proj.dressups(op)[0].Path.Commands)[0] if not rapid and p[2] <= 10.0]
+        self.assertLess(min(xs), 15.0 + radius - 0.5)
+        self.assertGreater(min(xs), 15.0)
+        self.assertGreater(max(xs), 65.0 - radius + 0.5)
         self.assertAlmostEqual(r1["zmin"], 4.0, places=3)
         proj.remove_dressup(op, "dogbone")
         self.assertEqual(proj.compute()[0]["commands"], r0["commands"])

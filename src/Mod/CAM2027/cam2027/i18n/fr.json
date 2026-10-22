@@ -1442,5 +1442,9 @@
   "projection on the part: only engraving, contour, V-carving, 2D pocket, slot and chamfer can be projected": "projection sur la pièce : seuls la gravure, le contour, le V-carving, la poche 2D, la rainure et le chanfrein peuvent être projetés",
   "projection on the part: not available on an indexed operation": "projection sur la pièce : impossible sur une opération indexée",
   "{op} is already projected on the part": "{op} est déjà projetée sur la pièce",
-  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce"
+  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce",
+  "Holding tags need a computed contour toolpath: {op} has no cutting move": "Les attaches demandent un parcours de contour calculé : {op} n'a aucun mouvement de coupe",
+  "Dogbones are not available on an adaptive toolpath ({op}): FreeCAD puts bones at the turns of the trochoids, into the walls": "Dogbones impossibles sur un parcours adaptatif ({op}) : FreeCAD place des os aux coudes des trochoïdes, dans les parois",
+  "Dogbones are not available on {op} with the {pattern} pattern: FreeCAD puts bones at the turns of the passes, into the walls; choose the Offset pattern": "Dogbones impossibles sur {op} avec le motif {pattern} : FreeCAD place des os aux demi-tours des passes, dans les parois ; choisissez le motif Décalage (Offset)",
+  "Adds a bone at every inner corner so a round cutter clears a square corner (joinery); contour paths and pockets with the Offset pattern (not zigzag, not adaptive), corners detected on the computed path; the bone goes past the walls by design (0.88 mm at a right angle with a 6 mm cutter).": "Ajoute un os à chaque angle intérieur pour qu'une fraise ronde dégage un angle droit (assemblages bois) ; parcours de contour et poches au motif Décalage (ni zigzag ni adaptative), angles détectés sur le parcours calculé ; l'os dépasse des parois, c'est voulu (0,88 mm dans un angle droit avec une fraise de 6 mm)."
 }

@@ -2,6 +2,51 @@
 
 ## Non publié
 
+- **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
+  lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
+  travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule
+  dans le solide du couvercle). Chaque corps est maintenant calculé contre tous les corps du job, et les corps
+  usinés entiers ne font qu'une zone (le couvercle n'est plus balayé deux fois) : finition 3D 145 378 → 94 333
+  commandes, Z constant 252 165 → 129 291, entaille 0 (`operations.patch_surface_models`).
+- **[B1]** Géométrie automatique des poches et de l'adaptative sur une pièce à plusieurs corps : un fond n'était
+  écarté que si la matière de **son** corps le recouvrait ; le fond de la cavité d'un socle fermée par un couvercle
+  (autre corps) était choisi et vidé à travers le couvercle. La matière de tous les corps du job compte maintenant
+  (`operations.pocket_floor_faces(..., others)`).
+- **[B1]** Finition 3D plus rapide, parcours identique (même G-code octet pour octet) : la simplification des lignes
+  de FreeCAD (Douglas-Peucker, 13 millions d'appels Python sur le chauffage) calcule les longues plages avec
+  numpy, et les fonctions de motif (lignes, zigzag, cercles, spirale) lisent la liste des arêtes une fois au lieu
+  de la reconstruire à chaque arête. Plateau `bitTray3030+v7` : 23,0 / 25,5 s → 11,0 / 12,1 s ; chauffage :
+  ≈ −3 % (OpenCamLib, déjà parallèle sur tous les cœurs, domine).
+- **[B1]** Z constant : les niveaux (carte des points hauts et bas, contours, commandes : Python pur de FreeCAD, un
+  niveau après l'autre) sont calculés dans des processus par le même code de FreeCAD (`project/parallel_waterline.py`,
+  `CAM2027_PARALLEL_WATERLINE=0` pour le désactiver), même G-code. Chauffage : 15,3 / 14,9 s → 9,1 / 9,1 s ;
+  plateau : 5,7 / 5,7 s → 5,0 / 4,6 s.
+- **[B1]** Poche 2D et adaptative sur des fonds choisis automatiquement : la réunion des fonds de FreeCAD
+  (`Path.Geom.combineHorizontalFaces`) fusionnait les extrusions une à une (coût quadratique) ; une seule
+  découpe à outils multiples donne la même région (copie gardée par empreinte SHA-1, `patch_combine_faces`).
+  Plateau, poche 2D : 13,0 / 14,4 s → 8,4 / 8,6 s, même G-code ; adaptative : 14,3 / 11,0 s → 8,4 / 4,6 s, même
+  volume enlevé (607,0 cm³), commandes dans la dispersion habituelle de l'adaptative.
+- **[B1]** Poche 2D sur de nombreux fonds : FreeCAD découpe les niveaux de chaque fond l'un après l'autre (un
+  `_buildPathArea` par fond) ; ils sont maintenant découpés pour tous les fonds dans des processus juste avant,
+  avec les mêmes réglages, et repris seulement si la zone est exactement celle préparée
+  (`parallel_pocket.precompute_face_sections`, `CAM2027_PARALLEL_POCKET=0` pour le désactiver). Plateau :
+  6,5 / 6,7 s → 2,5 / 2,5 s, même G-code.
+- **[B1]** Finition 3D et Z constant : le modèle OpenCamLib de tous les corps et le balayage du Z constant ne
+  restent plus en mémoire après le calcul.
+- **[B1]** Attaches ajoutées sur un habillage pas encore recalculé (rampe ou dogbones ajoutés juste avant par
+  script ; l'éditeur ajoute les attaches en premier) ou sur une opération sans parcours : FreeCAD lisait un
+  parcours vide et l'erreur brute « list index out of range » remontait. L'habillage du dessous est recalculé
+  d'abord ; sans aucun mouvement de coupe, un message clair (`dressups.add_dressup`).
+- **[B1]** Poches et surfaçage sous FreeCAD 1.1 : le motif de vidage (`OffsetPattern`) y est renommé
+  `ClearingPattern` ; il n'était plus ni proposé dans l'éditeur ni appliqué (paramètre ignoré). Les deux noms sont
+  maintenant connus (`operations.STRATEGIES`, `paramspec`).
+- **[B1]** Dogbones : FreeCAD règle le côté des os pour un contour (`Side` / `Direction`) ; sur une poche au motif
+  Décalage en opposition, aucun os n'était posé : le côté suit maintenant le sens de coupe. En zigzag (motif par
+  défaut de la poche 3D) et zigzag + décalage, et sur l'adaptative, FreeCAD plante des os aux demi-tours des passes
+  et aux coudes des trochoïdes, dans les parois quel que soit le côté (2,75 à 5 mm sur la plaque des tests, 26 mm
+  de haut et 3,5 mm de côté sur le plateau `bitTray3030+v7`) : refus avec un message qui dit quel motif choisir.
+  Le dépassement voulu d'un os (0,88 mm dans un angle droit, fraise de 6 mm) est dit dans les limites.
+
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

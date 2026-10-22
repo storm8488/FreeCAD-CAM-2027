@@ -40,7 +40,9 @@ DRESSUPS = {
         "suffix": "_DressupDogbone",
         "params": (("Style", "enum"), ("Side", "enum"), ("Incision", "enum"), ("Custom", "length")),
         "limits": "Adds a bone at every inner corner so a round cutter clears a square corner (joinery); "
-                  "profile and pocket paths, corners detected on the computed path.",
+                  "contour paths and pockets with the Offset pattern (not zigzag, not adaptive), corners detected on "
+                  "the computed path; "
+                  "the bone goes past the walls by design (0.88 mm at a right angle with a 6 mm cutter).",
     },
     "leads": {
         "module": "Path.Dressup.Gui.LeadInOut",
@@ -64,6 +66,10 @@ DRESSUPS = {
 
 ORDER = ("dogbone", "ramp", "tags", "leads", "pattern")  # ordre d'empilement : du plus proche de l'opération au plus haut
 ON_TOP = ("leads", "pattern")  # restent au-dessus des habillages ajoutés après eux (les autres s'empilent)
+#: poches FreeCAD (3D et 2D) : motifs dont les demi-tours au bord reçoivent des os dans les parois quel que soit le
+#: côté (2,75 à 5 mm sur la plaque des tests, 26 mm de haut sur un plateau à alvéoles)
+DOGBONE_POCKETS = ("Path.Op.Pocket", "Path.Op.PocketShape")
+DOGBONE_BAD_PATTERNS = ("ZigZag", "ZigZagOffset")
 
 
 def is_dressup(obj):
@@ -122,14 +128,35 @@ def add_dressup(job, op, kind, params=None, count=None):
         mod = importlib.import_module(meta["module"])
         name = base_operation(current).Name + meta["suffix"]
         if kind == "tags":
+            # FreeCAD place les attaches sur le parcours de ce qu'elles enveloppent : un habillage ajouté juste
+            # avant (même validation de l'éditeur) n'est pas encore calculé, parcours vide (IndexError)
+            if is_dressup(current) and not current.Path.Commands:
+                current.recompute()
+            if not any(c.Name in ("G1", "G01", "G2", "G02", "G3", "G03") for c in current.Path.Commands):
+                from ..i18n import UserError
+
+                raise UserError("Holding tags need a computed contour toolpath: {op} has no cutting move", op=op.Label)
             obj = mod.Create(current, name=name)
             if obj is None:
                 raise ValueError("FreeCAD refuse les attaches sur %s (contour fermé requis)" % op.Label)
             if count:
                 obj.Proxy.generateTags(obj, int(count))
         elif kind == "dogbone":
+            base = base_operation(current)
+            strategy = type(getattr(base, "Proxy", None)).__module__
+            pattern = getattr(base, "ClearingPattern", getattr(base, "OffsetPattern", None))
+            if strategy == "Path.Op.Adaptive" or (strategy in DOGBONE_POCKETS and pattern in DOGBONE_BAD_PATTERNS):
+                from ..i18n import UserError
+
+                if strategy == "Path.Op.Adaptive":
+                    raise UserError("Dogbones are not available on an adaptive toolpath ({op}): FreeCAD puts bones at the turns of the trochoids, into the walls", op=op.Label)
+                raise UserError("Dogbones are not available on {op} with the {pattern} pattern: FreeCAD puts bones at the turns of the passes, into the walls; choose the Offset pattern", op=op.Label, pattern=pattern)
             obj = mod.Create(current, name)
             job.Proxy.addOperation(obj, current)
+            if strategy in DOGBONE_POCKETS and getattr(base, "CutMode", None) in ("Climb", "Conventional"):
+                # FreeCAD règle le côté pour un contour (Side / Direction) ; une poche n'en a pas : « Right » par
+                # défaut, aucun os en opposition
+                obj.Side = "Right" if base.CutMode == "Climb" else "Left"
         elif kind == "leads":
             from . import leads
 

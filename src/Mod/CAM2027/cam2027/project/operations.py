@@ -30,7 +30,7 @@ STRATEGIES = {
     "pocket": {
         "module": "Path.Op.Pocket",
         "label": "2.5D pocket (offset / zigzag)",
-        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "StartAt", "ExtraOffset",
+        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StartAt", "ExtraOffset",
                    "KeepToolDown", "MinTravel", "UseOutline", "StepDown", "StartDepth", "FinalDepth",
                    "FinishDepth", "ClearanceHeight", "SafeHeight", "HelixAngle", "HelixDiameterLimit"),
         "limits": "Offset/zigzag/spiral patterns are NOT adaptive (no engagement control); use 'adaptive'.",
@@ -38,7 +38,7 @@ STRATEGIES = {
     "pocket2d": {
         "module": "Path.Op.PocketShape",
         "label": "2D pocket (inside a drawing contour)",
-        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "StartAt", "ExtraOffset",
+        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StartAt", "ExtraOffset",
                    "KeepToolDown", "MinTravel", "UseOutline", "StepDown", "StartDepth", "FinalDepth",
                    "FinishDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Works on flat faces (the faces generated from closed drawing contours); depth set by the "
@@ -63,7 +63,7 @@ STRATEGIES = {
     "millface": {
         "module": "Path.Op.MillFace",
         "label": "Facing",
-        "params": ("BoundaryShape", "StepOver", "CutMode", "ZigZagAngle", "OffsetPattern", "StepDown",
+        "params": ("BoundaryShape", "StepOver", "CutMode", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StepDown",
                    "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight", "ExcludeRaisedAreas",
                    "ClearEdges"),
         "limits": "Flat faces only; with 'ClearEdges' the tool centre passes just beyond the face edges.",
@@ -221,20 +221,23 @@ def _horizontal_planes(shape, tol=1e-6):
             yield i, f
 
 
-def pocket_floor_faces(obj, tol=1e-6):
+def pocket_floor_faces(obj, tol=1e-6, others=()):
     """Fonds de poche d'un solide : faces planes horizontales strictement entre le dessous et le dessus, sans
     matière au-dessus d'elles. Un fond sous un surplomb n'est pas accessible par le dessus : la poche FreeCAD
-    l'extrude vers le haut et usine à travers le surplomb."""
+    l'extrude vers le haut et usine à travers le surplomb. ``others`` : formes des autres corps du job, dont la
+    matière compte aussi (cavité du socle du chauffage Vz330 fermée par le couvercle, un autre corps)."""
     import FreeCAD
 
     shape = obj.Shape
     bb = shape.BoundBox
+    shapes = [shape] + [o for o in others if o is not None and not o.isNull() and o.Solids]
+    top = max(s.BoundBox.ZMax for s in shapes)
     # Matière dans la colonne au-dessus du fond ⇔ une face non verticale de la pièce y entre (en montant depuis
     # un point de matière, on sort par une telle face, toujours dans la colonne). Le test face à face sur les
     # seules faces voisines (boîtes englobantes) écarte vite les fonds dégagés ; l'intersection complète avec
     # la pièce (lente : 1553 faces → 9 s pour 135 fonds) ne tranche plus que les fonds douteux.
     tilted = []
-    for g in shape.Faces:
+    for g in (g for s in shapes for g in s.Faces):
         try:
             vertical = g.Surface.__class__.__name__ == "Plane" and abs(g.normalAt(0, 0).z) < 1e-9
         except Exception:
@@ -247,8 +250,8 @@ def pocket_floor_faces(obj, tol=1e-6):
             continue
         above = f.copy()
         above.translate(FreeCAD.Vector(0, 0, 1e-3))
-        column = above.extrude(FreeCAD.Vector(0, 0, bb.ZMax - f.BoundBox.ZMin + 1.0))
-        if _column_touched(column, tilted) and column.common(shape).Volume > 1e-3:
+        column = above.extrude(FreeCAD.Vector(0, 0, top - f.BoundBox.ZMin + 1.0))
+        if _column_touched(column, tilted) and any(column.common(s).Volume > 1e-3 for s in shapes):
             continue
         out.append("Face%d" % i)
     return out
@@ -294,7 +297,10 @@ def auto_geometry(kind, models):
         shape = getattr(obj, "Shape", None)
         if shape is None or not shape.Solids:
             continue
-        subs = finder(obj)
+        if finder is pocket_floor_faces:
+            subs = finder(obj, others=[getattr(o, "Shape", None) for o in models if o is not obj])
+        else:
+            subs = finder(obj)
         if subs:
             out.append((obj, subs))
     return out
@@ -531,8 +537,18 @@ def strategy_module(kind):
         patch_adaptive_slicing(mod)
     if kind == "surface3d":
         patch_surface_keepalive()
+    if kind in ("surface3d", "waterline"):
+        patch_surface_models()
+    if kind == "waterline":
+        from . import parallel_waterline
+
+        parallel_waterline.install(mod)
     if kind == "pocket":
         patch_pocket(mod)
+    if kind in ("pocket2d", "adaptive"):
+        patch_combine_faces()
+    if kind == "pocket2d":
+        patch_pocket2d(mod)
     return mod
 
 
@@ -547,10 +563,165 @@ def patch_surface_keepalive():
 
     def simplify(line, tolerance=1e-4):
         keep_gui_alive()
-        return original(line, tolerance=tolerance)
+        if len(line) < SIMPLIFY_NUMPY_MIN:
+            return original(line, tolerance=tolerance)
+        return simplify_3d_line(line, tolerance)
 
     simplify.cam2027_patched = True
     PathUtils.simplify3dLine = simplify
+    _patch_pattern_edges()
+
+
+#: en dessous (points d'une ligne ou d'une plage), Douglas-Peucker en Python comme FreeCAD : numpy y coûte plus
+SIMPLIFY_NUMPY_MIN = 64
+
+
+def simplify_3d_line(line, tolerance=1e-4):
+    """``PathUtils.simplify3dLine`` de FreeCAD (Douglas-Peucker, mêmes points gardés) avec les distances des
+    longues plages calculées par numpy : 13 millions d'appels à ``distanceToLineSegment`` (7,5 s) sur la
+    finition 3D du chauffage Vz330."""
+    import numpy as np
+
+    n = len(line)
+    pts = np.array([(v.x, v.y, v.z) for v in line], dtype=float)
+    keep = []
+    stack = [(0, n - 1)]
+    while stack:
+        start, end = stack.pop()
+        if end - start < 2:
+            keep.extend(range(start, end))
+            continue
+        if end - start < SIMPLIFY_NUMPY_MIN:
+            index, distance = 0, 0.0
+            a, b = line[start], line[end]
+            for i in range(start + 1, end):
+                d = line[i].distanceToLineSegment(a, b).Length
+                if d > distance:
+                    index, distance = i, d
+        else:
+            a, b = pts[start], pts[end]
+            seg = b - a
+            q = pts[start + 1:end]
+            l2 = float(seg.dot(seg))
+            if l2 == 0.0:
+                closest = a
+            else:
+                t = np.clip((q - a).dot(seg) / l2, 0.0, 1.0)
+                closest = a + t[:, None] * seg
+            d = np.sqrt(((closest - q) ** 2).sum(axis=1))
+            k = int(np.argmax(d))
+            index, distance = start + 1 + k, float(d[k])
+        if distance > tolerance:
+            stack.append((index, end))
+            stack.append((start, index))
+        else:
+            keep.append(start)
+    keep.append(n - 1)
+    return [line[i] for i in keep]
+
+
+class _CachedEdges(object):
+    """Composé de passes vu par les fonctions de motif de FreeCAD : ``compGeoShp.Edges[i]`` dans leur boucle
+    reconstruit à chaque fois la liste de toutes les arêtes (coût quadratique : 5,2 s sur le chauffage Vz330) ;
+    la liste est lue une fois."""
+
+    def __init__(self, shape):
+        self._shape = shape
+        self.Edges = shape.Edges
+
+    def __getattr__(self, name):
+        return getattr(self._shape, name)
+
+
+def _patch_pattern_edges():
+    import Path.Op.SurfaceSupport as support
+
+    for name in ("pathGeomToLinesPointSet", "pathGeomToZigzagPointSet", "pathGeomToCircularPointSet",
+                 "pathGeomToSpiralPointSet"):
+        original = getattr(support, name, None)
+        if original is None or getattr(original, "cam2027_patched", False):
+            continue
+
+        def wrapper(*args, _original=original):
+            if args and hasattr(args[-1], "Edges") and not isinstance(args[-1], _CachedEdges):
+                args = args[:-1] + (_CachedEdges(args[-1]),)
+            return _original(*args)
+
+        wrapper.cam2027_patched = True
+        setattr(support, name, wrapper)
+
+
+def _all_models_stl(group, types, obj, ocl):
+    """Triangles de tous les corps du job dans un seul modèle OpenCamLib (même triangulation que FreeCAD,
+    ``SurfaceSupport._makeSTL``)."""
+    stl = ocl.STLSurf()
+    for model, model_type in zip(group, types):
+        if model_type == "M":
+            facets = model.Mesh.Facets.Points
+        else:
+            vertices, indices = model.Shape.tessellate(obj.LinearDeflection.Value)
+            facets = ((vertices[f[0]], vertices[f[1]], vertices[f[2]]) for f in indices)
+        for v1, v2, v3 in facets:
+            stl.addTriangle(ocl.Triangle(ocl.Point(v1[0], v1[1], v1[2]), ocl.Point(v2[0], v2[1], v2[2]),
+                                         ocl.Point(v3[0], v3[1], v3[2])))
+    return stl
+
+
+def _merge_whole_models(psf, faces, voids):
+    """Zones des corps usinés entiers réunies dans celle du premier (les autres : rien à faire). Avec un seul
+    modèle OpenCamLib pour tous les corps, chaque corps referait sinon la zone commune (couvercle du chauffage
+    usiné deux fois)."""
+    group = psf.JOB.Model.Group
+    with_faces = {base.Name for base, subs in (psf.obj.Base or []) if any(subs)}
+    whole = [m for m, model in enumerate(group)
+             if isinstance(faces[m], list) and faces[m] and voids[m] is False and model.Name not in with_faces]
+    if len(whole) < 2 or psf.profileEdges != "None":
+        return
+    shapes = [s for m in whole for s in faces[m]]
+    try:
+        merged = shapes[0].fuse(shapes[1:]).removeSplitter()
+    except Exception:
+        return
+    if merged.isNull() or not merged.Faces:
+        return
+    faces[whole[0]] = [merged]
+    for m in whole[1:]:
+        faces[m] = False
+
+
+def patch_surface_models():
+    """Finition 3D et Z constant sur une pièce à plusieurs corps : FreeCAD calcule corps par corps avec un modèle
+    OpenCamLib de ce seul corps. Sur le socle du chauffage Vz330, la boule descendait dans la cavité à travers
+    le couvercle posé dessus (entaille de 41 mm). Chaque corps est ici calculé contre tous les corps du job, et
+    les corps usinés entiers ne font qu'une zone."""
+    import Path.Op.SurfaceSupport as support
+
+    original = support._prepareModelSTLs
+    if getattr(original, "cam2027_patched", False):
+        return
+
+    def prepare(self, JOB, obj, m, ocl):
+        group = JOB.Model.Group
+        if len(group) < 2 or self.modelSTLs[m] is not True:
+            return original(self, JOB, obj, m, ocl)
+        # un seul modèle pour tous les corps à calculer (FreeCAD libère la liste à la fin du calcul)
+        stl = _all_models_stl(group, self.modelTypes, obj, ocl)
+        for k, flag in enumerate(self.modelSTLs):
+            if flag is True:
+                self.modelSTLs[k] = stl
+
+    prepare.cam2027_patched = True
+    support._prepareModelSTLs = prepare
+
+    pre_original = support.ProcessSelectedFaces.preProcessModel
+
+    def pre_process(self, module):
+        result = pre_original(self, module)
+        if result:
+            _merge_whole_models(self, result[0], result[1])
+        return result
+
+    support.ProcessSelectedFaces.preProcessModel = pre_process
 
 
 #: écart de la triangulation d'une face dont FreeCAD ne sait pas projeter les fils (mm)
@@ -816,6 +987,72 @@ AREA_BUILD_SHA1 = ("c947d9bb22a0e7b54043af311f1572c5fcb30703",  # 1.1.4
                    "af27b6f0ede71f0493e55f8aeaf05ae1dd1660c1")  # 1.0.2
 
 
+#: empreinte SHA-1 de ``Path.Geom.combineHorizontalFaces`` (même code en 1.0.2 et 1.1.4)
+COMBINE_FACES_SHA1 = "429f00578adaff3be8ec5abb57e8048345d1fbdd"
+
+
+def patch_combine_faces():
+    """Poche 2D et adaptative sur des fonds choisis automatiquement : FreeCAD (``combineHorizontalFaces``) réunit
+    les fonds en fusionnant leurs extrusions une à une, chaque fusion reprenant tout le résultat précédent
+    (5,4 s pour les 135 alvéoles du plateau). Copie de la fonction de FreeCAD où la boîte est découpée par toutes
+    les extrusions d'un coup (même région), installée seulement si le code d'origine est exactement celui
+    attendu."""
+    import Path.Geom as geom
+
+    original = getattr(geom, "combineHorizontalFaces", None)
+    if original is None or getattr(original, "cam2027_patched", False) or _sha1(original) != COMBINE_FACES_SHA1:
+        return
+    import FreeCAD
+    import Part
+
+    def combine(faces):
+        if len(faces) < 3:
+            return original(faces)
+        horizontal = list()
+        offset = 10.0
+        topFace = None
+        innerFaces = list()
+        for f in faces:
+            if f.BoundBox.ZMin != 0.0:
+                f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+        allFaces = Part.makeCompound(faces)
+        if hasattr(allFaces, "Area") and geom.isRoughly(allFaces.Area, 0.0):
+            geom.Path.Log.info(geom.translate("PathGeom", "Zero working area to process. Check your selection and settings."))
+            return horizontal
+        afbb = allFaces.BoundBox
+        bboxFace = geom.makeBoundBoxFace(afbb, offset, -5.0)
+        bboxSolid = bboxFace.extrude(FreeCAD.Vector(0.0, 0.0, 10.0))
+        extrudedFaces = [f.extrude(FreeCAD.Vector(0.0, 0.0, 6.0)) for f in faces]
+        cut = bboxSolid.cut(extrudedFaces)  # CAM2027 : une découpe, au lieu de fusionner les extrusions une à une
+        for f in cut.Faces:
+            fbb = f.BoundBox
+            if geom.isRoughly(fbb.ZMin, 5.0) and geom.isRoughly(fbb.ZMax, 5.0):
+                if (geom.isRoughly(afbb.XMin - offset, fbb.XMin) and geom.isRoughly(afbb.XMax + offset, fbb.XMax)
+                        and geom.isRoughly(afbb.YMin - offset, fbb.YMin) and geom.isRoughly(afbb.YMax + offset, fbb.YMax)):
+                    topFace = f
+                else:
+                    innerFaces.append(f)
+        if not topFace:
+            return horizontal
+        outer = [Part.Face(w) for w in topFace.Wires[1:]]
+        if outer:
+            for f in outer:
+                f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+            if innerFaces:
+                inner = innerFaces
+                for f in inner:
+                    f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+                cut = Part.makeCompound(outer).cut(Part.makeCompound(inner))
+                for f in cut.Faces:
+                    horizontal.append(f)
+            else:
+                horizontal = outer
+        return horizontal
+
+    combine.cam2027_patched = True
+    geom.combineHorizontalFaces = combine
+
+
 def _sha1(fn):
     import hashlib
     import inspect
@@ -876,6 +1113,40 @@ def patch_pocket(mod=None):
 
     def build_path_area(self, obj, baseobject, isHole, start, getsim):
         return parallel_pocket.build_path_area(area_mod, build, self, obj, baseobject, isHole, start, getsim)
+
+    area_op_shapes.cam2027_patched = True
+    cls.areaOpShapes = area_op_shapes
+    cls._buildPathArea = build_path_area
+
+
+def patch_pocket2d(mod=None):
+    """Poche 2D sur de nombreux fonds (alvéoles d'un plateau) : les niveaux de chaque fond sont découpés dans des
+    processus avant que FreeCAD ne les demande un par un (``parallel_pocket.precompute_face_sections``), repris
+    seulement si la zone est exactement celle préparée. Installé seulement si ``_buildPathArea`` est le code
+    attendu."""
+    if mod is None:
+        mod = importlib.import_module("Path.Op.PocketShape")
+    cls = getattr(mod, "ObjectPocket", None)
+    original = getattr(cls, "areaOpShapes", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+    import Path.Op.Area as area_mod
+
+    build = area_mod.ObjectOp._buildPathArea
+    if _sha1(build) not in AREA_BUILD_SHA1:
+        return
+    from . import parallel_pocket
+
+    def area_op_shapes(self, obj):
+        shapes = original(self, obj)
+        try:
+            self._cam2027_face_sections = parallel_pocket.precompute_face_sections(self, obj, shapes)
+        except Exception:
+            self._cam2027_face_sections = {}
+        return shapes
+
+    def build_path_area(self, obj, baseobject, isHole, start, getsim):
+        return parallel_pocket.build_face_path_area(area_mod, build, self, obj, baseobject, isHole, start, getsim)
 
     area_op_shapes.cam2027_patched = True
     cls.areaOpShapes = area_op_shapes
