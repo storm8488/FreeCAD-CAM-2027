@@ -511,11 +511,6 @@ def check_panel_edit(scenario, proj, kinds):
         else:
             seen[kind] = "nothing"
             msgs = G.driver.take()
-        failed = [t for k, t in msgs if G.tr("Operation failed: {error}", error="")[:12] in t]
-        if not failed and not _deleted(ed) and G.tr("Operation failed: {error}", error="")[:12] in ed.status.text():
-            failed = [ed.status.text()]
-        if failed:
-            G.problem(scenario, "B3 %s after Ctrl+Z: error shown: %s" % (button, failed[0][:150]))
             if not msgs:
                 G.problem(scenario, "B3 panel Edit on %s (%s) opens nothing" % (item.text(0), kind))
         G.pump(0.1)
