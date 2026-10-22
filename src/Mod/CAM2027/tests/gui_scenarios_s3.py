@@ -236,3 +236,61 @@ def scenario_nest_shapes(scenario, tmp):
         G.problem(scenario, "sheet job is not the nesting sheet: %s" % sb)
     G.check_docks(scenario)
 
+
+def scenario_bulk_edit(scenario, tmp):
+    """Trois opérations, puis « Comparer et modifier » depuis le panneau : hauteur de dégagement changée sur les
+    trois d'un coup, recalculées."""
+    G.new_project(scenario, "BulkEdit")
+    G.driver.open_files.append(_two_pocket_part(tmp))
+    G.run_command(scenario, "CAM2027_ImportModel")
+    G.run_command(scenario, "CAM2027_StockFixture")
+    for strategy in ("profile", "adaptive", "pocket"):
+        FreeCADGui.Selection.clearSelection()
+        G.driver.handlers[G.tr("Add operation")] = (
+            lambda dlg, k=strategy: (G.combo_select(G.find_combo_with(dlg, k), k), True)[1])
+        G.run_command(scenario, "CAM2027_AddOperation")
+        G.accept_open_editors(scenario)
+    G.run_command(scenario, "CAM2027_Compute")
+    proj = G.project()
+    ops = [proj.base_operation(o) for o in proj.operations()]
+    if len(ops) < 3:
+        G.problem(scenario, "expected 3 operations, found %d" % len(ops))
+        return
+    seen = {}
+
+    def edit(dlg):
+        names = [r["name"] for r in dlg.rows]
+        seen["rows"] = len(names)
+        if "ClearanceHeight" not in names:
+            G.problem(scenario, "clearance height is not a shared row: %s" % names)
+            return False
+        dlg.diff_only.setChecked(True)
+        seen["hidden"] = sum(1 for r in range(dlg.table.rowCount()) if dlg.table.isRowHidden(r))
+        dlg.diff_only.setChecked(False)
+        dlg.set_value("ClearanceHeight", "33")
+        return True
+
+    G.driver.handlers[G.tr("Compare and edit operations")] = edit
+    p = G.panel()
+    from cam2027.gui.qt import QtWidgets
+
+    buttons = [b for b in p.findChildren(QtWidgets.QPushButton) if b.text() == G.tr("Compare and edit operations")]
+    if not buttons:
+        G.problem(scenario, "no Compare and edit button in the Project panel")
+        return
+    buttons[0].click()  # comme l'utilisateur, depuis le panneau
+    G.pump(0.5)
+    for kind, text in G.driver.take():
+        G.log("  bulk edit %s: %s" % (kind, text.replace("\n", " | ")[:200]))
+    G.log("  shared rows %s, hidden with differences only %s" % (seen.get("rows"), seen.get("hidden")))
+    if not seen.get("hidden"):
+        G.problem(scenario, "Differences only hid no row")
+    proj = G.project()
+    for op in ops:
+        z = float(op.ClearanceHeight.getValueAs("mm"))
+        zmax = max([c.Parameters["Z"] for c in op.Path.Commands if "Z" in c.Parameters] or [0])
+        state = proj.operation_state(op)
+        G.log("  %s: clearance %.2f, path Z max %.2f, %s" % (op.Label, z, zmax, state))
+        if abs(z - 33.0) > 1e-6 or abs(zmax - 33.0) > 1e-3 or state in ("failed", "todo", "stale"):
+            G.problem(scenario, "%s not updated: clearance %.2f, Z max %.2f, state %s" % (op.Label, z, zmax, state))
+    G.check_docks(scenario)

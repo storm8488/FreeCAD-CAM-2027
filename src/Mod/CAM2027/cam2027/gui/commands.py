@@ -847,6 +847,43 @@ class KeepOut(_Base):
             _warn("\n".join(tr_msg(m) for _lvl, m in errors))
 
 
+class BulkEdit(_Base):
+    atelier = "settings"
+    text = "Compare and edit operations"
+    tooltip = "Table of the parameters shared by several operations: show the differences, change a value on all of them at once"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        from ..project import bulkedit
+        from . import bulkedit as bulkgui
+
+        if len(bulkedit.editable_operations(proj) if proj.has_job else []) < 2:
+            _warn(tr("At least two operations are needed to compare them."))
+            return
+        selected = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+        dlg = bulkgui.BulkEditDialog(proj, selected if len(selected) > 1 else None, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            changes = dlg.changes()
+            ops = dlg.operations()
+            with busy(tr("Computing the toolpaths...")):
+                ignored = dlg.apply()
+                proj.compute()
+        except ValueError as exc:
+            _warn(tr_msg(exc))
+            return
+        _after_change()
+        if changes:
+            lines = [tr("{n} parameter(s) written to {m} operation(s), toolpaths recomputed.", n=len(changes), m=len(ops))]
+            for label, names in ignored.items():
+                lines.append(tr("{op}: not changed: {names}", op=label, names=", ".join(names)))
+            _info("\n".join(lines))
+
+
 class Compute(_Base):
     icon = "cam2027-compute.svg"
     atelier = "recalculate"
@@ -1393,6 +1430,7 @@ COMMANDS = [
     ("CAM2027_Nest", Nest),
     ("CAM2027_TwoSided", TwoSided),
     ("CAM2027_KeepOut", KeepOut),
+    ("CAM2027_BulkEdit", BulkEdit),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -1414,7 +1452,7 @@ WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout"
 STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
-    ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
+    ("Machining", ["CAM2027_AddOperation", "CAM2027_BulkEdit", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
                    "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),

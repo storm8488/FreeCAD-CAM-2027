@@ -1065,5 +1065,18 @@
   "Sheets at most": "Panneaux au plus",
   "True shape: the parts fit into each other's recesses (outline offset by half the spacing, holes not used). Extra sheets are laid to the right of the first one; the job uses the first sheet. Do it before Stock & fixture; the sheet will have this size.": "Forme réelle : les pièces s'emboîtent dans les creux les unes des autres (contour décalé de la moitié de l'espacement, trous non utilisés). Les panneaux suivants sont posés à droite du premier ; le job prend le premier panneau. À faire avant « Brut et montage » ; le panneau aura cette taille.",
   "Place the 2D drawings on sheets of a given size (true shape or bounding rectangles, rotations, copies)": "Place les dessins 2D sur des panneaux de taille donnée (forme réelle ou rectangles englobants, rotations, copies)",
-  "Sheets used: {n} (laid to the right of the first one).": "Panneaux utilisés : {n} (posés à droite du premier)."
+  "Sheets used: {n} (laid to the right of the first one).": "Panneaux utilisés : {n} (posés à droite du premier).",
+  "At least two operations are needed to compare them.": "Il faut au moins deux opérations pour les comparer.",
+  "Compare and edit operations": "Comparer et modifier des opérations",
+  "Differences only": "Différences seulement",
+  "New value (all)": "Nouvelle valeur (toutes)",
+  "Operations to compare": "Opérations à comparer",
+  "Parameter": "Paramètre",
+  "Type a value in the last column: it is written to every checked operation, which is then recomputed. Rows in bold differ between the operations.": "Saisissez une valeur dans la dernière colonne : elle est écrite sur chaque opération cochée, qui est ensuite recalculée. Les lignes en gras diffèrent d'une opération à l'autre.",
+  "no": "non",
+  "yes": "oui",
+  "{n} parameter(s) written to {m} operation(s), toolpaths recomputed.": "{n} paramètre(s) écrit(s) sur {m} opération(s), parcours recalculés.",
+  "{op}: not changed: {names}": "{op} : non modifié : {names}",
+  "{param}: invalid value {value}": "{param} : valeur invalide {value}",
+  "Table of the parameters shared by several operations: show the differences, change a value on all of them at once": "Tableau des paramètres communs à plusieurs opérations : voir les différences, changer une valeur sur toutes d'un coup"
 }

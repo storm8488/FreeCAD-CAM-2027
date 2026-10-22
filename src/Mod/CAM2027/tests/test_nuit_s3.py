@@ -447,3 +447,59 @@ class TestShapeNesting(unittest.TestCase):
         self.assertLess(mask.sum(), 0.9 * mask.size)  # coins du carré englobant libres
         self.assertGreaterEqual(mask.sum(), math.pi * 30 ** 2)  # prudent : au moins la surface du disque
 
+
+class TestBulkEdit(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s3b-")
+        cls.step = os.path.join(cls.tmp, "two_pockets.step")
+        make_two_pocket_part(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def test_clearance_on_three_operations(self):
+        """Contour, poche et surfaçage : lignes communes, différences repérées, hauteur de sécurité changée sur les
+        trois d'un coup (registre et parcours), saisies illisibles refusées."""
+        from cam2027.project import bulkedit
+
+        lib = starter_library()
+        proj = Project.create("Bulk edit", lib, machine())
+        part = proj.import_model(self.step, label="Plate").objects[0]
+        proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        clone = proj.job.Model.Group[0]
+        endmill = lib.search("6 mm flat end mill")[0]
+        asm = lib.assemblies_for_tool(endmill.id)[0]
+        pid = endmill.presets[0].id
+        floor = planar_face_at(clone, 6.0, 600.0)
+        top = max(((i, f) for i, f in enumerate(clone.Shape.Faces, 1) if abs(f.BoundBox.ZMin - 10) < 1e-6
+                   and abs(f.BoundBox.ZMax - 10) < 1e-6), key=lambda t: t[1].Area)[0]
+        ops = [proj.add_operation("profile", "Contour", asm.id, pid, base=[(clone, [])], params={"StepDown": 3.0})[0],
+               proj.add_operation("pocket", "Pocket", asm.id, pid, base=[(clone, [floor])], params={"StepDown": 2.0})[0],
+               proj.add_operation("millface", "Facing", asm.id, pid, base=[(clone, ["Face%d" % top])],
+                                  params={"StepDown": 1.0})[0]]
+        proj.compute()
+        self.assertEqual([o.Name for o in bulkedit.editable_operations(proj)], [o.Name for o in ops])
+        rows = {r["name"]: r for r in bulkedit.compare(proj, ops)}
+        self.assertIn("ClearanceHeight", rows)
+        self.assertIn("SafeHeight", rows)
+        self.assertTrue(rows["StepDown"]["differs"])
+        self.assertEqual(rows["StepDown"]["values"], [3.0, 2.0, 1.0])
+        self.assertNotIn("ThreadName", rows)
+        with self.assertRaises(ValueError):
+            bulkedit.parse("length", "abc")
+        with self.assertRaises(ValueError):
+            bulkedit.parse("percent", "140")
+        self.assertEqual(bulkedit.parse("length", "1 in"), 25.4)
+        value = bulkedit.parse("length", "30 mm")
+        ignored = bulkedit.apply(proj, ops, {"ClearanceHeight": value})
+        self.assertEqual(ignored, {})
+        proj.compute()
+        reg = proj.registry
+        for op in ops:
+            self.assertAlmostEqual(float(op.ClearanceHeight.getValueAs("mm")), 30.0, places=6)
+            self.assertAlmostEqual(reg[op.Name]["params"]["ClearanceHeight"], 30.0, places=6)
+            zmax = max(c.Parameters["Z"] for c in op.Path.Commands if "Z" in c.Parameters)
+            self.assertAlmostEqual(zmax, 30.0, places=3, msg=op.Label)
+            self.assertEqual(proj.operation_state(op), "computed")
+        rows = {r["name"]: r for r in bulkedit.compare(proj, ops)}
+        self.assertFalse(rows["ClearanceHeight"]["differs"])
+        proj.close()

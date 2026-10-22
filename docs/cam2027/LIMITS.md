@@ -195,6 +195,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Interface
 
+- **Comparer et modifier des opérations** (S3) : seulement les paramètres de stratégie présents sur toutes les
+  opérations cochées (contour + adaptative + poche : 5 lignes communes) ; outil, préréglage, avances, géométrie et
+  habillages restent dans l'éditeur de chaque opération. Une saisie illisible est refusée sans rien écrire. Les
+  opérations sans stratégie FreeCAD (positionnements A, gravure enroulée, angles vifs, trous de goujons) ne sont
+  pas proposées.
 - Thème sombre = pack « FreeCAD Dark » de FreeCAD, appliqué au profil du lanceur seulement
   (vérifié visuellement sur 1.1.4 ; 1.0.2 non vérifié). HiDPI : hérité de FreeCAD/Qt (non
   testé). Les barres d'outils FreeCAD standard (fichier, macro, structure) restent visibles.

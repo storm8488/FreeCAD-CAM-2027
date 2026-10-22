@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **[S3]** **Comparer et modifier plusieurs opérations** (Usiner > Comparer et modifier des opérations, bouton du
+  panneau Projet) : tableau dont les colonnes sont les opérations cochées et les lignes leurs paramètres communs
+  (libellés de l'éditeur), lignes différentes en gras, filtre « Différences seulement » ; une valeur saisie dans la
+  dernière colonne est écrite sur toutes (registre compris, comme depuis l'éditeur), puis les parcours sont
+  recalculés ; une étape d'annulation. Test et scénario : hauteur de dégagement passée à 33 mm sur un contour, une
+  adaptative et une poche d'un coup.
+
 - **[S3]** **Imbrication par forme réelle** (défaut de Préparer > Imbriquer) : silhouette de chaque dessin (contours
   extérieurs, trous bouchés) décalée de la moitié de l'espacement (`Part.makeOffset2D`), rotations par pas de 15°
   (ou 90°), grille prudente (toute cellule touchée par la silhouette est occupée) et positions libres trouvées par

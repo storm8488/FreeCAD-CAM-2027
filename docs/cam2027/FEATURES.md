@@ -29,6 +29,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Fonction cible | Statut | Composant | Validation | Travail restant |
 |---|---|---|---|---|
 | Surfaçage | disponible | `Path.Op.MillFace` | auto (`test_facing`) | — |
+| Comparer et modifier plusieurs opérations | disponible | Usiner > Comparer et modifier des opérations (`project/bulkedit.py`, `gui/bulkedit.py`) : paramètres communs × opérations, différences en gras, filtre, valeur appliquée à toutes puis recalcul | auto (`test_nuit_s3.py` : hauteur de dégagement de 3 opérations) + scénario `bulk-edit` | outil / avances / géométrie non comparés |
 | Contour 2D | disponible | `Path.Op.Profile` | auto | entrées/sorties inline, attaches (habillage) |
 | Poche | disponible | `Path.Op.Pocket` | auto | — |
 | Ébauche adaptative / trochoïdale | partiel | `Path.Op.Adaptive` (2D, monothread) | impl. | tests, perf, reprise 3D |
