@@ -435,16 +435,40 @@ def verify(analysis, machine, stock_bounds=None):
     return issues
 
 
+def _is_active(op):
+    """Même règle que les postprocesseurs : ``Active`` de l'opération ou, à défaut, de sa base (habillage)."""
+    import Path.Base.Util as PathUtil
+
+    return PathUtil.opProperty(op, "Active") is not False
+
+
+def exported_records(project):
+    """Opérations du programme, dans l'ordre du job : ``([(libellé, enregistrement), ...] actives, [libellés
+    désactivés])``. Clé du registre = opération sous les habillages ; entrées sans opération (supprimée dans
+    l'arbre FreeCAD) et positionnements A sans outil ignorés."""
+    from . import dressups
+
+    reg = project.registry
+    active, inactive = [], []
+    for op in project.operations():
+        base = dressups.base_operation(op)
+        rec = reg.get(base.Name)
+        if rec is None or not rec.get("assembly_id"):
+            continue
+        if _is_active(op):
+            active.append((base.Label, rec))
+        else:
+            inactive.append(base.Label)
+    return active, inactive
+
+
 def tool_number_issues(project):
     """Deux outils différents sous le même numéro T dans les opérations actives : rien dans le G-code ne les
     distingue, le programme ne s'arrête donc pas pour changer d'outil (bibliothèque de démarrage T1..T8 et
     import Fusion T1..T11 dans la même bibliothèque). Liste de (niveau, message)."""
     lib = project.library
-    active = {op.Name for op in project.operations() if getattr(op, "Active", True)}
     by_number = {}
-    for name, rec in project.registry.items():
-        if name not in active or not rec.get("assembly_id"):
-            continue
+    for _name, rec in exported_records(project)[0]:
         try:
             asm = lib.assembly(rec["assembly_id"])
             tool = lib.tool(asm.tool_id)
@@ -512,7 +536,8 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
     lines.append("| T | Assembly | Tool | Type | D (mm) | Flutes | Stickout (mm) | Holder | Change |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
     seen = set()
-    for op_name, rec in sorted(project.registry.items(), key=lambda kv: kv[1].get("order", 0)):
+    records, inactive = exported_records(project)
+    for _label, rec in records:
         asm = lib.assembly(rec["assembly_id"])
         if asm.id in seen:
             continue
@@ -527,12 +552,15 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
     lines.append("")
     lines.append("| # | Operation | Strategy | T | Preset | Spindle (rpm) | Feed (mm/min) | Plunge (mm/min) |")
     lines.append("|---|---|---|---|---|---|---|---|")
-    for idx, (op_name, rec) in enumerate(sorted(project.registry.items(), key=lambda kv: kv[1].get("order", 0)), 1):
+    for idx, (label, rec) in enumerate(records, 1):
         asm = lib.assembly(rec["assembly_id"])
         v = rec["values"]
         lines.append("| %d | %s | %s | %d | %s | %.0f | %.0f | %.0f |" % (
-            idx, rec.get("label", op_name), rec["kind"], asm.output.tool_number, v["preset_name"],
+            idx, label, rec["kind"], asm.output.tool_number, v["preset_name"],
             v["spindle_rpm"], v["feed_mm_min"], v["plunge_feed_mm_min"]))
+    if inactive:
+        lines.append("")
+        lines.append("Not in the G-code (inactive): %s" % ", ".join(inactive))
     lines.append("")
     try:
         lines.extend(timing_lines(project)[0])

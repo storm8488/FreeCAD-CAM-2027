@@ -361,6 +361,51 @@ class TestGrblProgramState(unittest.TestCase):
         self.assertFalse(any("M8" in m for m in self.msgs(text.replace("M7", "M8"), "error")))
 
 
+class TestSetupSheet(_PlateCase):
+    def test_sheet_lists_what_the_gcode_contains(self):
+        """Fiche de préparation : une opération désactivée (absente du G-code) et son outil étaient listés comme à
+        préparer, une opération supprimée de l'arbre FreeCAD aussi (registre resté) ; ordre = ordre du registre,
+        pas celui du programme (B5-13). Le contrôle des numéros T voit aussi les opérations habillées."""
+        proj, lib, clone = self.project("Sheet")
+        a3, p3 = self.tool(lib, "3 mm flat end mill")
+        a6, p6 = self.tool(lib, "6 mm flat end mill")
+        op1, _ = proj.add_operation("profile", "Small contour", a3, p3, base=[(clone, [])],
+                                    params={"FinalDepth": 5.0, "StepDown": 5.0, "Side": "Outside"})
+        op2, _ = proj.add_operation("profile", "Big contour", a6, p6, base=[(clone, [])],
+                                    params={"FinalDepth": 0.0, "StepDown": 5.0, "Side": "Outside"})
+        op3, _ = proj.add_operation("profile", "Gone", a6, p6, base=[(clone, [])],
+                                    params={"FinalDepth": 0.0, "StepDown": 5.0, "Side": "Outside"})
+        proj.compute()
+        op2.Active = False
+        proj.job.Operations.Group = [o for o in proj.job.Operations.Group if o.Name != op3.Name]
+        proj.doc.removeObject(op3.Name)  # suppression dans l'arbre FreeCAD : le registre garde l'entrée
+        proj.doc.recompute()
+        text, analysis, issues = proj.preview_gcode()
+        sheet = exportmod.prep_sheet(proj, [("all", text)], analysis, issues, ["x.nc"])
+        tools = sheet.split("## Tools")[1].split("## Operations")[0]
+        ops = sheet.split("## Operations")[1].split("##")[0]
+        self.assertIn("3 mm flat end mill", tools)
+        self.assertNotIn("6 mm flat end mill", tools, sheet)
+        self.assertIn("Small contour", ops)
+        self.assertNotIn("| Big contour", ops)
+        self.assertNotIn("Gone", ops)
+        self.assertIn("Big contour", sheet.split("## Operations")[1])  # signalée comme non exportée
+        # habillage : l'opération reste comptée par le contrôle des numéros T
+        for asm in proj.library.assemblies.values():
+            asm.output.tool_number = 1
+        op2.Active = True
+        proj.add_dressup(op1, "tags", count=2)
+        top = [o for o in proj.operations() if dressupmod_base(o).Name == op1.Name][0]
+        self.assertNotEqual(top.Name, op1.Name)
+        self.assertTrue(exportmod.tool_number_issues(proj), "dressed operation ignored")
+
+
+def dressupmod_base(obj):
+    from cam2027.project import dressups
+
+    return dressups.base_operation(obj)
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
