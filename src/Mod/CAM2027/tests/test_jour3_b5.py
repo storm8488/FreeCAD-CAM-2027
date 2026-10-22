@@ -544,6 +544,11 @@ class TestIndexClearance(unittest.TestCase):
             z = float(lines[i - 1].split("Z")[1].split()[0])
             self.assertTrue(lines[i - 1].startswith("G0") and "X" not in lines[i - 1], lines[i - 1])
             self.assertGreater(z, swept, "%s then %s: stock corners sweep R%.2f" % (lines[i - 1], lines[i], swept))
+        # axe A retiré du profil ensuite : le calcul continue, l'export refuse les mots A
+        proj.set_machine(machine())
+        proj.compute()
+        _t, _a, issues = proj.preview_gcode()
+        self.assertTrue(any(l == "error" and "no rotary axis" in str(m) for l, m in issues), issues)
 
 
 def dressupmod_base(obj):

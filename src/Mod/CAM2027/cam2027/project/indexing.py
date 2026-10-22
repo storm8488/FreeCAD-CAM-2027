@@ -199,7 +199,10 @@ def refresh(project):
         if not is_index_op(obj):
             continue
         if sign is None:
-            sign = check_machine(project.machine)[2]
+            try:
+                sign = check_machine(project.machine)[2]
+            except ValueError:  # axe A retiré du profil depuis : l'export refuse les mots A, le calcul continue
+                return False
         following = next((o for o in ops[k + 1:] if not is_index_op(o)), None)
         base = base_operation(following) if following is not None else obj
         gcode = ["G0 Z%.3f" % rotation_height(project, base), "G0 A%.4f" % (sign * getattr(obj, ANGLE_PROPERTY))]
