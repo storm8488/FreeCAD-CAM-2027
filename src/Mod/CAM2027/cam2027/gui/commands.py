@@ -1554,6 +1554,38 @@ def register_task_pages():
                 FreeCAD.Console.PrintWarning("CAM2027: task page of %s not registered: %s\n" % (kind, exc))
 
 
+def patch_task_panel_cancel():
+    """Annuler sur la page de tâches FreeCAD d'une opération : l'annulation de la transaction a déjà tout remis en
+    l'état, mais l'ouverture de la page avait marqué l'opération « à recalculer » : FreeCAD recalculait tout le
+    parcours, interface figée (45 s pour une reprise des angles). L'opération qui était à jour avant l'ouverture
+    le redevient."""
+    import Path.Op.Gui.Base as PathOpGui
+
+    panel = PathOpGui.TaskPanel
+    if getattr(panel, "cam2027", False):
+        return
+    init, reject, cleanup = panel.__init__, panel.reject, panel.cleanup
+
+    def __init__(self, obj, *args, **kw):
+        self.cam2027_was_touched = "Touched" in (obj.State or [])
+        init(self, obj, *args, **kw)
+
+    def reject_(self, *args, **kw):
+        self.cam2027_cancel = True
+        return reject(self, *args, **kw)
+
+    def cleanup_(self, resetEdit):
+        if getattr(self, "cam2027_cancel", False) and not getattr(self, "cam2027_was_touched", True):
+            try:
+                self.obj.purgeTouched()
+            except Exception:
+                pass  # opération supprimée (création annulée)
+        return cleanup(self, resetEdit)
+
+    panel.__init__, panel.reject, panel.cleanup = __init__, reject_, cleanup_
+    panel.cam2027 = True
+
+
 def register():
     global _registered
     if _registered:
@@ -1561,4 +1593,5 @@ def register():
     for name, cls in COMMANDS:
         FreeCADGui.addCommand(name, cls())
     register_task_pages()
+    patch_task_panel_cancel()
     _registered = True
