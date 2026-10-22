@@ -82,6 +82,10 @@
   le plus bas, puis le plus à gauche) est lue directement (première colonne libre, première ligne libre) au lieu de
   trier toutes les positions libres à chaque rotation (40,9 → 6,1 s) ; transformées de Fourier sur tous les cœurs
   (`scipy.fft`, 10 % de plus mesurés seuls : 40,9 → 36,5 s).
+- **[B4]** Correctif : **prisme sans passe sur FreeCAD 1.0.2** (« Prisme : rien à usiner » dans le scénario
+  `s5-decor`, jamais lancé sur 1.0 cette nuit). L'import SVG de 1.0 donne des arêtes B-spline et le décalage vers
+  l'extérieur du plat de pointe du V-bit échoue (« Wire is not closed ») ; l'échec était pris pour « plus rien à
+  l'intérieur ». Le décalage est repris sur la copie polygonale de la face (0,01 mm) ; rien ne change quand il réussit.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

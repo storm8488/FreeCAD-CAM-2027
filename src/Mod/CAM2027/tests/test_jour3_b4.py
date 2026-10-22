@@ -279,6 +279,34 @@ class TestHoleRecognition(unittest.TestCase):
         self.assertLess(rep["gouge_max"], 0.05, rep)
 
 
+class TestPrismSvg(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_prism_on_imported_svg(self):
+        """Prisme sur le rectangle d'un SVG importé, V-bit à plat de pointe (rayon 0,05) : sur FreeCAD 1.0.2 l'import
+        SVG donne des arêtes B-spline et le décalage vers l'extérieur du plat de pointe échoue (« Wire is not
+        closed ») : aucune passe (« Prisme : rien à usiner » dans le scénario s5-decor sur 1.0.2)."""
+        import os
+        import tempfile
+        from cam2027.project import decor, sheet as sheetmod, vectors
+
+        path = os.path.join(tempfile.mkdtemp(prefix="cam2027-b4p-"), "sign.svg")
+        with open(path, "w", encoding="utf-8") as fp:
+            fp.write('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" '
+                     'viewBox="0 0 120 80"><rect x="10" y="10" width="60" height="30" fill="none" stroke="black"/></svg>')
+        proj = Project.create("B4 prism svg", starter_library(), machine())
+        proj.import_model(path)
+        rect = [v for v in sheetmod.vector_objects(proj.doc) if len(v.Shape.Edges) == 4][0]
+        face = vectors.faces_of(rect.Shape)
+        passes = decor.prism_passes(face, 3.0, 30.0, 1.0, 0.0, tip_radius=0.05)
+        self.assertEqual(len(passes), 2)  # s = 0 et 1 mm : pointe sous le dessus tant que s < 3 tan 30°
+        first = passes[0]
+        xs = [p[0] for p in first]
+        self.assertAlmostEqual(min(xs), 10.0 - 0.05, delta=0.02)  # plat de pointe à cheval sur le contour
+
+
 def ball_penetration(commands, boxes, radius, step=0.01):
     """Pénétration maximale (mm, distance normale) d'une boule de rayon ``radius`` (pointe = point du parcours) dans
     une union de boîtes ``(xmin, ymin, zmin, xmax, ymax, zmax)`` le long des mouvements de coupe (calcul exact)."""

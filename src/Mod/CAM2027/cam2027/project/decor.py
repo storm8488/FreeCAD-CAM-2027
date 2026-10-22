@@ -337,6 +337,7 @@ def prism_passes(face, depth, half_angle_deg, stepover, z_top=0.0, tip_radius=0.
     t = math.tan(math.radians(half_angle_deg))
     out = []
     k = 0
+    polygonal = False
     while True:
         s = k * stepover
         z = z_top - depth + s / t
@@ -346,8 +347,15 @@ def prism_passes(face, depth, half_angle_deg, stepover, z_top=0.0, tip_radius=0.
         if abs(offset) > 1e-9:
             try:
                 region = face.makeOffset2D(offset, 2, False, False, False)
-            except Exception:  # plus rien à l'intérieur
-                break
+            except Exception:
+                if not polygonal:
+                    # FreeCAD 1.0 : rectangle d'un SVG importé en B-splines, décalage vers l'extérieur refusé (« Wire is
+                    # not closed ») : même passe sur la copie polygonale (0,01 mm) de la face
+                    from .vectors import _polygonal
+
+                    face, polygonal = _polygonal(face), True
+                    continue
+                break  # plus rien à l'intérieur
         else:
             region = face
         wires = [w for f in region.Faces for w in f.Wires]
