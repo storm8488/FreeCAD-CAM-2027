@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **[S1]** **Finition des zones plates** (stratégie `flat3d`, Fusion « Flat », type Offset, plusieurs
+  profondeurs) : faces planes horizontales accessibles par le dessus (dessus de la pièce, fonds de poche dégagés)
+  trouvées seules, regroupées par hauteur, une série de passes décalées par hauteur à la hauteur exacte du plat,
+  fraise contenue dans la zone, surépaisseurs 0 par défaut (`project/flatfinish.py`, opération Python dérivée de
+  `Path.Op.Base`). Les décalages d'OpenCascade étant faux sur les fonds percés à bords B-spline (fond hexagonal
+  du disque WobbleRing : 54,9 mm² « réduit » depuis 26,5), contours discrétisés, chaque contour décalé seul et
+  résultat refusé s'il sort de la face. Disque WobbleRing, fraise Ø1 : dessus, rainures et logements finis à
+  0,00 mm sur la carte de hauteur (grille 0,1 mm, 70 208 / 7 104 / 9 559 colonnes), aucune entaille, calcul
+  2,8 s ; Ø2 : logements (anneau de 1,1 mm) signalés trop étroits. Dôme sans plat : rien à faire, refus clair.
 - **[S1]** **Reprise de matière depuis les opérations précédentes** (Fusion « Rest machining », source « From
   previous operation(s) », « Ignore stock less than » 0,1 mm par défaut) sur ébauche 3D, adaptative, poche et
   poche 2D : onglet « Reprise et zone » de l'éditeur d'opération. Le brut de départ est la carte de hauteur

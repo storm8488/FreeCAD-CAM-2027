@@ -271,4 +271,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   peu plus de parcours que nécessaire). Entrées dans les morceaux gardés : plongée verticale en avance de
   plongée depuis la hauteur de sécurité (pas d'hélice ni de rampe) : fraise à coupe au centre nécessaire ; sur
   une adaptative, beaucoup de petits morceaux = beaucoup de remontées (480 sur le plateau de test).
+- **Finition des zones plates** (`flat3d`, `project/flatfinish.py`) : faces planes horizontales seulement (pas de
+  plat incliné) ; passes décalées (pas de type « Parallel ») ; zone réduite du rayon de la fraise : une zone plus
+  étroite que la fraise est sautée et comptée dans le rapport de l'opération (« zone(s) trop étroite(s) ») ; la
+  bande le long d'un bord ouvert (marche vers le bas) n'est pas finie (fraise contenue, comme Fusion). Entrée
+  dans chaque zone : plongée verticale à la hauteur du plat (à lancer après l'ébauche) ; passage d'une passe à
+  la suivante en restant en bas quand le milieu du trajet reste dans la zone, sinon remontée. Contours
+  discrétisés à 0,01 mm. Le panneau de tâches de FreeCAD (double-clic dans l'arbre) renvoie à l'éditeur CAM2027.
 

@@ -136,6 +136,43 @@ def scenario_rest_and_area(g, scenario, files):
     g.pump(0.3)
 
 
+def scenario_flat(g, scenario, files):
+    """Finition des zones plates sans sélection (dessus et fonds trouvés seuls), outil choisi dans le dialogue,
+    éditeur accepté, calcul, contrôle matière."""
+    from cam2027.project import flatfinish
+
+    proj = g.new_project(scenario, "S1 flat")
+    if proj is None:
+        return
+    g.driver.open_files.append(files["step"])
+    g.run_command(scenario, "CAM2027_ImportModel")
+    g.run_command(scenario, "CAM2027_StockFixture")
+    ed = _add_operation(g, scenario, "flat3d", "3 mm flat end mill 2F")
+    if ed is None:
+        return
+    titles = [ed.tabs.tabText(i) for i in range(ed.tabs.count())]
+    g.log("  editor tabs: %s" % titles)
+    op = ed.op
+    ed.accept()
+    g.pump(0.3)
+    proj = g.project()
+    g.run_command(scenario, "CAM2027_Compute")
+    state = proj.operation_state(op)
+    pts = _cut_points(op.Path)
+    levels = sorted(set(round(p[2], 3) for p in pts))
+    g.log("  flat: state %s, %d cut points, levels %s, %s" % (state, len(pts), levels, op.Report))
+    if state != "computed" or levels != [4.0, 12.0]:
+        g.problem(scenario, "flat finishing: state %s, levels %s (expected 4 and 12)" % (state, levels))
+    g.run_command(scenario, "CAM2027_MaterialCheck")
+    rep = proj.last_check()
+    if rep is None or rep.get("gouge_max", 1) > 0.03:
+        g.problem(scenario, "gouge after flat finishing: %s" % (rep and rep.get("gouge_max")))
+    g.check_docks(scenario)
+    FreeCAD.closeDocument(proj.doc.Name)
+    g.pump(0.3)
+
+
 def scenarios(g, files, tmp):
     """Entrées pour la liste de ``gui_scenarios.main``."""
-    return (("s1-rest-area", lambda: scenario_rest_and_area(g, "s1-rest-area", files)),)
+    return (("s1-rest-area", lambda: scenario_rest_and_area(g, "s1-rest-area", files)),
+            ("s1-flat", lambda: scenario_flat(g, "s1-flat", files)))

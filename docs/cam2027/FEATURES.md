@@ -48,6 +48,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Reprise depuis le brut restant | partiel | `project/rest.py` : brut = carte de hauteur simulée des opérations précédentes, coupes gardées où la fraise rencontre plus de « Ignorer moins de » (Fusion), liaisons recalculées (`project/trim.py`) ; ébauche 3D, adaptative, poche, poche 2D ; onglet « Reprise et zone » | auto (`test_nuit_s1` : plaque à rainure étroite) + scénario `s1-rest-area` + disque WobbleRing (7,3 % de l'ébauche, aucune entaille) | entrées en hélice dans les zones reprises (plongées verticales), calcul limité aux zones restantes (l'opération complète est calculée puis découpée), sources « depuis un fichier / des corps » |
 | Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
 | Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
+| Finition des zones plates (Flat) | disponible | stratégie `flat3d` (`project/flatfinish.py`) : plats accessibles trouvés seuls, passes décalées à la hauteur exacte de chaque plat, fraise contenue | auto (`test_nuit_s1` : 3 hauteurs à ±0,02 mm, fraise contenue, fond percé, dôme sans plat) + scénario `s1-flat` + disque WobbleRing (0,00 mm, aucune entaille) | type Parallel, entrées en rampe, plats inclinés |
 
 ## Dessin et fonctions Aspire
 

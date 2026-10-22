@@ -782,6 +782,8 @@ def default_params(kind, tool, values):
         params.update({"LayerMode": "Multi-pass", "SampleInterval": 0.5})
     if kind == "chamfer":
         params["Width"] = 1.0
+    if kind == "flat3d":
+        params = {"StepOver": stepover}  # une seule passe, à la hauteur de chaque plat
     if kind == "threadmill":
         names = thread_names(DEFAULT_THREAD_TYPE)
         params["ThreadType"] = DEFAULT_THREAD_TYPE
