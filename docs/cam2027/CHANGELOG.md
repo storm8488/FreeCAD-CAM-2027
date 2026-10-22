@@ -34,6 +34,12 @@
   que 2/1 dont le milieu passe sous la hauteur OpenCamLib devient une marche (palier à la plus haute des deux
   hauteurs, puis verticale ; un seul lot OpenCamLib pour toutes). Test : marche de 10 mm, pénétration exacte de la
   boule 0,0125 mm avant, < 0,005 mm après.
+- **[B4]** Correctif : **entaille de la finition 3D rotative au bord des parois plus profondes que le rayon de la
+  boule** (gorge, poche, épaulement). Même défaut que `scallop` : deux points voisins d'une ligne (0,25 mm) sont l'un
+  sur l'arête, l'autre au fond, et la droite qui les relie entre dans l'arête : **0,26 mm** mesurés sur une gorge de
+  6 mm avec la boule de 6 (le test de la nuit ne regardait la carte radiale que loin des parois, sur une poche de
+  2 mm). Deux points voisins plus écartés en hauteur que 2 fois leur distance sont maintenant reliés par une marche
+  (palier à la plus haute des deux hauteurs, puis montée ou descente seule), en lignes comme en spirale.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

@@ -229,6 +229,27 @@ class RotaryModel(object):
         return z
 
 
+#: pente (dz / déplacement) au-delà de laquelle deux points voisins d'une passe sont reliés par une marche
+STEEP_SLOPE = 2.0
+
+
+def _stairs(run):
+    """Points d'une passe ``[(x, y, z)]`` avec une marche entre deux voisins très écartés en hauteur.
+
+    Au bord d'une paroi (poche, épaulement), un point est sur l'arête (fraise posée sur le bord) et le suivant au
+    pied de la paroi : la droite qui les relie entre dans l'arête. La marche reste à la plus haute des deux
+    hauteurs jusqu'au-dessus de l'autre point, puis descend (ou monte) seule : entre deux points voisins, la
+    surface ne dépasse pas la plus haute des deux de plus que la flèche d'une boule sur l'écart (< 0,003 mm à
+    0,25 mm)."""
+    out = run[:1]
+    for b in run[1:]:
+        a = out[-1]
+        if abs(b[2] - a[2]) > STEEP_SLOPE * math.hypot(b[0] - a[0], b[1] - a[1]) > 0.0:
+            out.append((b[0], b[1], a[2]) if a[2] > b[2] else (a[0], a[1], b[2]))
+        out.append(b)
+    return out
+
+
 def rotary_moves(model, stock_radius, cutter, tool_radius, stepover, sample, safe_z, step_down=0.0, leave=0.0,
                  x_range=None, spiral=False):
     """Lignes le long de l'axe (aller-retour), une par angle, en repère déroulé ; niveaux d'ébauche depuis le
@@ -290,7 +311,7 @@ def rotary_moves(model, stock_radius, cutter, tool_radius, stepover, sample, saf
                     moves.append(("rapid", xa, ya, safe_z))
                     moves.append(("rapid", xa, ya, min(safe_z, max(za, top) + 1.0)))
                     moves.append(("plunge", xa, ya, za))
-                    moves.extend(("cut", xv, yv, zv) for xv, yv, zv in run[1:])
+                    moves.extend(("cut", xv, yv, zv) for xv, yv, zv in _stairs(run)[1:])
                     moves.append(("rapid", run[-1][0], run[-1][1], safe_z))
                 run = []
         if floor is not None:
