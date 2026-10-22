@@ -104,5 +104,39 @@ class TestSlopes(unittest.TestCase):
                 self.assertLess(float(np.abs(diff).max()), 0.005, (cname, tname, float(diff.max()), float(diff.min())))
 
 
+class TestCurvedParts(unittest.TestCase):
+    def test_part_top_follows_curved_faces(self):
+        """Dessus de pièce triangulé = surface exacte à 0,012 mm près sur un bol (concave) et un dôme (convexe) ;
+        avant : 0,045 mm au-dessus du bol (fausses entailles), 0,024 mm sous le dôme (entailles manquées)."""
+        import numpy as np
+
+        for shape, exact in ((bowl(), bowl_z), (dome(), dome_z)):
+            z = sim.ZMap(0, 0, 60, 60, 30, 0.25)
+            h = sim.model_heights(z, [shape])
+            X, Y = np.meshgrid(z.xs, z.ys, indexing="ij")
+            err = h - exact(X, Y)
+            self.assertLess(float(np.abs(err).max()), 0.012, (float(err.max()), float(err.min())))
+
+    def test_ball_tangent_in_bowl_is_not_a_gouge(self):
+        """Fraise boule 6 mm exactement tangente à un bol : aucune entaille (garde-fou du dessus triangulé plus fin)."""
+        import numpy as np
+
+        ball = sim.ToolProfile("ball", 6.0)
+        z = sim.ZMap(0, 0, 60, 60, 21.0, 0.25)
+        P0, P1 = [], []
+        for y in np.arange(4.0, 56.01, 0.5):
+            prev = None
+            for x in np.arange(4.0, 56.01, 0.1):
+                p = (float(x), float(y), ball_tip_on_bowl(x, y))
+                if prev is not None:
+                    P0.append(prev)
+                    P1.append(p)
+                prev = p
+        z.sweep_arrays(np.array(P0), np.array(P1), ball)
+        rep = check(z, [bowl()])
+        self.assertGreater(z.removed_volume(), 5000.0)
+        self.assertLess(rep["gouge_max"], 0.02, rep)
+
+
 if __name__ == "__main__":
     unittest.main()

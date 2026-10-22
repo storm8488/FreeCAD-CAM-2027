@@ -8,6 +8,10 @@
   rampes, hélices et pentes. Minimum exact sur la plage où le disque couvre la colonne (fonction convexe, section
   dorée) : la carte = la fraise posée tous les 2 µm à 0,005 mm près (avant : 0,050 mm). Fraises plate et boule
   inchangées (déjà exactes).
+- **[B2]** **Contrôle matière, dessus de la pièce sur les faces courbes** : la pièce était triangulée à 0,05 mm de
+  flèche, plus que la tolérance d'entaille (0,02 mm) : facettes 0,045 mm au-dessus du fond d'un bol (fausses
+  entailles possibles) et 0,024 mm sous un dôme (entailles manquées). Triangulation à 0,01 mm
+  (`sim.MODEL_DEFLECTION`) : écart au dessus exact de 0,011 mm au plus sur le bol et le dôme de test.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

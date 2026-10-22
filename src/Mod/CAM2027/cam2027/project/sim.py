@@ -626,9 +626,13 @@ def path_segments(commands, start=None, with_index=False):
 
 #: tolérance latérale du contrôle d'entaille au droit des parois verticales (mm)
 WALL_TOLERANCE = 0.05
+#: flèche de la triangulation de la pièce (mm) : les facettes passent jusqu'à cette distance au-dessus d'une
+#: surface concave (fausses entailles) ou au-dessous d'une convexe (entailles manquées) ; à 0,05 mm, 0,045 mm
+#: d'écart sur un bol, plus que la tolérance d'entaille (0,02 mm)
+MODEL_DEFLECTION = 0.01
 
 
-def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
+def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
     """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce).
 
     ``lateral`` > 0 : retourne ``(hauteurs au centre, hauteurs basses)``, les basses étant la plus basse des
@@ -789,7 +793,7 @@ def _point_triangle_distance(p, A, B, C):
     return np.minimum.reduce([face, seg(A, B), seg(B, C), seg(C, A)])
 
 
-def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=0.05):
+def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_DEFLECTION):
     """Vérifie en 3D les colonnes que la carte de hauteur dit entaillées et remplace leur entaille verticale
     par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce,
     nulle si ce point est hors de la pièce (dessous d'un surplomb, que la carte ne voit pas).
