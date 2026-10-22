@@ -146,45 +146,41 @@ def _samples(move, step):
 def collisions(obj, shapes, step=0.5, tol=0.02):
     """Points (x, y, z) des mouvements ajoutés par l'habillage où la fraise touche la pièce.
 
-    Seuls les mouvements absents du parcours de base sont contrôlés (l'opération répond des siens) ; en chaque
-    point, la distance entre l'axe de la fraise (de la pointe au-dessus de la pièce) et les solides doit valoir au
-    moins le rayon de l'outil."""
-    import FreeCAD
-    import Part
+    Seuls les mouvements absents du parcours de base sont contrôlés (l'opération répond des siens). Carte de
+    hauteur du dessus de la pièce (``sim.model_heights``) sur la zone de ces mouvements, au plus 0,05 mm :
+    en chaque point, aucune colonne à moins d'un rayon d'outil (moins la tolérance et une demi-diagonale de
+    cellule) ne doit dépasser la pointe. Le fond sous la fraise ne compte pas ; un surplomb compte (prudent)."""
+    import math
+    from . import sim
 
     radius = _tool_radius(obj)
     if not shapes or radius <= 0:
         return []
+    np = sim._np()
     key = lambda m: (m[0],) + tuple(round(v, 3) for v in m[1] + m[2])
     base = set(key(m) for m in _moves(obj.Base.Path.Commands))
-    top = max(s.BoundBox.ZMax for s in shapes) + 1.0
-    bb = shapes[0].BoundBox
-    for s in shapes[1:]:
-        bb.add(s.BoundBox)
-    above = {}  # pièce au-dessus du plan de la pointe (le fond sous la fraise ne compte pas)
-
-    def part_above(z):
-        k = round(z, 3)
-        if k not in above:
-            box = Part.makeBox(bb.XLength + 2 * radius + 20, bb.YLength + 2 * radius + 20, top - k,
-                               FreeCAD.Vector(bb.XMin - radius - 10, bb.YMin - radius - 10, k + 1e-3))
-            above[k] = [c for c in (s.common(box) for s in shapes) if c.Solids]
-        return above[k]
-
+    top = max(s.BoundBox.ZMax for s in shapes)
+    points = [q for m in _moves(obj.Path.Commands) if key(m) not in base for q in _samples(m, step) if q[2] < top]
+    if not points:
+        return []
+    P = np.array(points, dtype=float)
+    margin = radius + 1.0
+    xmin, ymin = P[:, 0].min() - margin, P[:, 1].min() - margin
+    xmax, ymax = P[:, 0].max() + margin, P[:, 1].max() + margin
+    res = max(0.05, math.sqrt((xmax - xmin) * (ymax - ymin) / 1.8e6))
+    zmap = sim.ZMap(xmin, ymin, xmax, ymax, top, res)
+    heights = sim.model_heights(zmap, shapes, deflection=0.02)
+    reach = radius - tol - res * 0.71
     hits = []
-    for move in _moves(obj.Path.Commands):
-        if key(move) in base:
+    for x, y, z in points:
+        win = zmap._window(x - reach, x + reach, y - reach, y + reach)
+        if win is None:
             continue
-        for x, y, z in _samples(move, step):
-            if z >= top - 1.0:
-                continue
-            solids = part_above(z)
-            if not solids:
-                continue
-            axis = Part.LineSegment(FreeCAD.Vector(x, y, z + 2e-3), FreeCAD.Vector(x, y, top)).toShape()
-            if min(axis.distToShape(s)[0] for s in solids) < radius - tol:
-                hits.append((round(x, 3), round(y, 3), round(z, 3)))
-                break
+        i0, i1, j0, j1, (X, Y) = win
+        near = (X - x) ** 2 + (Y - y) ** 2 <= reach * reach
+        if np.any(heights[i0:i1, j0:j1][near] > z + tol):
+            hits.append((round(x, 3), round(y, 3), round(z, 3)))
+            break
     return hits
 
 

@@ -1105,5 +1105,6 @@
   "Unknown offset mode: {m}": "Mode de décalage inconnu : {m}",
   "Probe tip diameter unknown: enter it in the machine profile.": "Diamètre de la bille du palpeur inconnu : renseignez-le.",
   "The hole must be wider than the probe tip.": "Le trou doit être plus large que la bille du palpeur.",
-  "Unknown corner: {c}": "Coin inconnu : {c}"
+  "Unknown corner: {c}": "Coin inconnu : {c}",
+  "Holes below the stock top: {holes}; machine the material above them first (the drilling moves would hit it)": "Trous sous le dessus du brut : {holes} ; usinez d'abord la matière au-dessus (les mouvements de perçage la toucheraient)"
 }

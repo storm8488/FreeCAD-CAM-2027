@@ -70,7 +70,8 @@ class HoleDialog(QtWidgets.QDialog):
 
     def _refresh(self, *_args):
         self.steps, self.notes = holesmod.plan(self.proj.library, self.holes, threads=self.threads(),
-                                               spot=self.spot.isChecked())
+                                               spot=self.spot.isChecked(),
+                                               stock_top=self.proj.stock_bounds()["zmax"])
         self.preview.clear()
         for st in self.steps:
             label = tr(holesmod.STEP_LABELS["bore" if st.get("bore") else st["step"]])

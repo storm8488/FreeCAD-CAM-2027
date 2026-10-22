@@ -485,6 +485,39 @@ class TestHoles(unittest.TestCase):
                                       ("G0", {"Z": 12.0})])
 
 
+    def test_counterbore_and_stock_note(self):
+        """Lamage Ø9 sur un trou Ø4,5 débouchant : le lamage a un fond (pas débouchant), le trou débouche (cas du
+        chauffage Vz330) ; un trou qui commence sous le dessus du brut est signalé."""
+        import Part
+        from cam2027.project import holes
+
+        V = FreeCAD.Vector
+        shape = Part.makeBox(40, 40, 10).cut(Part.makeCylinder(2.25, 10, V(20, 20, 0)))
+        shape = shape.cut(Part.makeCylinder(4.5, 2, V(20, 20, 8))).removeSplitter()
+        step = os.path.join(self.tmp, "counterbore.step")
+        shape.exportStep(step)
+        lib = drill_library()
+        proj = Project.create("Counterbore", lib, machine())
+        part = proj.import_model(step, label="CB").objects[0]
+        job = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        self.addCleanup(proj.close)
+        found = {round(h.diameter, 2): h for h in holes.find_holes(job.Model.Group[0])}
+        self.assertEqual(sorted(found), [4.5, 9.0])
+        self.assertFalse(found[9.0].through)
+        self.assertAlmostEqual(found[9.0].bottom, 8.0, places=6)
+        self.assertTrue(found[4.5].through)
+        self.assertAlmostEqual(found[4.5].top, 8.0, places=6)
+        _steps, notes = holes.plan(lib, list(found.values()), stock_top=proj.stock_bounds()["zmax"])
+        below = [n for n in notes if "below the stock top" in n]
+        self.assertEqual(len(below), 1, notes)  # dessus du brut à 11 : les deux tailles, un seul message
+        self.assertIn("Ø4.50 (Z 8.00)", below[0])
+        self.assertIn("Ø9.00 (Z 10.00)", below[0])
+        _steps, notes = holes.plan(lib, list(found.values()), stock_top=10.0)
+        below = [n for n in notes if "below the stock top" in n]
+        self.assertEqual(len(below), 1, notes)  # dessus du brut au ras de la pièce : seul le trou sous le lamage
+        self.assertIn("Ø4.50", below[0])
+        self.assertNotIn("Ø9.00", below[0])
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 CORNER_FL = ["(CAM2027 probe origin: corner front-left)", "M5", "G21", "G90", "G54", "G91",

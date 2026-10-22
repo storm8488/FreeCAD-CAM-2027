@@ -21,7 +21,9 @@
   3 D, pas = D ; débouchant : pointe entière sous le fond + 0,5 mm ; borgne : pointe au fond) ou, sans foret,
   alésage hélicoïdal à la plus grosse fraise qui passe, chanfrein par plongée d'un outil en V du même angle
   jusqu'au diamètre du chanfrein, filetage à la fraise à fileter si un filet est choisi pour la taille. Les
-  trous sans outil sont signalés. Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
+  trous sans outil sont signalés, comme les trous qui commencent sous le dessus du brut (le perçage, comme
+  dans Fusion, ne tient pas compte du brut : il faut usiner la matière au-dessus avant). Un lamage posé sur un
+  trou plus petit a un fond (pas « débouchant », vu sur le chauffage). Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
   G98/G99) : ils n'enlevaient rien avant. Plaque de test à 3 diamètres (3 débouchant, 5 borgne, 8 débouchant
   chanfreiné) : 7 opérations, trous au bon diamètre et à la bonne profondeur dans la carte de hauteur, chanfrein
   à 45° à 0,05 mm, aucune entaille.
@@ -41,8 +43,9 @@
   vertical, droite tangente ou perpendiculaire), rayon, angle de balayage. Habillage `LeadInOut` de FreeCAD,
   encapsulé dans `project/leads.py` (propriétés 1.1 `StyleIn/RadiusIn/AngleIn`, traduites en `StyleOn/Length`
   sur 1.0 ; arc vertical et angle ≠ 90° demandent 1.1). Les entrées restent au-dessus des attaches et de la
-  rampe. Contrôle des collisions : chaque mouvement ajouté est vérifié contre la pièce (axe de la fraise à au
-  moins un rayon d'outil des solides au-dessus de la pointe) ; sur 1.1, le point de départ est déplacé le long
+  rampe. Contrôle des collisions : chaque mouvement ajouté est vérifié contre la carte de hauteur du dessus de
+  la pièce sur la zone des entrées (aucune colonne plus haute que la pointe à moins d'un rayon d'outil ; 1,1 s
+  sur le chauffage Vz330, 1 523 commandes) ; sur 1.1, le point de départ est déplacé le long
   du parcours avec recouvrement (`OffsetIn/OffsetOut`) tant qu'un arc toucherait la pièce, sinon refus avec la
   position. La poche en zigzag n'en a pas (arcs dans les parois : entaille de 4,2 mm mesurée). Plaque de test,
   contour R3 : premier mouvement de coupe = arc de R3 tangent au contour à chaque passe, aucune entaille.

@@ -114,8 +114,11 @@ def find_holes(obj, tol=1e-4):
         above = FreeCAD.Vector(cx, cy, top + 0.05)
         if top < bb.ZMax - 1e-6 and shape.isInside(above, tol, True):
             continue  # fermé au-dessus (trou par en dessous, perçage transversal...)
-        below = FreeCAD.Vector(cx, cy, bottom - 0.05)
-        through = bottom <= bb.ZMin + 1e-6 or not shape.isInside(below, tol, True)
+        # débouchant : vide sous tout le fond (près de la paroi aussi : un lamage sur un trou plus petit a un fond)
+        ring = [FreeCAD.Vector(cx + 0.9 * r * math.cos(a), cy + 0.9 * r * math.sin(a), bottom - 0.05)
+                for a in (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi)]
+        through = bottom <= bb.ZMin + 1e-6 or not any(shape.isInside(v, tol, True)
+                                                       for v in [FreeCAD.Vector(cx, cy, bottom - 0.05)] + ring)
         holes.append(Hole(cx, cy, 2.0 * r, top, bottom, through, e["faces"], chamfer_d, chamfer_angle))
     holes.sort(key=lambda h: (h.diameter, h.y, h.x))
     return holes
@@ -184,15 +187,18 @@ def _drill_tip(tool):
 # -- séquence ----------------------------------------------------------------------------------------------
 
 
-def plan(lib, holes, threads=None, spot=True):
+def plan(lib, holes, threads=None, spot=True, stock_top=None):
     """Séquence proposée : liste d'étapes ``{"step", "group", "holes", "tool", "preset", "kind", "params"}`` et
-    notes (trous laissés de côté). ``threads`` : diamètre arrondi à 0,01 -> désignation (« M8 »)."""
+    notes (trous laissés de côté, trous sous le dessus du brut). ``threads`` : diamètre arrondi à 0,01 ->
+    désignation (« M8 »)."""
     from . import operations as opsmod
 
     threads = {round(float(k), 2): v for k, v in (threads or {}).items()}
-    steps, notes = [], []
+    steps, notes, low = [], [], []
     for model, members in groups(holes):
         d = model.diameter
+        if stock_top is not None and model.top < stock_top - 0.05:
+            low.append("Ø%.2f (Z %.2f)" % (d, model.top))
         drill = pick_drill(lib, d)
         mill = None if drill else pick_bore_mill(lib, d)
         if drill is None and mill is None:
@@ -243,6 +249,10 @@ def plan(lib, holes, threads=None, spot=True):
                 full = name if name in opsmod.thread_names(opsmod.DEFAULT_THREAD_TYPE) else _thread_name(name)
                 steps.append({"step": "thread", "kind": "threadmill", "tool": tm[0], "holes": members, "model": model,
                               "params": {"ThreadName": full}})
+    if low:
+        # perçage pas « stock-aware » (comme Fusion) : la matière au-dessus des trous doit être enlevée avant
+        notes.append(Msg("Holes below the stock top: {holes}; machine the material above them first (the drilling moves would hit it)",
+                         holes=", ".join(low)))
     order = {"spot": 0, "drill": 1, "chamfer": 2, "thread": 3}
     steps.sort(key=lambda s: (order[s["step"]], s["tool"].name, s["model"].diameter))
     return steps, notes

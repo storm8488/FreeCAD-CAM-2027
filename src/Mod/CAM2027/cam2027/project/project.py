@@ -687,7 +687,7 @@ class Project(object):
             # filetage dans la matière (trou pas encore percé) : un seul message qui dit quoi faire
             threading = rec.get("kind") == "threadmill"
             commands = obj.Path.Commands
-            if holesmod.has_cycles(commands):  # cycles de perçage : mouvements équivalents
+            if rec.get("kind") == "drilling" and holesmod.has_cycles(commands):  # cycles : mouvements équivalents
                 commands = holesmod.expand_cycles(commands)
             segments, pos = sim.path_segments(commands, pos, with_index=True)
             top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
