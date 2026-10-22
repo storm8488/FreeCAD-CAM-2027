@@ -48,7 +48,69 @@ def _junction_speed(u, w, accel, deviation):
 
 
 def plan_time(moves, accel=DEFAULT_ACCELERATION, deviation=DEFAULT_JUNCTION_DEVIATION):
-    """Durée (s) d'une suite de mouvements ``(p0, p1, avance mm/s)`` enchaînés (arrêt au début et à la fin)."""
+    """Durée (s) d'une suite de mouvements ``(p0, p1, avance mm/s)`` enchaînés (arrêt au début et à la fin).
+
+    Passages arrière et avant en carrés de vitesse ``w = v²`` : ``w[k] = min(w[k], w[k+1] + 2·a·L[k])`` se
+    résout d'un coup en minimum cumulé (``w[k] = min_j≥k(cap[j] + 2a·S[j]) − 2a·S[k]``, ``S`` longueur
+    cumulée) : même résultat que la boucle, vectorisé (numpy)."""
+    import numpy as np
+
+    if not moves:
+        return 0.0
+    P0 = np.array([m[0] for m in moves], dtype=float)
+    P1 = np.array([m[1] for m in moves], dtype=float)
+    F = np.array([m[2] for m in moves], dtype=float)
+    D = P1 - P0
+    L = np.sqrt((D * D).sum(axis=1))
+    keep = (L >= 1e-9) & (F > 0)
+    L, F, D = L[keep], F[keep], D[keep]
+    n = len(L)
+    if not n:
+        return 0.0
+    U = D / L[:, None]
+    # vitesse maximale aux jonctions (GRBL), arrêt au départ et à l'arrivée
+    cap = np.zeros(n + 1)
+    if n > 1:
+        cos_theta = -(U[:-1] * U[1:]).sum(axis=1)
+        sin_half = np.sqrt(np.clip(0.5 * (1.0 - cos_theta), 0.0, 1.0))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            vj = np.sqrt(accel * deviation * sin_half / (1.0 - sin_half))
+        vj = np.where(cos_theta > 0.999999, 0.0, np.where(cos_theta < -0.999999, np.inf, vj))
+        cap[1:n] = np.minimum(np.minimum(F[:-1], F[1:]), vj)
+    w = cap * cap
+    S = np.concatenate(([0.0], np.cumsum(L)))
+    two_a = 2.0 * accel
+    # arrière : freinage possible jusqu'à la vitesse suivante
+    w = np.minimum.accumulate((w + two_a * S)[::-1])[::-1] - two_a * S
+    # avant : accélération possible depuis la vitesse précédente
+    w = np.minimum.accumulate(w - two_a * S) + two_a * S
+    v = np.sqrt(np.clip(w, 0.0, None))
+    v_in, v_out = v[:-1], v[1:]
+    # trapèze ou triangle par segment
+    d_up = np.clip((F * F - v_in * v_in) / two_a, 0.0, None)
+    d_down = np.clip((F * F - v_out * v_out) / two_a, 0.0, None)
+    trap = d_up + d_down <= L
+    t_trap = (F - v_in) / accel + (F - v_out) / accel + (L - d_up - d_down) / F
+    v_peak = np.maximum(np.sqrt(np.clip((two_a * L + v_in * v_in + v_out * v_out) / 2.0, 0.0, None)), np.maximum(v_in, v_out))
+    t_tri = np.clip((v_peak - v_in) / accel, 0.0, None) + np.clip((v_peak - v_out) / accel, 0.0, None)
+    return float(np.where(trap, t_trap, t_tri).sum())
+
+
+def naive_time(moves):
+    """Durée sans accélération : somme des longueurs / avances (comparaison sur la fiche)."""
+    import numpy as np
+
+    if not moves:
+        return 0.0
+    P0 = np.array([m[0] for m in moves], dtype=float)
+    P1 = np.array([m[1] for m in moves], dtype=float)
+    F = np.array([m[2] for m in moves], dtype=float)
+    L = np.sqrt(((P1 - P0) ** 2).sum(axis=1))
+    return float((L[F > 0] / F[F > 0]).sum())
+
+
+def plan_time_loop(moves, accel=DEFAULT_ACCELERATION, deviation=DEFAULT_JUNCTION_DEVIATION):
+    """Même calcul que :func:`plan_time`, en boucle Python (référence des tests)."""
     segs = []
     for p0, p1, feed in moves:
         d = [p1[k] - p0[k] for k in range(3)]
@@ -72,23 +134,40 @@ def plan_time(moves, accel=DEFAULT_ACCELERATION, deviation=DEFAULT_JUNCTION_DEVI
     return sum(segment_time(segs[k][0], v_entry[k], v_entry[k + 1], segs[k][2], accel) for k in range(n))
 
 
+_MOVES = {"G0": True, "G00": True, "G1": False, "G01": False}
+_ARCS = ("G2", "G02", "G3", "G03")
+
+
 def path_moves(commands, rapid_mm_min, start=None):
-    """``(p0, p1, avance mm/s)`` d'une liste de commandes Path (F en mm/s, unité interne de FreeCAD ; arcs
-    découpés), et la position finale."""
+    """``(p0, p1, avance mm/s)`` d'une liste de commandes Path (F en mm/s, unité interne de FreeCAD, modale ;
+    arcs découpés par ``sim.path_segments``), et la position finale. Un seul passage sur les commandes (lire
+    ``Parameters`` coûte : l'estimation est faite à chaque export)."""
     from . import sim
 
-    out, feed = [], None
-    segments, pos = sim.path_segments(commands, start, with_index=True)
-    feeds = {}
-    current = None
-    for i, c in enumerate(commands):
-        if "F" in c.Parameters:
-            current = float(c.Parameters["F"])
-        feeds[i] = current
-    for rapid, p0, p1, index in segments:
-        feed = rapid_mm_min / 60.0 if rapid else (feeds.get(index) or 0.0)
-        out.append((tuple(p0), tuple(p1), feed if feed > 0 else rapid_mm_min / 60.0))
-    return out, pos
+    rapid = rapid_mm_min / 60.0
+    out, feed = [], 0.0
+    pos = tuple(start) if start is not None else None
+    for c in commands:
+        name = c.Name.upper()
+        rapid_move = _MOVES.get(name)
+        if rapid_move is None and name not in _ARCS:
+            continue
+        p = c.Parameters
+        if "F" in p:
+            feed = float(p["F"])
+        if pos is None:
+            pos = (p.get("X", 0.0), p.get("Y", 0.0), p.get("Z", 0.0))
+            continue
+        speed = rapid if rapid_move else (feed if feed > 0 else rapid)
+        if rapid_move is None:  # arc : découpé comme dans le contrôle matière
+            segments, end = sim.path_segments([c], pos)
+            out.extend((tuple(a), tuple(b), speed) for _r, a, b in segments)
+            pos = tuple(end)
+            continue
+        end = (p.get("X", pos[0]), p.get("Y", pos[1]), p.get("Z", pos[2]))
+        out.append((pos, end, speed))
+        pos = end
+    return out, (list(pos) if pos is not None else None)
 
 
 def machine_settings(machine):
@@ -121,7 +200,7 @@ def estimate(project):
         t = plan_time(moves, accel)
         rows.append((op.Label, t))
         total += t
-        naive += sum(math.dist(p0, p1) / f for p0, p1, f in moves if f > 0)
+        naive += naive_time(moves)
         pos = pos_end
     return {"operations": rows, "total": total, "assumed": assumed, "without_accel": naive,
             "acceleration": accel, "rapid": rapid}

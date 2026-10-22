@@ -346,6 +346,27 @@ class TestTiming(unittest.TestCase):
         self.assertGreater(corner, 2 * 10.0 / v + v / 500.0)
         self.assertLess(corner, 2 * t)
         self.assertAlmostEqual(timing.segment_time(10, 0, 0, v, 0), 10.0 / v)
+        # chaque mouvement prend l'avance de sa propre commande (F modal), rapides à l'avance rapide
+        import Path
+
+        cmds = [Path.Command("G0", {"X": 0, "Y": 0, "Z": 5}), Path.Command("G0", {"Z": 1}),
+                Path.Command("G1", {"Z": 0, "F": 10.0}), Path.Command("G1", {"X": 10, "F": 20.0}),
+                Path.Command("G1", {"Y": 10}), Path.Command("G2", {"X": 20, "Y": 0, "I": 0, "J": -10, "F": 5.0})]
+        moves, end = timing.path_moves(cmds, 600.0)
+        self.assertEqual([m[2] for m in moves[:4]], [10.0, 10.0, 20.0, 20.0])
+        self.assertTrue(all(m[2] == 5.0 for m in moves[4:]) and len(moves) > 5)
+        self.assertAlmostEqual(end[0], 20.0, places=6)
+        self.assertEqual(timing.path_moves(cmds[:2], 600.0)[0][0][2], 10.0)  # G0 : 600 mm/min = 10 mm/s
+        # version vectorisée = boucle de référence sur un trajet quelconque (virages, avances, segments courts)
+        import random
+
+        rnd = random.Random(3)
+        pts = [(0.0, 0.0, 0.0)]
+        for _k in range(400):
+            p = pts[-1]
+            pts.append((p[0] + rnd.uniform(-2, 2), p[1] + rnd.uniform(-2, 2), p[2] + rnd.uniform(-0.3, 0.3)))
+        moves = [(pts[k], pts[k + 1], rnd.choice((5.0, 20.0, 50.0))) for k in range(400)]
+        self.assertAlmostEqual(timing.plan_time(moves, 500.0), timing.plan_time_loop(moves, 500.0), places=6)
 
     def test_project_estimate_and_setup_sheet(self):
         from cam2027.project import timing, vectors
