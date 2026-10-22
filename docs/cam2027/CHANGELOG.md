@@ -234,6 +234,37 @@
   `QTextDocument` ne dessine rien dans `QPdfWriter` (vérifié : texte direct par `QPainter` 6,4 Ko, document 1,2 Ko
   vide). La commande refuse maintenant clairement sur 1.0 (la fiche Markdown est écrite à côté du G-code à l'export) ;
   1.1.4 inchangé (PDF de 23 Ko). Scénario `s5-setup-pdf` adapté (refus attendu sur 1.0).
+- **[B5]** **Changement d'outil manuel** : le postprocesseur `grbl` met M6 en commentaire (GRBL 1.1 le refuse) et
+  le programme enchaînait l'opération suivante avec l'outil précédent (fraise plus grosse = entaille). Chaque
+  changement de numéro d'outil devient `M5` + `(Tool change: load Tn, set Z zero again, then resume)` + `M0` (reprise par Départ
+  cycle ; CNCjs suspend aussi l'envoi) ; le premier outil est celui de la fiche. Deux outils différents sous le même
+  numéro (bibliothèque de démarrage T1..T8 + import Fusion T1..T11) : export refusé, rien ne les distingue dans le
+  G-code.
+- **[B5]** **Contrôles GRBL 1.1 ajoutés à l'export** (refus) : arcs dont le rayon de fin s'écarte du rayon de début
+  au-delà de 0,005 mm et 0,1 % (error:33), rayon R trop petit (error:34), arc sans centre ; avance non définie
+  (error:22, y compris juste après G93 -> G94) ; coupe broche arrêtée (avant M3, après M5, S0) ; texte hors mots
+  G-code en dehors des commentaires (error:1 / 2) ; ligne de plus de 80 caractères (error:11) ; M7 et M56 absents du
+  GRBL standard (M7 accepté si le profil déclare l'arrosage brouillard). Avertissements : broche en marche à la fin,
+  pas de M2 / M30. Aucun arc refusé dans les sorties actuelles (contour, hélice, filetage).
+- **[B5]** **Commentaires imbriqués** : « Dupliquer » nomme la copie « Contour (copy) », le palpage « Probe the
+  origin (corner) » ; le postprocesseur écrivait « (Begin operation: Contour (copy)) », que GRBL et CNCjs ferment à
+  la première « ) » (la suite est lue comme du G-code : error:1). Parenthèses intérieures -> crochets.
+- **[B5]** **4e axe indexé : collision avant rotation** : le positionnement A remontait à la hauteur de dégagement
+  de l'opération lue avant son calcul (`G0 Z5.000` puis `G0 A90` : descente rapide dans le brut, dessus à Z 15).
+  Hauteur = le plus grand du dégagement et du rayon balayé par le brut autour de l'axe A + marge du job (barreau
+  carré 30 x 30 : Z 26,2) ; recalculée avant calcul, aperçu et export.
+- **[B5]** **Enveloppe XYZ** : les mouvements relatifs (palpage G91), G10 / G92 / G28 / G30 / G53 ne comptent plus
+  comme positions (un programme palpé était refusé à tort sur la course Z, « Z sous le brut » faux).
+- **[B5]** **Fiche de préparation** : opérations désactivées (absentes du G-code) et leurs outils retirés, signalées
+  à part ; opération supprimée de l'arbre FreeCAD ignorée ; ordre = ordre du programme ; nombre de pauses M0.
+- **[B5]** **Import** : 3MF (lu par le module Mesh de FreeCAD 1.0 et 1.1) ; STL / OBJ vide = message clair au lieu de
+  « No shells or compsolids found in shape » ; STEP sans nom de produit nommé d'après le fichier.
+- **[B5]** **Bibliothèque d'outils** : import Fusion sans doublon (outil déjà présent ignoré et listé), numéro déjà
+  pris renuméroté après le plus grand (rapport), archive tronquée ou corrompue et outil mal formé = message clair (rien
+  d'importé à moitié), préréglage défini seulement par Vc ou fz importé dans ce mode, rapport « non validé » retiré ;
+  bibliothèque utilisateur illisible mise de côté (`.unreadable-<date>`) au lieu de bloquer toutes les commandes.
+- **[B5]** **Optimisation** : analyse du G-code en un seul passage par ligne : 413 000 lignes en 1,52 s contre 2,83 s
+  (même analyse) ; avec les nouveaux contrôles, 2,04 s contre 2,40 s au départ du jour 3.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

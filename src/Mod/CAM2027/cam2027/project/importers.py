@@ -4,7 +4,7 @@
 Formats et état :
 
 - STEP (``.step``/``.stp``) : solides via ``Part`` — testé automatiquement.
-- STL / OBJ : maillage via ``Mesh`` — testé automatiquement (STL). Un maillage
+- STL / OBJ / 3MF : maillage via ``Mesh`` — testé automatiquement (STL, 3MF écrit par FreeCAD). Un maillage
   n'est pas un solide : seules les opérations 3D sur maillage (Surface, OCL)
   peuvent l'utiliser ; la conversion en solide est proposée pour les petits
   maillages fermés.
@@ -55,7 +55,7 @@ def import_file(doc, path, label=None):
 
             Part.insert(path, doc.Name)
             kind = "solid"
-        elif ext in (".stl", ".obj", ".ast", ".ply", ".off"):
+        elif ext in (".stl", ".obj", ".3mf", ".ast", ".ply", ".off"):
             import Mesh
 
             Mesh.insert(path, doc.Name)
@@ -100,6 +100,15 @@ def import_file(doc, path, label=None):
         warnings.append(Msg("no object created from {file}", file=os.path.basename(path)))
     if label and len(objects) == 1:
         objects[0].Label = label
+    for o in objects:  # STEP écrit par OpenCascade sans nom de produit : le nom du fichier, pas celui du traducteur
+        if o.Label.startswith("Open CASCADE STEP translator"):
+            o.Label = os.path.splitext(os.path.basename(path))[0]
+    if kind == "vector":
+        for o in objects:  # texte SVG / DXF : objet sans arête, ignoré en silence par le panneau
+            shape = getattr(o, "Shape", None)
+            if not hasattr(o, "Group") and (shape is None or shape.isNull() or not shape.Edges):  # groupes, calques : non
+                warnings.append(Msg("{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program",
+                                    name=o.Label))
     if kind == "mesh":
         objects, mesh_warnings = meshes_to_solids(doc, objects)
         warnings.extend(mesh_warnings)
@@ -134,6 +143,10 @@ def meshes_to_solids(doc, objects):
         mesh = getattr(o, "Mesh", None)
         if mesh is None:
             out.append(o)
+            continue
+        if not mesh.CountFacets:  # fichier vide ou abîmé ; « fermé » pour Mesh, la conversion en solide échouait
+            warnings.append(Msg("{name}: no triangle in the file (empty or damaged)", name=o.Label))
+            doc.removeObject(o.Name)
             continue
         if mesh.isSolid() and mesh.CountFacets <= MESH_SOLID_MAX_FACETS:
             out.append(mesh_to_solid(doc, o))
@@ -212,4 +225,4 @@ def mesh_to_solid(doc, mesh_obj, tolerance=0.05):
     return obj
 
 
-SUPPORTED_EXTENSIONS = (".step", ".stp", ".brep", ".brp", ".iges", ".igs", ".stl", ".obj", ".svg", ".dxf")
+SUPPORTED_EXTENSIONS = (".step", ".stp", ".brep", ".brp", ".iges", ".igs", ".stl", ".obj", ".3mf", ".svg", ".dxf")

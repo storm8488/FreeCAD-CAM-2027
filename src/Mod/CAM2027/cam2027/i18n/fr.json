@@ -1455,5 +1455,17 @@
   "rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis": "finition rotative : la spirale fait tourner l'axe A {t:.0f} fois ({d:.0f}°), plus que sa course ({a:g}° à {b:g}° dans le profil machine) : utilisez les lignes le long de l'axe",
   "{n} hole(s) under another body of the part are left out (not reachable from above).": "{n} trou(s) sous un autre corps de la pièce laissé(s) de côté (inaccessibles par le dessus).",
   "constant scallop finishing: about {n} million points for this area at a {h} mm scallop height: increase the scallop height or the sample interval, or limit the area": "finition à crête constante : environ {n} millions de points pour cette zone à {h} mm de crête : augmentez la hauteur de crête ou l'intervalle d'échantillonnage, ou limitez la zone",
-  "The PDF setup sheet needs FreeCAD 1.1: on FreeCAD 1.0, the setup sheet is written next to the G-code when exporting.": "La fiche de préparation en PDF demande FreeCAD 1.1 : sur FreeCAD 1.0, la fiche est écrite à côté du G-code à l'export."
+  "The PDF setup sheet needs FreeCAD 1.1: on FreeCAD 1.0, the setup sheet is written next to the G-code when exporting.": "La fiche de préparation en PDF demande FreeCAD 1.1 : sur FreeCAD 1.0, la fiche est écrite à côté du G-code à l'export.",
+  "T{n} is used by several tools ({tools}): the program would not stop to change the tool. Give each tool its own number.": "T{n} est utilisé par plusieurs outils ({tools}) : le programme ne s'arrêterait pas pour changer d'outil. Donnez à chaque outil son propre numéro.",
+  "Imported {n} tool(s), skipped {s} (details below).": "{n} outil(s) importé(s), {s} ignoré(s) (détails ci-dessous).",
+  "{name}: no triangle in the file (empty or damaged)": "{name} : aucun triangle dans le fichier (vide ou abîmé)",
+  "{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small": "{n} arc(s) refusé(s) par GRBL (error:33 à 35) : point d'arrivée hors du cercle jusqu'à {d:.3f} mm, ou sans centre, ou rayon trop petit",
+  "{n} cutting move(s) without a feed rate (GRBL error:22; after G93 -> G94 the feed must be given again)": "{n} mouvement(s) de coupe sans avance (GRBL error:22 ; après G93 -> G94, l'avance doit être redonnée)",
+  "the spindle is still running at the end of the program (no M5)": "la broche tourne encore à la fin du programme (pas de M5)",
+  "no program end (M2 / M30): the controller keeps the last modal state": "pas de fin de programme (M2 / M30) : le contrôleur garde le dernier état modal",
+  "{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)": "{n} ligne(s) avec du texte qui n'est pas du G-code hors des commentaires (GRBL error:1 ou error:2)",
+  "{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)": "{n} mouvement(s) de coupe broche arrêtée (avant M3, après M5 ou à S0)",
+  "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée.",
+  "{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision": "{n} ligne(s) de plus de {m} caractères (GRBL 1.1 error:11) : réduire la précision du postprocesseur",
+  "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin"
 }

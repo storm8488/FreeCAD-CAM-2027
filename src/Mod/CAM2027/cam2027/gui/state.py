@@ -5,7 +5,7 @@ import os
 
 import FreeCAD
 
-from ..tools.library import ToolLibrary, starter_library, default_library_path
+from ..tools.library import starter_library, default_library_path, load_or_recover
 from ..project.project import Project
 from ..project import docobjects
 
@@ -18,11 +18,24 @@ def library():
     if _library is None:
         path = default_library_path()
         if os.path.isfile(path):
-            _library = ToolLibrary.load(path)
+            _library, warning = load_or_recover(path)
+            if warning is not None:
+                _warn_library(warning)
         else:
             _library = starter_library()
             _library.save(path)
     return _library
+
+
+def _warn_library(warning):
+    from ..i18n import tr_msg
+
+    FreeCAD.Console.PrintWarning("CAM2027: %s\n" % tr_msg(warning))
+    if FreeCAD.GuiUp:
+        from .qt import QtWidgets
+        import FreeCADGui
+
+        QtWidgets.QMessageBox.warning(FreeCADGui.getMainWindow(), "CAM2027", tr_msg(warning))
 
 
 def set_library(lib):

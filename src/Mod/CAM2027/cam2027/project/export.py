@@ -19,15 +19,24 @@ from .. import compat
 from ..i18n import Msg
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
+_COMMENT = re.compile(r"\(.*?\)")
+#: ligne (commentaires ôtés) faite uniquement de mots « lettre + nombre » ; sinon GRBL : error:1 / error:2
+_WORDS_ONLY = re.compile(r"(?:[A-Za-z]\s*[-+]?\d*\.?\d+\s*)*$")
+#: ligne entière de commentaire du postprocesseur, numéro de ligne éventuel
+_COMMENT_LINE = re.compile(r"^(\s*(?:N\d+\s*)?)\((.*)\)(\s*)$")
 
 # codes acceptés par défaut pour un contrôleur GRBL (v1.1)
 GRBL_ALLOWED = {
     "G0", "G1", "G2", "G3", "G4", "G10", "G17", "G18", "G19", "G20", "G21", "G28", "G30", "G38.2", "G38.3",
     "G38.4", "G38.5", "G40", "G43.1", "G49", "G53", "G54", "G55", "G56", "G57", "G58", "G59", "G61", "G80",
     "G90", "G91", "G91.1", "G92", "G92.1", "G93", "G94",
-    "M0", "M1", "M2", "M30", "M3", "M4", "M5", "M7", "M8", "M9", "M56",
+    "M0", "M1", "M2", "M30", "M3", "M4", "M5", "M8", "M9",
 }
+#: M7 (brouillard) et M56 (forçage du parking) : seulement avec ENABLE_M7 / ENABLE_PARKING_OVERRIDE_CONTROL à la
+#: compilation de GRBL (désactivés par défaut, error:20) ; M7 accepté si le profil machine déclare « mist »
 ALLOWED_BY_CONTROLLER = {"grbl": GRBL_ALLOWED}
+#: tampon de ligne de GRBL 1.1 (``LINE_BUFFER_SIZE``), espaces et commentaires non comptés
+GRBL_LINE_MAX = 80
 
 
 def available_postprocessors():
@@ -86,8 +95,52 @@ def postprocess(job, post_name=None, post_args=None):
     for name, gcode in sections:
         if not isinstance(gcode, str):
             gcode = str(gcode)
-        out.append((name, gcode))
+        out.append((name, tool_change_stops(flat_comments(gcode))[0]))
     return out
+
+
+def flat_comments(gcode):
+    """Commentaire sans parenthèse intérieure : un libellé « Contour (copy) » donnait « (Begin operation: Contour
+    (copy)) », que GRBL et CNCjs ferment à la première « ) » ; la « ) » restante est lue comme du G-code (error:1,
+    programme arrêté). Les parenthèses intérieures deviennent des crochets."""
+    if gcode.count("(") == gcode.count("\n(") + gcode.startswith("("):
+        return gcode  # cas courant : une parenthèse par ligne de commentaire, en début de ligne
+    out = []
+    for line in gcode.splitlines(True):
+        body = line.rstrip("\r\n")
+        m = _COMMENT_LINE.match(body)
+        if m and ("(" in m.group(2) or ")" in m.group(2)):
+            line = "%s(%s)%s%s" % (m.group(1), m.group(2).replace("(", "[").replace(")", "]"), m.group(3),
+                                   line[len(body):])
+        out.append(line)
+    return "".join(out)
+
+
+#: M6 mis en commentaire par le postprocesseur ``grbl`` (GRBL 1.1 refuse M6 : error:20)
+_COMMENTED_M6 = re.compile(r"^\s*(?:N\d+\s+)?\(\s*M0?6\s+T(\d+)\s*\)\s*$", re.IGNORECASE)
+
+
+def tool_change_stops(gcode):
+    """Changement d'outil manuel : le postprocesseur ``grbl`` met M6 en commentaire et le programme enchaînait
+    l'opération suivante avec l'outil précédent (fraise plus grosse = entaille). Chaque M6 commenté qui change
+    de numéro d'outil devient broche arrêtée (M5) + pause (M0, reprise par Départ cycle ; CNCjs suspend aussi
+    l'envoi) ; le premier outil est celui de la fiche. Retourne ``(gcode, nombre de pauses)``."""
+    upper = gcode.upper()
+    if "M6" not in upper and "M06" not in upper:
+        return gcode, 0  # aucun changement d'outil (programme à un seul outil sans M6 écrit)
+    out, stops, current = [], 0, None
+    for line in gcode.splitlines(True):
+        m = _COMMENTED_M6.match(line)
+        if m is None:
+            out.append(line)
+            continue
+        number = int(m.group(1))
+        out.append(line)
+        if current is not None and number != current:
+            out.append("M5\n(Tool change: load T%d, set Z zero again, then resume)\nM0\n" % number)
+            stops += 1
+        current = number
+    return "".join(out), stops
 
 
 def write_gcode(sections, path):
@@ -108,6 +161,39 @@ def write_gcode(sections, path):
     return written
 
 
+#: G dont les mots d'axe ne sont pas une position de travail : G10 / G92 (décalages), G28 / G30 (point
+#: intermédiaire, souvent en G91), G53 (repère machine)
+_NOT_POSITION_G = ("10", "28", "30", "53", "92")
+_AXES = frozenset("XYZABC")
+#: (lettre, nombre écrit) -> code normalisé (« G01 » -> « G1 », « G38.20 » -> « G38.2 »)
+_CODES = {}
+
+
+#: plan d'arc -> (axe 1, axe 2, mot de centre 1, mot de centre 2)
+_ARC_PLANES = {"17": ("X", "Y", "I", "J"), "18": ("Z", "X", "K", "I"), "19": ("Y", "Z", "J", "K")}
+
+
+def _arc_error(pos, values, plane):
+    """Écart (mm) qui fait refuser l'arc par GRBL 1.1, 0 s'il est accepté, ``None`` si la position de départ est
+    inconnue. Règles de ``gc_execute_line`` : centre I/J/K, rayons de début et de fin à 0,005 mm et 0,1 % près
+    (ou 0,5 mm), error:33 ; rayon R plus petit que la demi-corde, error:34 ; ni centre ni rayon, error:35."""
+    a, b, ia, ib = _ARC_PLANES[plane]
+    if pos[a] is None or pos[b] is None:
+        return None
+    sa, sb = pos[a], pos[b]
+    ea, eb = values.get(a, sa), values.get(b, sb)
+    if "R" in values:
+        half = 0.5 * ((ea - sa) ** 2 + (eb - sb) ** 2) ** 0.5
+        return half - abs(values["R"]) if half > abs(values["R"]) + 1e-9 else 0.0
+    if ia not in values and ib not in values:
+        return float("inf")
+    ca, cb = sa + values.get(ia, 0.0), sb + values.get(ib, 0.0)
+    r_start = ((sa - ca) ** 2 + (sb - cb) ** 2) ** 0.5
+    r_end = ((ea - ca) ** 2 + (eb - cb) ** 2) ** 0.5
+    delta = abs(r_end - r_start)
+    return delta if delta > 0.5 or (delta > 0.005 and delta > 0.001 * r_end) else 0.0
+
+
 def analyze_gcode(text):
     """Analyse statique d'un G-code : codes, axes, unités, repères, enveloppe, lignes."""
     codes = set()
@@ -117,6 +203,7 @@ def analyze_gcode(text):
     fixtures = set()
     lines = 0
     tool_changes = 0
+    pauses = 0  # M0 (changements d'outil manuels)
     max_feed = 0.0
     spindle = set()
     motion = None  # mode de déplacement modal (G0 / G1 / G2 / G3)
@@ -129,65 +216,151 @@ def analyze_gcode(text):
     max_a_rate = 0.0  # vitesse angulaire maximale de A en G93 (deg/min)
     max_a_step = 0.0  # plus grand changement de A dans un seul mouvement de coupe (deg)
     a_current = None
+    relative = False  # G91 : positions inconnues (palpage relatif), hors enveloppe
+    plane = "17"
+    pos = {"X": None, "Y": None, "Z": None}  # position de travail courante (None : inconnue)
+    bad_arcs = 0  # arcs refusés par GRBL 1.1 (error:33 / 34 / 35)
+    feed_defined = False  # avance définie en G94 (GRBL : error:22 sinon ; perdue en passant de G93 à G94)
+    undefined_feed = 0
+    spindle_on = False
+    program_end = False  # M2 / M30 rencontré
+    speed = None  # dernier mot S (modal)
+    cut_spindle_off = 0  # coupes broche arrêtée (avant M3, après M5, S0)
+    max_arc_error = 0.0
+    bad_lines = 0  # lignes avec autre chose que des mots G-code hors commentaires
+    long_lines = 0  # lignes de plus de GRBL_LINE_MAX caractères hors espaces (GRBL 1.1 : error:11)
+    fs = []  # mots F de la ligne
     for raw in text.splitlines():
-        line = raw.split(";")[0]
-        line = re.sub(r"\(.*?\)", "", line).strip()
+        if ";" in raw:
+            raw = raw.split(";")[0]
+        if "(" in raw:
+            raw = _COMMENT.sub("", raw)
+        line = raw.strip()
         if not line:
             continue
         lines += 1
+        if not _WORDS_ONLY.match(line):
+            bad_lines += 1
+        if len(line) > GRBL_LINE_MAX and len(line) - line.count(" ") > GRBL_LINE_MAX:
+            long_lines += 1
         words = _WORD.findall(line)
+        not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
+        was_inverse = inverse_time
+        values = {}  # un seul passage sur les mots : dernière valeur de chaque lettre
+        gm = []  # codes G / M de la ligne, dans l'ordre
+        coords = []  # mots d'axe (lettre, valeur), dans l'ordre
         for letter, number in words:
-            if letter.upper() == "G":
-                g = str(int(float(number))) if float(number).is_integer() else number
-                if g in ("0", "1", "2", "3"):
-                    motion = "G" + g
-                elif g == "93":
-                    inverse_time = True
-                elif g == "94":
-                    inverse_time = False
-        has_axis = any(letter.upper() in "XYZABC" for letter, _n in words)
-        f_words = [float(n) for letter, n in words if letter.upper() == "F"]
-        if inverse_time and motion in ("G1", "G2", "G3") and has_axis:
-            if not f_words:
+            letter = letter.upper()
+            v = values[letter] = float(number)
+            if letter in _AXES:
+                coords.append((letter, v))
+            elif letter == "G" or letter == "M":
+                code = _CODES.get((letter, number))
+                if code is None:
+                    code = _CODES[(letter, number)] = letter + (number.rstrip("0").rstrip(".") if "." in number
+                                                                else str(int(v)))
+                gm.append(code)
+                if letter == "G":
+                    g = str(int(v)) if v.is_integer() else code[1:]
+                    if g in ("0", "1", "2", "3"):
+                        motion = code
+                    elif g == "93":
+                        inverse_time = True
+                    elif g == "94":
+                        inverse_time = False
+                    elif g == "91":
+                        relative = True
+                    elif g == "90":
+                        relative = False
+                    elif g in ("17", "18", "19"):
+                        plane = g
+                    elif g in _NOT_POSITION_G or g.startswith("38."):
+                        not_position = g
+            elif letter == "F":
+                fs.append(v)
+            elif letter == "S":
+                spindle.add(v)
+                speed = v
+        has_axis = "X" in values or "Y" in values or "Z" in values or "A" in values or "B" in values or "C" in values
+        cutting = motion in ("G1", "G2", "G3")
+        if was_inverse and not inverse_time:
+            feed_defined = "F" in values
+        elif "F" in values and not inverse_time:
+            feed_defined = True
+        if cutting and not inverse_time and not not_position and not feed_defined and has_axis:
+            undefined_feed += 1
+        if motion in ("G2", "G3") and not inverse_time and not relative and not not_position and (
+                "X" in values or "Y" in values or "Z" in values or "I" in values or "J" in values or "K" in values
+                or "R" in values):
+            err = _arc_error(pos, values, plane)
+            if err is not None and err > 0.0:
+                bad_arcs += 1
+                if err != float("inf"):  # arc sans centre : compté, sans écart
+                    max_arc_error = max(max_arc_error, err)
+        if inverse_time and cutting and has_axis:
+            if "F" not in values:
                 g93_missing_f += 1
             if motion in ("G2", "G3"):
                 g93_arcs += 1
-        if any(letter.upper() == "A" for letter, _n in words):
-            a_value = [float(n) for letter, n in words if letter.upper() == "A"][-1]
-            if motion in ("G1", "G2", "G3"):
+        if "A" in values:
+            a_value = values["A"]
+            if cutting:
                 if a_current is not None:
                     max_a_step = max(max_a_step, abs(a_value - a_current))
                 if inverse_time:
                     a_wrap_lines += 1
-                    if a_current is not None and f_words:
-                        max_a_rate = max(max_a_rate, abs(a_value - a_current) * f_words[-1])
+                    if a_current is not None and "F" in values:
+                        max_a_rate = max(max_a_rate, abs(a_value - a_current) * values["F"])
                 else:
                     a_feed_lines += 1
             else:
                 a_positions.append(a_value)
             a_current = a_value
-        for letter, number in words:
-            letter = letter.upper()
-            if letter in ("G", "M"):
-                code = letter + (number.rstrip("0").rstrip(".") if "." in number else str(int(float(number))))
-                codes.add(code)
-                if code == "G20":
-                    units = "inch"
-                elif code == "G21":
-                    units = "mm"
-                elif code in ("G54", "G55", "G56", "G57", "G58", "G59"):
-                    fixtures.add(code)
-                elif code == "M6":
-                    tool_changes += 1
-            elif letter in ("X", "Y", "Z", "A", "B", "C"):
-                axes.add(letter)
-                v = float(number)
-                lo, hi = bbox.get(letter, (v, v))
-                bbox[letter] = (min(lo, v), max(hi, v))
-            elif letter == "F" and not inverse_time:  # en G93, F n'est pas une vitesse en mm/min
-                max_feed = max(max_feed, float(number))
-            elif letter == "S":
-                spindle.add(float(number))
+        for code in gm:
+            codes.add(code)
+            if code == "G20":
+                units = "inch"
+            elif code == "G21":
+                units = "mm"
+            elif code in ("G54", "G55", "G56", "G57", "G58", "G59"):
+                fixtures.add(code)
+            elif code == "M6":
+                tool_changes += 1
+            elif code == "M0":
+                pauses += 1
+            elif code in ("M3", "M4"):
+                spindle_on, program_end = True, False
+            elif code == "M5":
+                spindle_on = False
+            elif code in ("M2", "M30"):
+                spindle_on, program_end = False, True
+        if cutting and has_axis and not not_position and not (spindle_on and speed):
+            cut_spindle_off += 1
+        for letter, v in coords:
+            axes.add(letter)
+            if relative or not_position:
+                continue
+            span = bbox.get(letter)
+            if span is None:
+                bbox[letter] = (v, v)
+            elif v < span[0]:
+                bbox[letter] = (v, span[1])
+            elif v > span[1]:
+                bbox[letter] = (span[0], v)
+        if fs and not inverse_time:  # en G93, F n'est pas une vitesse en mm/min
+            max_feed = max(max_feed, max(fs))
+        del fs[:]
+        for axis in "XYZ":
+            if axis not in values:
+                continue
+            if not_position in ("92", "10"):  # G92 / G10 L20 : la position courante prend cette valeur
+                pos[axis] = values[axis] if (not_position == "92" or values.get("L") == 20) else None
+            elif not_position:  # G28 / G30 / G53 / palpage : position de travail inconnue ensuite
+                pos[axis] = None
+            elif relative:
+                pos[axis] = None if pos[axis] is None else pos[axis] + values[axis]
+            else:
+                pos[axis] = values[axis]
     return {
         "lines": lines,
         "codes": sorted(codes),
@@ -196,6 +369,7 @@ def analyze_gcode(text):
         "fixtures": sorted(fixtures),
         "bbox": bbox,
         "tool_changes": tool_changes,
+        "pauses": pauses,
         "max_feed": max_feed,
         "spindle_speeds": sorted(spindle),
         "a_feed_lines": a_feed_lines,
@@ -205,6 +379,14 @@ def analyze_gcode(text):
         "g93_arcs": g93_arcs,
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
+        "bad_arcs": bad_arcs,
+        "cut_spindle_off": cut_spindle_off,
+        "bad_lines": bad_lines,
+        "long_lines": long_lines,
+        "undefined_feed": undefined_feed,
+        "spindle_on_at_end": spindle_on,
+        "program_end": program_end,
+        "max_arc_error": max_arc_error,
         "ends_in_g93": inverse_time,
         "probe": __import__("cam2027.project.probe", fromlist=["analyze"]).analyze(text),
     }
@@ -224,6 +406,8 @@ def verify(analysis, machine, stock_bounds=None):
         issues.append(("unverifiable", Msg("controller {c!r}: no allowed-code list, commands not checked",
                                            c=machine.controller)))
     else:
+        if machine.controller == "grbl" and "mist" in (machine.coolant_options or []):
+            allowed = allowed | {"M7"}
         bad = [c for c in analysis["codes"] if c not in allowed]
         if bad:
             issues.append(("error", Msg("commands not supported by {c}: {codes}", c=machine.controller,
@@ -241,6 +425,25 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("g93_arcs"):
         issues.append(("error", Msg("{n} arc(s) in inverse-time mode (G93): not checked, not supported",
                                     n=analysis["g93_arcs"])))
+    if analysis.get("cut_spindle_off"):
+        issues.append(("error", Msg("{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)",
+                                    n=analysis["cut_spindle_off"])))
+    if analysis.get("long_lines") and machine.controller == "grbl":
+        issues.append(("error", Msg("{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision",
+                                    n=analysis["long_lines"], m=GRBL_LINE_MAX)))
+    if analysis.get("bad_lines"):
+        issues.append(("error", Msg("{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)",
+                                    n=analysis["bad_lines"])))
+    if analysis.get("bad_arcs"):
+        issues.append(("error", Msg("{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small",
+                                    n=analysis["bad_arcs"], d=analysis["max_arc_error"])))
+    if analysis.get("undefined_feed"):
+        issues.append(("error", Msg("{n} cutting move(s) without a feed rate (GRBL error:22; after G93 -> G94 the feed must be given again)",
+                                    n=analysis["undefined_feed"])))
+    if analysis.get("spindle_on_at_end"):
+        issues.append(("warning", Msg("the spindle is still running at the end of the program (no M5)")))
+    if analysis.get("lines") and not analysis.get("program_end", True):
+        issues.append(("warning", Msg("no program end (M2 / M30): the controller keeps the last modal state")))
     if analysis.get("ends_in_g93"):
         issues.append(("error", Msg("the program ends in inverse-time mode (G93): G94 missing")))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):
@@ -279,6 +482,51 @@ def verify(analysis, machine, stock_bounds=None):
 
     issues.extend(probemod.verify(analysis, machine))
     return issues
+
+
+def _is_active(op):
+    """Même règle que les postprocesseurs : ``Active`` de l'opération ou, à défaut, de sa base (habillage)."""
+    import Path.Base.Util as PathUtil
+
+    return PathUtil.opProperty(op, "Active") is not False
+
+
+def exported_records(project):
+    """Opérations du programme, dans l'ordre du job : ``([(libellé, enregistrement), ...] actives, [libellés
+    désactivés])``. Clé du registre = opération sous les habillages ; entrées sans opération (supprimée dans
+    l'arbre FreeCAD) et positionnements A sans outil ignorés."""
+    from . import dressups
+
+    reg = project.registry
+    active, inactive = [], []
+    for op in project.operations():
+        base = dressups.base_operation(op)
+        rec = reg.get(base.Name)
+        if rec is None or not rec.get("assembly_id"):
+            continue
+        if _is_active(op):
+            active.append((base.Label, rec))
+        else:
+            inactive.append(base.Label)
+    return active, inactive
+
+
+def tool_number_issues(project):
+    """Deux outils différents sous le même numéro T dans les opérations actives : rien dans le G-code ne les
+    distingue, le programme ne s'arrête donc pas pour changer d'outil (bibliothèque de démarrage T1..T8 et
+    import Fusion T1..T11 dans la même bibliothèque). Liste de (niveau, message)."""
+    lib = project.library
+    by_number = {}
+    for _name, rec in exported_records(project)[0]:
+        try:
+            asm = lib.assembly(rec["assembly_id"])
+            tool = lib.tool(asm.tool_id)
+        except KeyError:
+            continue
+        by_number.setdefault(asm.output.tool_number, {})[tool.id] = tool.name
+    return [("error", Msg("T{n} is used by several tools ({tools}): the program would not stop to change the tool. Give each tool its own number.",
+                          n=n, tools=", ".join(sorted(tools.values()))))
+            for n, tools in sorted(by_number.items()) if len(tools) > 1]
 
 
 def _verify_rotary(analysis, machine):
@@ -337,7 +585,8 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
     lines.append("| T | Assembly | Tool | Type | D (mm) | Flutes | Stickout (mm) | Holder | Change |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
     seen = set()
-    for op_name, rec in sorted(project.registry.items(), key=lambda kv: kv[1].get("order", 0)):
+    records, inactive = exported_records(project)
+    for _label, rec in records:
         asm = lib.assembly(rec["assembly_id"])
         if asm.id in seen:
             continue
@@ -352,12 +601,15 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
     lines.append("")
     lines.append("| # | Operation | Strategy | T | Preset | Spindle (rpm) | Feed (mm/min) | Plunge (mm/min) |")
     lines.append("|---|---|---|---|---|---|---|---|")
-    for idx, (op_name, rec) in enumerate(sorted(project.registry.items(), key=lambda kv: kv[1].get("order", 0)), 1):
+    for idx, (label, rec) in enumerate(records, 1):
         asm = lib.assembly(rec["assembly_id"])
         v = rec["values"]
         lines.append("| %d | %s | %s | %d | %s | %.0f | %.0f | %.0f |" % (
-            idx, rec.get("label", op_name), rec["kind"], asm.output.tool_number, v["preset_name"],
+            idx, label, rec["kind"], asm.output.tool_number, v["preset_name"],
             v["spindle_rpm"], v["feed_mm_min"], v["plunge_feed_mm_min"]))
+    if inactive:
+        lines.append("")
+        lines.append("Not in the G-code (inactive): %s" % ", ".join(inactive))
     lines.append("")
     try:
         lines.extend(timing_lines(project)[0])
@@ -371,8 +623,9 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
         if axis in analysis["bbox"]:
             lo, hi = analysis["bbox"][axis]
             lines.append("- %s: %.3f .. %.3f" % (axis, lo, hi))
-    lines.append("- Max feed: F%.0f, spindle: %s, tool changes (M6): %d" % (
-        analysis["max_feed"], ", ".join("S%.0f" % s for s in analysis["spindle_speeds"]), analysis["tool_changes"]))
+    lines.append("- Max feed: F%.0f, spindle: %s, tool changes (M6): %d, pauses (M0): %d" % (
+        analysis["max_feed"], ", ".join("S%.0f" % s for s in analysis["spindle_speeds"]), analysis["tool_changes"],
+        analysis.get("pauses", 0)))
     lines.append("")
     lines.append("## Checks")
     lines.append("")

@@ -309,6 +309,29 @@ def migrate(data):
     return data
 
 
+def load_or_recover(path):
+    """Bibliothèque de ``path`` ; illisible (fichier abîmé, version plus récente, outil invalide) : le fichier est
+    renommé ``<nom>.unreadable-<date>`` sans être modifié, une bibliothèque de démarrage est enregistrée à sa place
+    et un avertissement (anglais, ``Msg``) le dit. Retourne ``(bibliothèque, avertissement ou None)`` ; sans cela
+    chaque commande qui lit la bibliothèque échouait sans message."""
+    from ..i18n import Msg
+
+    try:
+        return ToolLibrary.load(path), None
+    except (ValueError, KeyError, TypeError, AttributeError, UnicodeDecodeError) as exc:
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = "%s.unreadable-%s" % (path, stamp)
+        n = 1
+        while os.path.exists(backup):
+            n += 1
+            backup = "%s.unreadable-%s-%d" % (path, stamp, n)
+        os.replace(path, backup)
+        lib = starter_library()
+        lib.save(path)
+        return lib, Msg("The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.",
+                        file=os.path.basename(path), error=str(exc)[:200], backup=os.path.basename(backup))
+
+
 def default_library_path():
     """Emplacement par défaut de la bibliothèque utilisateur."""
     import FreeCAD
@@ -404,4 +427,4 @@ def merge_starter_tools(lib):
 
 
 __all__ = ["ToolLibrary", "starter_library", "merge_starter_tools", "default_library_path", "migrate", "TOOL_TYPES",
-           "EXTENSION"]
+           "EXTENSION", "load_or_recover"]
