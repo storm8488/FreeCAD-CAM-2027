@@ -1220,14 +1220,20 @@ class ProjectPanel(QtWidgets.QWidget):
     def on_item_changed(self, item, col):
         if self._updating or col != 0:
             return
+        # traité après le signal : ``refresh`` reconstruit la liste ; pendant le signal, il détruisait l'élément
+        # que Qt était en train de cocher (violation d'accès, plantage de FreeCAD au hasard)
+        name, active = item.data(0, QtCore.Qt.UserRole), item.checkState(0) == QtCore.Qt.Checked
+        QtCore.QTimer.singleShot(0, lambda: self._set_active(name, active))
+
+    def _set_active(self, name, active):
         proj = state.active_project()
         if proj is None:
             return
-        op = proj.doc.getObject(item.data(0, QtCore.Qt.UserRole))
+        op = proj.doc.getObject(name)
         if op is None:
             return
         with undo.transaction(proj.doc, tr("Enable or disable the operation")):
-            proj.set_operation_active(op, item.checkState(0) == QtCore.Qt.Checked)
+            proj.set_operation_active(op, active)
             proj.compute()
         self.refresh()
         self._reselect(op.Name)
