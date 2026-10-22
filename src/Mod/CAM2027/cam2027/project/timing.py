@@ -138,17 +138,24 @@ _MOVES = {"G0": True, "G00": True, "G1": False, "G01": False}
 _ARCS = ("G2", "G02", "G3", "G03")
 
 
-def path_moves(commands, rapid_mm_min, start=None):
+def path_moves(commands, rapid_mm_min, start=None, timed=None):
     """``(p0, p1, avance mm/s)`` d'une liste de commandes Path (F en mm/s, unité interne de FreeCAD, modale ;
     arcs découpés par ``sim.path_segments``), et la position finale. Un seul passage sur les commandes (lire
-    ``Parameters`` coûte : l'estimation est faite à chaque export)."""
+    ``Parameters`` coûte : l'estimation est faite à chaque export).
+
+    Mouvements en temps inverse (G93, axe A continu) : F est l'inverse de la durée (1 / min, donc 1 / s dans
+    l'unité interne) ; leur durée est ajoutée à la liste ``timed`` (secondes) au lieu d'un segment."""
     from . import sim
 
     rapid = rapid_mm_min / 60.0
     out, feed = [], 0.0
+    inverse = False
     pos = tuple(start) if start is not None else None
     for c in commands:
         name = c.Name.upper()
+        if name in ("G93", "G94"):
+            inverse = name == "G93"
+            continue
         rapid_move = _MOVES.get(name)
         if rapid_move is None and name not in _ARCS:
             continue
@@ -157,6 +164,11 @@ def path_moves(commands, rapid_mm_min, start=None):
             feed = float(p["F"])
         if pos is None:
             pos = (p.get("X", 0.0), p.get("Y", 0.0), p.get("Z", 0.0))
+            continue
+        if inverse and not rapid_move:
+            if timed is not None and "F" in p and float(p["F"]) > 0:
+                timed.append(1.0 / float(p["F"]))
+            pos = (p.get("X", pos[0]), p.get("Y", pos[1]), p.get("Z", pos[2]))
             continue
         speed = rapid if rapid_move else (feed if feed > 0 else rapid)
         if rapid_move is None:  # arc : découpé comme dans le contrôle matière
@@ -196,11 +208,12 @@ def estimate(project):
         base = dressupmod.base_operation(op)
         if getattr(base, "Active", True) is False:
             continue
-        moves, pos_end = path_moves(op.Path.Commands, rapid, pos)
-        t = plan_time(moves, accel)
+        timed = []
+        moves, pos_end = path_moves(op.Path.Commands, rapid, pos, timed)
+        t = plan_time(moves, accel) + sum(timed)
         rows.append((op.Label, t))
         total += t
-        naive += naive_time(moves)
+        naive += naive_time(moves) + sum(timed)
         pos = pos_end
     return {"operations": rows, "total": total, "assumed": assumed, "without_accel": naive,
             "acceleration": accel, "rapid": rapid}

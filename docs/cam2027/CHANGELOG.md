@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **[B4]** Correctif : **temps d'usinage des opérations rotatives** (G93, temps inverse) faux. L'estimation lisait
+  l'avance d'un mouvement G93 (inverse de sa durée) comme une vitesse en mm/s sur la seule longueur X Y Z : rotation
+  pure comptée 0 s, autres mouvements faux (11,0 s estimées au lieu de 4,0 s sur le cas d'essai). Chaque mouvement
+  G93 compte maintenant pour 1 / F (sans modèle d'accélération) ; test `test_jour3_b4.TestTiming`.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
