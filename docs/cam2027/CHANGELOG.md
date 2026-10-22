@@ -18,6 +18,11 @@
   traversée de la pièce au-dessus du point. C'est le cas de la finition 3D du chauffage (2 corps) : boule de 6 mm
   à Z 3,9 sous le corps du dessus (pièce pleine de 0 à 3,9 et de 40 à 45 en X 69 Y 18,75) ; l'entaille de 41 mm
   signalée vient des colonnes non vérifiées en 3D (182 258 candidates, 4 000 vérifiées) et est réelle.
+- **[B2]** **Contrôle matière plus rapide sur les pièces STEP** : dessus de la pièce rastérisé par colonnes
+  (intervalle exact du triangle dans chaque colonne, puis seulement les cellules dedans) au lieu de la boîte entière
+  de chaque triangle. Chauffage (71 000 triangles à 0,01 mm, 5 hauteurs pour la tolérance latérale) : 4,7-5,7 s
+  → 1,4-1,6 s, mêmes cellules, écart 5·10⁻¹⁰ mm ; contrôle de la finition 3D 13,9-16,6 s → 10,7-11,0 s, même
+  entaille, même volume. Plateau STL (3 668 grands triangles) inchangé (0,33 / 0,36 s).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

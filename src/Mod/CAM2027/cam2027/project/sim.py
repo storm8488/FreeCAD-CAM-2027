@@ -632,6 +632,71 @@ WALL_TOLERANCE = 0.05
 MODEL_DEFLECTION = 0.01
 
 
+#: triangles rastérisés d'un coup (tableaux de quelques Mo)
+_RASTER_TRIANGLES = 20000
+
+
+def _ragged(counts):
+    """``(propriétaire, rang)`` de chaque élément d'une liste à plat de ``counts[k]`` éléments par propriétaire."""
+    np = _np()
+    owner = np.repeat(np.arange(len(counts)), counts)
+    start = np.cumsum(counts) - counts
+    return owner, np.arange(int(counts.sum())) - start[owner]
+
+
+def _raster_max(zmap, a, b, c, det, ox, oy, flat):
+    """Hauteur des triangles ``(a, b, c)`` (non verticaux, ``det`` : double aire signée en XY) aux centres des
+    colonnes décalés de ``(ox, oy)``, gardée au maximum dans ``flat`` (``zmap.top`` à plat).
+
+    Pour chaque colonne de cellules de la fenêtre d'un triangle, les coordonnées barycentriques sont linéaires
+    en Y : l'intervalle de Y où elles sont toutes >= -1e-9 donne les cellules à évaluer (une de marge de chaque
+    côté), puis le test et la hauteur (linéaire en Y aussi) cellule par cellule. Travail proportionnel à la
+    surface des triangles et non à leur boîte (les triangles longs des faces planes coûtaient des milliers de
+    cellules chacun)."""
+    np = _np()
+    eps = -1e-9
+    xmin = np.minimum(np.minimum(a[:, 0], b[:, 0]), c[:, 0])
+    xmax = np.maximum(np.maximum(a[:, 0], b[:, 0]), c[:, 0])
+    ymin = np.minimum(np.minimum(a[:, 1], b[:, 1]), c[:, 1])
+    ymax = np.maximum(np.maximum(a[:, 1], b[:, 1]), c[:, 1])
+    # colonne (i, j) décalée de (ox, oy) : même fenêtre que ``_window`` sur le triangle décalé de -o
+    i0 = np.clip(np.floor((xmin - ox - zmap.x0) / zmap.res).astype(int), 0, zmap.nx)
+    i1 = np.clip(np.ceil((xmax - ox - zmap.x0) / zmap.res).astype(int) + 1, 0, zmap.nx)
+    j0 = np.clip(np.floor((ymin - oy - zmap.y0) / zmap.res).astype(int), 0, zmap.ny)
+    j1 = np.clip(np.ceil((ymax - oy - zmap.y0) / zmap.res).astype(int) + 1, 0, zmap.ny)
+    t, r = _ragged(np.where(j1 > j0, np.maximum(i1 - i0, 0), 0))  # (triangle, colonne)
+    col = i0[t] + r
+    X = zmap.xs[col] + ox
+    at, bt, ct, dt = a[t], b[t], c[t], det[t]
+    # l1 = A1 Y + B1, l2 = A2 Y + B2, l3 = 1 - l1 - l2
+    A1 = (ct[:, 0] - bt[:, 0]) / dt
+    B1 = ((bt[:, 1] - ct[:, 1]) * (X - ct[:, 0]) - (ct[:, 0] - bt[:, 0]) * ct[:, 1]) / dt
+    A2 = (at[:, 0] - ct[:, 0]) / dt
+    B2 = ((ct[:, 1] - at[:, 1]) * (X - ct[:, 0]) - (at[:, 0] - ct[:, 0]) * ct[:, 1]) / dt
+    lo = np.full(len(t), -np.inf)
+    hi = np.full(len(t), np.inf)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for A, B in ((A1, B1), (A2, B2), (-A1 - A2, 1.0 - B1 - B2)):
+            y = (eps - B) / A
+            lo = np.where(A > 0, np.maximum(lo, y), lo)
+            hi = np.where(A < 0, np.minimum(hi, y), hi)
+            lo = np.where((A == 0) & (B < eps), np.inf, lo)
+    jl = np.maximum(np.floor(np.clip((lo - oy - zmap.y0) / zmap.res - 0.5, -1, zmap.ny + 1)).astype(int), j0[t])
+    jh = np.minimum(np.ceil(np.clip((hi - oy - zmap.y0) / zmap.res - 0.5, -2, zmap.ny + 1)).astype(int), j1[t] - 1)
+    A3, B3 = -A1 - A2, 1.0 - B1 - B2
+    Az = A1 * at[:, 2] + A2 * bt[:, 2] + A3 * ct[:, 2]  # hauteur sur la colonne : Az Y + Bz
+    Bz = B1 * at[:, 2] + B2 * bt[:, 2] + B3 * ct[:, 2]
+    p, q = _ragged(np.maximum(jh - jl + 1, 0))  # (triangle-colonne, cellule)
+    jj = jl[p] + q
+    Yc = zmap.ys[jj] + oy
+    inside = (A1[p] * Yc + B1[p] >= eps) & (A2[p] * Yc + B2[p] >= eps) & (A3[p] * Yc + B3[p] >= eps)
+    if not inside.any():
+        return
+    p, Yc = p[inside], Yc[inside]
+    z = Az[p] * Yc + Bz[p]
+    np.maximum.at(flat, col[p] * zmap.ny + jj[inside], z)
+
+
 def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
     """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce).
 
@@ -640,7 +705,7 @@ def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
     dont le centre tombe pile sur une paroi verticale (grille alignée sur les cotes de la pièce) prendrait
     le haut de la paroi alors que la fraise passe tangente à côté.
 
-    Triangles rastérisés par groupes de même fenêtre (vectorisé : 215 000 triangles en quelques secondes)."""
+    Triangles rastérisés par colonnes (``_raster_max``)."""
     np = _np()
     offsets = [(0.0, 0.0)]
     if lateral > 0:
@@ -664,41 +729,10 @@ def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
         a, b, c, det = a[keep], b[keep], c[keep], det[keep]
         if not len(det):
             continue
-        xmin = np.minimum(np.minimum(a[:, 0], b[:, 0]), c[:, 0])
-        xmax = np.maximum(np.maximum(a[:, 0], b[:, 0]), c[:, 0])
-        ymin = np.minimum(np.minimum(a[:, 1], b[:, 1]), c[:, 1])
-        ymax = np.maximum(np.maximum(a[:, 1], b[:, 1]), c[:, 1])
         for (ox, oy), h in zip(offsets, hs):
-            # colonne (i, j) décalée de (ox, oy) : même fenêtre que ``_window`` sur le triangle décalé de -o
-            i0 = np.clip(np.floor((xmin - ox - zmap.x0) / zmap.res).astype(int), 0, zmap.nx)
-            i1 = np.clip(np.ceil((xmax - ox - zmap.x0) / zmap.res).astype(int) + 1, 0, zmap.nx)
-            j0 = np.clip(np.floor((ymin - oy - zmap.y0) / zmap.res).astype(int), 0, zmap.ny)
-            j1 = np.clip(np.ceil((ymax - oy - zmap.y0) / zmap.res).astype(int) + 1, 0, zmap.ny)
-            w, hh = i1 - i0, j1 - j0
-            valid = (w > 0) & (hh > 0)
-            flat = h.reshape(-1)
-            for (wk, hk) in {(int(x), int(y)) for x, y in zip(w[valid], hh[valid])}:
-                sel = np.nonzero(valid & (w == wk) & (hh == hk))[0]
-                step = max(1, int(1_500_000 // (wk * hk)))
-                for s0 in range(0, len(sel), step):
-                    k = sel[s0:s0 + step]
-                    ii = i0[k][:, None] + np.arange(wk)[None, :]  # (n, w)
-                    jj = j0[k][:, None] + np.arange(hk)[None, :]  # (n, h)
-                    X = (zmap.xs[ii] + ox)[:, :, None]
-                    Y = (zmap.ys[jj] + oy)[:, None, :]
-                    ak, bk, ck, dk = a[k], b[k], c[k], det[k][:, None, None]
-                    l1 = ((bk[:, 1] - ck[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
-                          + (ck[:, 0] - bk[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
-                    l2 = ((ck[:, 1] - ak[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
-                          + (ak[:, 0] - ck[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
-                    l3 = 1.0 - l1 - l2
-                    eps = -1e-9
-                    inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
-                    if not inside.any():
-                        continue
-                    z = l1 * ak[:, 2][:, None, None] + l2 * bk[:, 2][:, None, None] + l3 * ck[:, 2][:, None, None]
-                    cells = (ii[:, :, None] * zmap.ny + jj[:, None, :])
-                    np.maximum.at(flat, cells[inside], z[inside])
+            for s0 in range(0, len(det), _RASTER_TRIANGLES):
+                k = slice(s0, s0 + _RASTER_TRIANGLES)
+                _raster_max(zmap, a[k], b[k], c[k], det[k], ox, oy, h.reshape(-1))
     if len(hs) == 1:
         return hs[0]
     low = hs[0].copy()
