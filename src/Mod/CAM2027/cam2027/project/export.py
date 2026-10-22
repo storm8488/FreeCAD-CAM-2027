@@ -132,6 +132,11 @@ def write_gcode(sections, path):
     return written
 
 
+#: G dont les mots d'axe ne sont pas une position de travail : G10 / G92 (décalages), G28 / G30 (point
+#: intermédiaire, souvent en G91), G53 (repère machine)
+_NOT_POSITION_G = ("10", "28", "30", "53", "92")
+
+
 def analyze_gcode(text):
     """Analyse statique d'un G-code : codes, axes, unités, repères, enveloppe, lignes."""
     codes = set()
@@ -154,6 +159,7 @@ def analyze_gcode(text):
     max_a_rate = 0.0  # vitesse angulaire maximale de A en G93 (deg/min)
     max_a_step = 0.0  # plus grand changement de A dans un seul mouvement de coupe (deg)
     a_current = None
+    relative = False  # G91 : positions inconnues (palpage relatif), hors enveloppe
     for raw in text.splitlines():
         line = raw.split(";")[0]
         line = re.sub(r"\(.*?\)", "", line).strip()
@@ -161,6 +167,7 @@ def analyze_gcode(text):
             continue
         lines += 1
         words = _WORD.findall(line)
+        not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
         for letter, number in words:
             if letter.upper() == "G":
                 g = str(int(float(number))) if float(number).is_integer() else number
@@ -170,6 +177,12 @@ def analyze_gcode(text):
                     inverse_time = True
                 elif g == "94":
                     inverse_time = False
+                elif g == "91":
+                    relative = True
+                elif g == "90":
+                    relative = False
+                elif g in _NOT_POSITION_G or g.startswith("38."):
+                    not_position = True
         has_axis = any(letter.upper() in "XYZABC" for letter, _n in words)
         f_words = [float(n) for letter, n in words if letter.upper() == "F"]
         if inverse_time and motion in ("G1", "G2", "G3") and has_axis:
@@ -208,6 +221,8 @@ def analyze_gcode(text):
                     pauses += 1
             elif letter in ("X", "Y", "Z", "A", "B", "C"):
                 axes.add(letter)
+                if relative or not_position:
+                    continue
                 v = float(number)
                 lo, hi = bbox.get(letter, (v, v))
                 bbox[letter] = (min(lo, v), max(hi, v))

@@ -95,5 +95,39 @@ class TestToolChangeStops(_PlateCase):
         self.assertNotIn("M6", analysis["codes"])  # GRBL 1.1 : M6 refusé (error:20)
 
 
+PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
+
+
+class TestEnvelope(_PlateCase):
+    def test_envelope_ignores_relative_moves_and_offsets(self):
+        """Enveloppe XYZ : les mouvements relatifs (G91, palpage) et les mots d'axe de G10 / G92 / G28 / G53 ne
+        sont pas des positions de travail (bug B5-2 : Z -25 du palpage relatif compté comme position)."""
+        text = "\n".join(["G21", "G90", "G54", "G91", "G38.2 Z-25 F100", "G10 L20 P1 Z0", "G0 Z2", "G0 X-16",
+                          "G90", "G92 X40", "G28 G91 Z0", "G90", "G53 G0 Z-90", "G0 X0 Y0 Z5",
+                          "G1 X10 Y20 Z-1 F500", "G0 Z5", "M5", "M2"])
+        a = exportmod.analyze_gcode(text)
+        self.assertEqual(a["bbox"]["X"], (0.0, 10.0))
+        self.assertEqual(a["bbox"]["Y"], (0.0, 20.0))
+        self.assertEqual(a["bbox"]["Z"], (-1.0, 5.0))
+
+    def test_probe_program_not_refused_on_z_travel(self):
+        """Palpage du coin + contour, course Z 30 mm : le programme réel (Z 0..16) n'est pas refusé et Z n'est
+        pas « sous le brut »."""
+        proj, lib, clone = self.project("Probe travel", probe=dict(PROBE), travel_z_mm=30.0)
+        from cam2027.project import probe
+
+        a6, p6 = self.tool(lib, "6 mm flat end mill")
+        proj.add_operation("profile", "Contour", a6, p6, base=[(clone, [])],
+                           params={"FinalDepth": 0.0, "StepDown": 5.0})
+        probe.add_probe(proj, "corner")
+        proj.compute()
+        text, analysis, issues = proj.preview_gcode()
+        self.assertEqual(analysis["bbox"]["Z"], (0.0, 16.0))
+        self.assertEqual([i for i in issues if i[0] == "error"], [], issues)
+        self.assertFalse(any("below the stock" in str(m) for _l, m in issues), issues)
+        # palpeur (T99) puis fraise : pause pour retirer le palpeur
+        self.assertEqual(code_lines(text).count("M0"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
