@@ -210,14 +210,17 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
   dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
   Chaque colonne signalée (les 4 000 plus profondes) est vérifiée en 3D sur la pièce triangulée : l'entaille
-  retenue est la distance du point coupé à la surface (nulle sous un surplomb), pas la hauteur de paroi
+  retenue est la distance du point coupé à la surface (sous un surplomb, que le corps de la fraise traverse : celle du
+  milieu de la première traversée de la pièce au-dessus), pas la hauteur de paroi
   qu'une fraise tangente fait perdre à la colonne ; une colonne sur le bord de la silhouette (pièce absente
   à 0,05 mm) n'est pas contrôlée.
   Balayage : fraise plate et boule exactes sur les pentes (disque et sphère balayés le long du segment 3D) ;
-  torique et conique prises au point le plus proche sur des morceaux de 0,5 mm / 0,05 mm de dénivelé.
+  torique et conique au plus bas de la plage couverte (section dorée) sur des morceaux de 0,5 mm / 0,05 mm de
+  dénivelé ; queue et porte-outil : dessous du cylindre balayé (exact sur les rampes). Pièce triangulée à 0,01 mm.
   Segments traités par paquets vectorisés (pré-contrôles de la queue, du porte-outil et des rapides sur
   l'état d'avant le paquet, repli séquentiel quand ils signalent quelque chose : même résultat qu'un à un).
-  Ordre de grandeur : 10 à 20 000 commandes par seconde.
+  Ordre de grandeur : 20 à 45 000 commandes par seconde (jour 3). Au-delà de 4 000 colonnes signalées, les
+  suivantes gardent leur entaille verticale (plus grande que la pénétration réelle).
 - Fiche de préparation en Markdown (pas de PDF).
 
 ## Interface

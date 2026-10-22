@@ -27,6 +27,7 @@ MAX_CELLS = 2_000_000
 _ARC_STEP_MM = 0.25
 _SLOPE_STEP_MM = 0.5
 _SLOPE_DZ_MM = 0.05
+_GOLDEN_STEPS = 14  # section dorée des profils torique / conique sur pente : plage réduite à 0,1 %
 
 
 #: profondeur à partir de laquelle un rapide (G0) compte comme entrant dans la matière (mm)
@@ -140,8 +141,9 @@ class ZMap(object):
 
         Fraise plate : les segments horizontaux (et les verticaux, disque au point bas) sont regroupés par
         hauteur, quel que soit leur ordre, et chaque groupe est rempli par colonnes (``_sweep_flat_level``) ;
-        les segments inclinés, et tout pour les autres profils, passent par fenêtres communes
-        (``_sweep_chunk``)."""
+        boule : les segments horizontaux de même hauteur sont évalués sur leurs seules capsules
+        (``_sweep_ball_level``) ; les segments inclinés, et tout pour les autres profils, passent par fenêtres
+        communes (``_sweep_chunk``)."""
         np = _np()
         P0, P1 = split_segments(P0, P1, tool)
         if tool.kind == "flat" and len(P0):
@@ -150,13 +152,62 @@ class ZMap(object):
                 sel = P0[:, 2] == z
                 self._sweep_flat_level(P0[sel], P1[sel], float(z), tool.radius)
             P0, P1 = rest0, rest1
+        elif tool.kind == "ball" and len(P0):
+            level = P0[:, 2] == P1[:, 2]
+            H0, H1 = P0[level], P1[level]
+            for z in np.unique(H0[:, 2]):
+                sel = np.nonzero(H0[:, 2] == z)[0]
+                for s0 in range(0, len(sel), BALL_LEVEL_SEGMENTS):
+                    k = sel[s0:s0 + BALL_LEVEL_SEGMENTS]
+                    self._sweep_ball_level(H0[k], H1[k], tool)
+            P0, P1 = P0[~level], P1[~level]
         for start, stop in chunk_bounds(P0, P1, self.res, tool.radius):
             self._sweep_chunk(P0[start:stop], P1[start:stop], tool)
 
+    def _sweep_ball_level(self, P0, P1, tool):
+        """Boule, segments horizontaux de même hauteur : seules les cellules de la capsule de chaque segment
+        (``_capsule_columns``, une cellule de marge) sont évaluées, avec la formule de ``_bottom`` (distance au
+        segment, profil de la boule), puis gardées au minimum. Même carte que par fenêtres communes, sans les
+        cellules de la fenêtre que le segment ne couvre pas."""
+        np = _np()
+        r = tool.radius
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return
+        i0, i1, j0, j1, _grid = win
+        seg, cols, lo, hi, ok = self._capsule_columns(P0, P1, r, i0, i1)
+        seg, cols, lo, hi = seg[ok], cols[ok], lo[ok], hi[ok]
+        jlo = np.clip(np.ceil((lo - self.y0) / self.res - 0.5) - 1, j0, j1 - 1).astype(int)
+        jhi = np.clip(np.floor((hi - self.y0) / self.res - 0.5) + 1, j0, j1 - 1).astype(int)
+        counts = np.maximum(jhi - jlo + 1, 0)
+        ends = np.cumsum(counts)
+        start = 0
+        while start < len(counts):  # paquets de paires d'au plus CHUNK_CELLS cellules (longs rapides)
+            stop = max(int(np.searchsorted(ends, (ends[start - 1] if start else 0) + CHUNK_CELLS, "right")), start + 1)
+            p, q = _ragged(counts[start:stop])  # (segment-colonne, cellule)
+            p += start
+            jj = jlo[p] + q
+            s, ii = seg[p], cols[p]
+            X, Y = self.xs[ii], self.ys[jj]
+            x0, y0, z0 = P0[s, 0], P0[s, 1], P0[s, 2]
+            dx, dy = P1[s, 0] - x0, P1[s, 1] - y0
+            L2 = dx * dx + dy * dy
+            vertical = L2 < 1e-18
+            t_foot = ((X - x0) * dx + (Y - y0) * dy) / np.where(vertical, 1.0, L2)
+            t = np.where(vertical, 0.0, np.clip(t_foot, 0.0, 1.0))
+            d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))
+            inside = d <= r + 1e-9
+            z = z0 + tool.lift(np.minimum(d, r))
+            np.minimum.at(self.top, (ii[inside], jj[inside]), z[inside])
+            start = stop
+
     def excess_any(self, P0, P1, radius, offset, threshold, flat):
         """Vrai si, sur l'état courant, de la matière dépasse ``pointe + offset`` de plus de ``threshold`` dans
-        ``radius`` autour d'un des segments (queue, porte-outil). ``flat`` : fraise plate (les segments
-        horizontaux sont regroupés par hauteur et remplis par colonnes, comme le balayage)."""
+        ``radius`` autour d'un des segments (queue, porte-outil). ``flat`` : segments horizontaux regroupés par
+        hauteur et remplis par colonnes (le disque de la queue ou du porte-outil est plat quel que soit le
+        profil de la fraise)."""
         np = _np()
         if flat and len(P0):
             P0, P1, rest0, rest1 = flat_groups_ready(P0, P1)
@@ -185,49 +236,44 @@ class ZMap(object):
         block = self.top[i0:i1, j0:j1]
         np.minimum(block, np.where(covered, zlev, np.inf), out=block)
 
-    def _flat_cover(self, P0, P1, r):
-        """Cellules couvertes par des segments horizontaux élargis de ``r`` : dans chaque colonne de cellules,
-        la capsule couvre un intervalle de Y, union de ses trois morceaux (disque de départ, disque d'arrivée,
-        bande entre les perpendiculaires aux extrémités) ; les intervalles sont cumulés par colonne
-        (``add.at`` puis somme cumulée) : une cellule est couverte si son centre est dans l'un d'eux,
-        exactement comme ``d <= r`` dans ``_bottom``. Retourne ``(i0, i1, j0, j1, masque)`` ou None."""
+    def _capsule_columns(self, P0, P1, r, i0, i1):
+        """Intervalle de Y couvert par chaque segment horizontal élargi de ``r`` dans chaque colonne de cellules
+        de la fenêtre ``[i0, i1)`` : union de ses trois morceaux (disque de départ, disque d'arrivée, bande entre
+        les perpendiculaires aux extrémités ; la capsule est convexe, l'union est un intervalle). Paires
+        (segment, colonne) à plat : ``(segment, colonne, bas, haut, non vide)``."""
         np = _np()
-        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
-                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
-                           grid=False)
-        if win is None:
-            return None
-        i0, i1, j0, j1, _grid = win
         rr = r + 1e-9
         res = self.res
         xA, yA, xB, yB = P0[:, 0], P0[:, 1], P1[:, 0], P1[:, 1]
         cmin = np.clip(np.floor((np.minimum(xA, xB) - rr - self.x0) / res).astype(int), i0, i1 - 1)
         cmax = np.clip(np.ceil((np.maximum(xA, xB) + rr - self.x0) / res).astype(int), i0, i1 - 1)
-        K = int((cmax - cmin).max()) + 1
-        cols = cmin[:, None] + np.arange(K)[None, :]  # (n, K)
-        valid = cols <= cmax[:, None]
-        xc = self.xs[np.clip(cols, 0, self.nx - 1)]
+        # paires (segment, colonne) à plat : un long segment ne fait plus calculer sa largeur à tous les autres
+        seg, rank = _ragged(cmax - cmin + 1)
+        cols = cmin[seg] + rank
+        valid = True
+        xc = self.xs[cols]
+        xA, yA, xB, yB = xA[seg], yA[seg], xB[seg], yB[seg]
         inf = np.inf
         # disques aux extrémités
-        hA = rr * rr - (xc - xA[:, None]) ** 2
-        hB = rr * rr - (xc - xB[:, None]) ** 2
+        hA = rr * rr - (xc - xA) ** 2
+        hB = rr * rr - (xc - xB) ** 2
         sA = np.sqrt(np.maximum(hA, 0.0))
         sB = np.sqrt(np.maximum(hB, 0.0))
-        loA = np.where(hA >= 0, yA[:, None] - sA, inf)
-        hiA = np.where(hA >= 0, yA[:, None] + sA, -inf)
-        loB = np.where(hB >= 0, yB[:, None] - sB, inf)
-        hiB = np.where(hB >= 0, yB[:, None] + sB, -inf)
+        loA = np.where(hA >= 0, yA - sA, inf)
+        hiA = np.where(hA >= 0, yA + sA, -inf)
+        loB = np.where(hB >= 0, yB - sB, inf)
+        hiB = np.where(hB >= 0, yB + sB, -inf)
         # bande entre les perpendiculaires : 0 <= t <= 1 et |perp| <= r, deux contraintes linéaires en y
-        dx, dy = (xB - xA)[:, None], (yB - yA)[:, None]
+        dx, dy = xB - xA, yB - yA
         L2 = dx * dx + dy * dy
         L = np.sqrt(L2)
-        u = xc - xA[:, None]
+        u = xc - xA
         eps = 1e-12
         with np.errstate(divide="ignore", invalid="ignore"):
-            t_a = yA[:, None] + (0.0 - u * dx) / dy
-            t_b = yA[:, None] + (L2 - u * dx) / dy
-            p_a = yA[:, None] + (u * dy - rr * L) / dx
-            p_b = yA[:, None] + (u * dy + rr * L) / dx
+            t_a = yA + (0.0 - u * dx) / dy
+            t_b = yA + (L2 - u * dx) / dy
+            p_a = yA + (u * dy - rr * L) / dx
+            p_b = yA + (u * dy + rr * L) / dx
         dy_ok = np.abs(dy) > eps
         dx_ok = np.abs(dx) > eps
         t_lo = np.where(dy_ok, np.minimum(t_a, t_b), np.where((u * dx >= 0) & (u * dx <= L2), -inf, inf))
@@ -242,6 +288,23 @@ class ZMap(object):
         lo = np.minimum(np.minimum(loA, loB), loS)
         hi = np.maximum(np.maximum(hiA, hiB), hiS)
         ok = valid & np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)
+        return seg, cols, lo, hi, ok
+
+    def _flat_cover(self, P0, P1, r):
+        """Cellules couvertes par des segments horizontaux élargis de ``r`` : dans chaque colonne de cellules,
+        la capsule couvre un intervalle de Y, union de ses trois morceaux (disque de départ, disque d'arrivée,
+        bande entre les perpendiculaires aux extrémités) ; les intervalles sont cumulés par colonne
+        (``add.at`` puis somme cumulée) : une cellule est couverte si son centre est dans l'un d'eux,
+        exactement comme ``d <= r`` dans ``_bottom``. Retourne ``(i0, i1, j0, j1, masque)`` ou None."""
+        np = _np()
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return None
+        i0, i1, j0, j1, _grid = win
+        res = self.res
+        cols, lo, hi, ok = self._capsule_columns(P0, P1, r, i0, i1)[1:]
         # cellules dont le centre y0 + (j + 0.5) res est dans [lo, hi]
         jlo = np.ceil((lo - self.y0) / res - 0.5)
         jhi = np.floor((hi - self.y0) / res - 0.5)
@@ -286,6 +349,10 @@ class ZMap(object):
         inside = d <= r + 1e-9
         if tool.kind == "flat" and not (dz != 0).any():  # fraise plate à plat : le dessous est au Z du segment
             z = z0 + np.zeros_like(d)
+        elif tool.kind == "ball" and not (dz != 0).any():
+            # boule à plat (Z constant) : le point le plus bas de la plage est le point le plus proche, même
+            # résultat que la formule de la pente avec dz = 0, sans ses tableaux intermédiaires
+            z = z0 + tool.lift(np.minimum(d, r))
         elif tool.kind in ("flat", "ball"):
             d_perp = np.hypot(X - (x0 + t_foot * dx), Y - (y0 + t_foot * dy))
             reach = np.sqrt(np.maximum(r * r - d_perp * d_perp, 0.0))
@@ -303,7 +370,41 @@ class ZMap(object):
         else:
             z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * dz)
             z = z_tip + tool.lift(np.minimum(d, r))
+            if (dz != 0).any():
+                z = np.minimum(z, self._slope_bottom(X, Y, x0, y0, z0, dx, dy, dz, L2s, vertical, t_foot, tool))
         return i0, i1, j0, j1, np.where(inside, z, np.inf), vertical[:, 0, 0]
+
+    @staticmethod
+    def _slope_bottom(X, Y, x0, y0, z0, dx, dy, dz, L2s, vertical, t_foot, tool):
+        """Torique et conique sur une pente : plus bas dessous de la fraise sur la plage de paramètres où son
+        disque couvre la colonne. ``z(t) + lift(distance(t))`` est convexe (profil croissant et convexe de la
+        distance, elle-même convexe) : section dorée sur la plage, bornes comprises. Le point le plus proche
+        laissait jusqu'au dénivelé d'un morceau (0,05 mm) de matière en trop."""
+        np = _np()
+        r = tool.radius
+        d_perp = np.hypot(X - (x0 + t_foot * dx), Y - (y0 + t_foot * dy))
+        half = np.sqrt(np.maximum(r * r - d_perp * d_perp, 0.0)) / np.sqrt(L2s)
+        a = np.where(vertical, 0.0, np.maximum(t_foot - half, 0.0))
+        b = np.where(vertical, 1.0, np.minimum(t_foot + half, 1.0))
+        b = np.maximum(a, b)
+
+        def f(tt):
+            dd = np.hypot(X - (x0 + tt * dx), Y - (y0 + tt * dy))
+            return z0 + tt * dz + tool.lift(np.minimum(dd, r))
+
+        best = np.minimum(f(a), f(b))
+        g = (math.sqrt(5.0) - 1.0) / 2.0
+        c, e = b - g * (b - a), a + g * (b - a)
+        fc, fe = f(c), f(e)
+        for _k in range(_GOLDEN_STEPS):
+            left = fc < fe  # minimum dans [a, e]
+            b = np.where(left, e, b)
+            a = np.where(left, a, c)
+            new = np.where(left, b - g * (b - a), a + g * (b - a))
+            fn = f(new)
+            c, e, fc, fe = (np.where(left, new, e), np.where(left, c, new),
+                            np.where(left, fn, fe), np.where(left, fc, fn))
+        return np.minimum(best, np.minimum(fc, fe))
 
     def _sweep_chunk(self, P0, P1, tool, rapid=False):
         np = _np()
@@ -325,12 +426,27 @@ class ZMap(object):
     def rapid_hits_many(self, P0, P1, tool):
         """Pour chaque rapide, True s'il entrerait dans la matière sur l'état courant (sans la modifier)."""
         np = _np()
-        res = self._bottom(P0, P1, tool)
+        hits = np.zeros(len(P0), dtype=bool)
+        r = tool.radius
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return hits
+        # le dessous de la fraise n'est jamais sous la pointe : un rapide dont la pointe reste au-dessus de la
+        # plus haute matière de la fenêtre (moins la tolérance) n'entre nulle part (dégagements, liaisons hautes)
+        top_max = float(self.top[win[0]:win[1], win[2]:win[3]].max())
+        cand = np.nonzero(np.minimum(P0[:, 2], P1[:, 2]) < top_max - RAPID_TOLERANCE)[0]
+        if not len(cand):
+            return hits
+        Q0, Q1 = P0[cand], P1[cand]
+        res = self._bottom(Q0, Q1, tool)
         if res is None:
-            return np.zeros(len(P0), dtype=bool)
+            return hits
         i0, i1, j0, j1, z, vertical = res
-        up = vertical & (P1[:, 2] > P0[:, 2])
-        return (z < self.top[i0:i1, j0:j1][None, :, :] - RAPID_TOLERANCE).any(axis=(1, 2)) & ~up
+        up = vertical & (Q1[:, 2] > Q0[:, 2])
+        hits[cand] = (z < self.top[i0:i1, j0:j1][None, :, :] - RAPID_TOLERANCE).any(axis=(1, 2)) & ~up
+        return hits
 
     def removed_volume(self):
         return float((self.initial - self.top).sum() * self.res * self.res)
@@ -339,6 +455,8 @@ class ZMap(object):
 #: paquets vectorisés : segments × cellules de la fenêtre commune au plus (~100 Mo de tableaux temporaires)
 CHUNK_CELLS = 1_500_000
 CHUNK_SEGMENTS = 512
+#: boule à Z constant : segments d'un même niveau remplis d'un coup (une centaine de cellules chacun)
+BALL_LEVEL_SEGMENTS = 20000
 #: suites de segments plats au même Z traitées par colonnes : au moins / au plus tant de segments d'un coup
 FLAT_RUN_MIN = 4
 FLAT_RUN_MAX = 20000
@@ -427,26 +545,28 @@ def split_segments(P0, P1, tool):
 def material_excess(zmap, p0, p1, radius, offset):
     """Plus grand dépassement de matière au-dessus de ``pointe + offset`` dans ``radius`` le long du segment.
 
+    La pointe est prise au plus bas de la plage où le disque de rayon ``radius`` couvre la colonne (dessous d'un
+    cylindre balayé, ``_bottom`` d'une fraise plate) : au point le plus proche, une queue ou un porte-outil le
+    long d'une rampe touchait la matière plus bas sur la rampe sans que le contrôle le voie.
+
     Retourne ``(dépassement, (x, y, z_pointe))`` ; dépassement <= 0 : pas de contact."""
     np = _np()
-    win = zmap._window(min(p0[0], p1[0]) - radius, max(p0[0], p1[0]) + radius,
-                       min(p0[1], p1[1]) - radius, max(p0[1], p1[1]) + radius)
-    if win is None:
+    P0, P1 = np.array([p0], dtype=float), np.array([p1], dtype=float)
+    res = zmap._bottom(P0, P1, ToolProfile("flat", 2.0 * radius))
+    if res is None:
         return 0.0, None
-    i0, i1, j0, j1, (X, Y) = win
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    L2 = dx * dx + dy * dy
-    t = np.zeros_like(X) if L2 < 1e-18 else np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
-    d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
-    z_tip = min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + t * (p1[2] - p0[2])
-    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1] - (z_tip + offset), -np.inf)
+    i0, i1, j0, j1, z_low, _vertical = res
+    excess = np.where(np.isfinite(z_low[0]), zmap.top[i0:i1, j0:j1] - (z_low[0] + offset), -np.inf)
     k = int(np.argmax(excess))
     worst = float(excess.flat[k])
     if not np.isfinite(worst) or worst <= 0:
         return worst if np.isfinite(worst) else 0.0, None
-    tk = float(np.asarray(t).flat[k]) if L2 >= 1e-18 else 0.0
-    at = (p0[0] + tk * dx, p0[1] + tk * dy, min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + tk * (p1[2] - p0[2]))
-    return worst, at
+    i, j = np.unravel_index(k, excess.shape)
+    x, y = float(zmap.xs[i0 + i]), float(zmap.ys[j0 + j])
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    L2 = dx * dx + dy * dy
+    tk = 0.0 if L2 < 1e-18 else min(max(((x - p0[0]) * dx + (y - p0[1]) * dy) / L2, 0.0), 1.0)
+    return worst, (p0[0] + tk * dx, p0[1] + tk * dy, float(z_low[0][i, j]))
 
 
 # -- collisions ---------------------------------------------------------------------------------------
@@ -498,24 +618,11 @@ def material_excess_many(zmap, P0, P1, radius, offset):
     de la carte. Les positions ne sont pas retournées : sert de pré-contrôle d'un paquet (aucun dépassement =
     aucun événement, car la matière ne fait que baisser)."""
     np = _np()
-    win = zmap._window(min(P0[:, 0].min(), P1[:, 0].min()) - radius, max(P0[:, 0].max(), P1[:, 0].max()) + radius,
-                       min(P0[:, 1].min(), P1[:, 1].min()) - radius, max(P0[:, 1].max(), P1[:, 1].max()) + radius,
-                       grid=False)
-    if win is None:
+    res = zmap._bottom(P0, P1, ToolProfile("flat", 2.0 * radius))
+    if res is None:
         return np.zeros(len(P0))
-    i0, i1, j0, j1, _grid = win
-    X = zmap.xs[i0:i1][None, :, None]
-    Y = zmap.ys[j0:j1][None, None, :]
-    x0, y0, z0 = (P0[:, k][:, None, None] for k in range(3))
-    x1, y1, z1 = (P1[:, k][:, None, None] for k in range(3))
-    dx, dy = x1 - x0, y1 - y0
-    L2 = dx * dx + dy * dy
-    vertical = L2 < 1e-18
-    t = np.clip(((X - x0) * dx + (Y - y0) * dy) / np.where(vertical, 1.0, L2), 0.0, 1.0)
-    t = np.where(vertical, 0.0, t)
-    z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * (z1 - z0))
-    d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))
-    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1][None, :, :] - (z_tip + offset), -np.inf)
+    i0, i1, j0, j1, z_low, _vertical = res
+    excess = np.where(np.isfinite(z_low), zmap.top[i0:i1, j0:j1][None, :, :] - (z_low + offset), -np.inf)
     worst = excess.max(axis=(1, 2))
     return np.where(np.isfinite(worst), worst, 0.0)
 
@@ -591,9 +698,83 @@ def path_segments(commands, start=None, with_index=False):
 
 #: tolérance latérale du contrôle d'entaille au droit des parois verticales (mm)
 WALL_TOLERANCE = 0.05
+#: flèche de la triangulation de la pièce (mm) : les facettes passent jusqu'à cette distance au-dessus d'une
+#: surface concave (fausses entailles) ou au-dessous d'une convexe (entailles manquées) ; à 0,05 mm, 0,045 mm
+#: d'écart sur un bol, plus que la tolérance d'entaille (0,02 mm)
+MODEL_DEFLECTION = 0.01
 
 
-def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
+#: triangles rastérisés d'un coup (tableaux de quelques Mo)
+_RASTER_TRIANGLES = 20000
+
+
+def _ragged(counts):
+    """``(propriétaire, rang)`` de chaque élément d'une liste à plat de ``counts[k]`` éléments par propriétaire."""
+    np = _np()
+    owner = np.repeat(np.arange(len(counts)), counts)
+    start = np.cumsum(counts) - counts
+    return owner, np.arange(int(counts.sum())) - start[owner]
+
+
+def _raster_max(zmap, a, b, c, det, ox, oy, flat):
+    """Hauteur des triangles ``(a, b, c)`` (non verticaux, ``det`` : double aire signée en XY) aux centres des
+    colonnes décalés de ``(ox, oy)``, gardée au maximum dans ``flat`` (``zmap.top`` à plat).
+
+    Pour chaque colonne de cellules de la fenêtre d'un triangle, les coordonnées barycentriques sont linéaires
+    en Y : l'intervalle de Y où elles sont toutes >= -1e-9 donne les cellules à évaluer (une de marge de chaque
+    côté), puis le test et la hauteur (linéaire en Y aussi) cellule par cellule. Travail proportionnel à la
+    surface des triangles et non à leur boîte (les triangles longs des faces planes coûtaient des milliers de
+    cellules chacun)."""
+    np = _np()
+    eps = -1e-9
+    xmin = np.minimum(np.minimum(a[:, 0], b[:, 0]), c[:, 0])
+    xmax = np.maximum(np.maximum(a[:, 0], b[:, 0]), c[:, 0])
+    ymin = np.minimum(np.minimum(a[:, 1], b[:, 1]), c[:, 1])
+    ymax = np.maximum(np.maximum(a[:, 1], b[:, 1]), c[:, 1])
+    # colonne (i, j) décalée de (ox, oy) : même fenêtre que ``_window`` sur le triangle décalé de -o
+    i0 = np.clip(np.floor((xmin - ox - zmap.x0) / zmap.res).astype(int), 0, zmap.nx)
+    i1 = np.clip(np.ceil((xmax - ox - zmap.x0) / zmap.res).astype(int) + 1, 0, zmap.nx)
+    j0 = np.clip(np.floor((ymin - oy - zmap.y0) / zmap.res).astype(int), 0, zmap.ny)
+    j1 = np.clip(np.ceil((ymax - oy - zmap.y0) / zmap.res).astype(int) + 1, 0, zmap.ny)
+    t, r = _ragged(np.where(j1 > j0, np.maximum(i1 - i0, 0), 0))  # (triangle, colonne)
+    col = i0[t] + r
+    X = zmap.xs[col] + ox
+    at, bt, ct, dt = a[t], b[t], c[t], det[t]
+    # l1 = A1 Y + B1, l2 = A2 Y + B2, l3 = 1 - l1 - l2
+    A1 = (ct[:, 0] - bt[:, 0]) / dt
+    B1 = ((bt[:, 1] - ct[:, 1]) * (X - ct[:, 0]) - (ct[:, 0] - bt[:, 0]) * ct[:, 1]) / dt
+    A2 = (at[:, 0] - ct[:, 0]) / dt
+    B2 = ((ct[:, 1] - at[:, 1]) * (X - ct[:, 0]) - (at[:, 0] - ct[:, 0]) * ct[:, 1]) / dt
+    lo = np.full(len(t), -np.inf)
+    hi = np.full(len(t), np.inf)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for A, B in ((A1, B1), (A2, B2), (-A1 - A2, 1.0 - B1 - B2)):
+            y = (eps - B) / A
+            lo = np.where(A > 0, np.maximum(lo, y), lo)
+            hi = np.where(A < 0, np.minimum(hi, y), hi)
+            lo = np.where((A == 0) & (B < eps), np.inf, lo)
+    jl = np.maximum(np.floor(np.clip((lo - oy - zmap.y0) / zmap.res - 0.5, -1, zmap.ny + 1)).astype(int), j0[t])
+    jh = np.minimum(np.ceil(np.clip((hi - oy - zmap.y0) / zmap.res - 0.5, -2, zmap.ny + 1)).astype(int), j1[t] - 1)
+    A3, B3 = -A1 - A2, 1.0 - B1 - B2
+    Az = A1 * at[:, 2] + A2 * bt[:, 2] + A3 * ct[:, 2]  # hauteur sur la colonne : Az Y + Bz
+    Bz = B1 * at[:, 2] + B2 * bt[:, 2] + B3 * ct[:, 2]
+    counts = np.maximum(jh - jl + 1, 0)
+    ends = np.cumsum(counts)
+    start = 0
+    while start < len(counts):  # paquets d'au plus CHUNK_CELLS cellules (grands triangles des faces planes)
+        stop = max(int(np.searchsorted(ends, (ends[start - 1] if start else 0) + CHUNK_CELLS, "right")), start + 1)
+        p, q = _ragged(counts[start:stop])  # (triangle-colonne, cellule)
+        p += start
+        jj = jl[p] + q
+        Yc = zmap.ys[jj] + oy
+        inside = (A1[p] * Yc + B1[p] >= eps) & (A2[p] * Yc + B2[p] >= eps) & (A3[p] * Yc + B3[p] >= eps)
+        if inside.any():
+            p, Yc = p[inside], Yc[inside]
+            np.maximum.at(flat, col[p] * zmap.ny + jj[inside], Az[p] * Yc + Bz[p])
+        start = stop
+
+
+def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
     """Hauteur du dessus des pièces au centre de chaque colonne (-inf hors pièce).
 
     ``lateral`` > 0 : retourne ``(hauteurs au centre, hauteurs basses)``, les basses étant la plus basse des
@@ -601,7 +782,7 @@ def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
     dont le centre tombe pile sur une paroi verticale (grille alignée sur les cotes de la pièce) prendrait
     le haut de la paroi alors que la fraise passe tangente à côté.
 
-    Triangles rastérisés par groupes de même fenêtre (vectorisé : 215 000 triangles en quelques secondes)."""
+    Triangles rastérisés par colonnes (``_raster_max``)."""
     np = _np()
     offsets = [(0.0, 0.0)]
     if lateral > 0:
@@ -625,41 +806,10 @@ def model_heights(zmap, shapes, deflection=0.05, lateral=0.0):
         a, b, c, det = a[keep], b[keep], c[keep], det[keep]
         if not len(det):
             continue
-        xmin = np.minimum(np.minimum(a[:, 0], b[:, 0]), c[:, 0])
-        xmax = np.maximum(np.maximum(a[:, 0], b[:, 0]), c[:, 0])
-        ymin = np.minimum(np.minimum(a[:, 1], b[:, 1]), c[:, 1])
-        ymax = np.maximum(np.maximum(a[:, 1], b[:, 1]), c[:, 1])
         for (ox, oy), h in zip(offsets, hs):
-            # colonne (i, j) décalée de (ox, oy) : même fenêtre que ``_window`` sur le triangle décalé de -o
-            i0 = np.clip(np.floor((xmin - ox - zmap.x0) / zmap.res).astype(int), 0, zmap.nx)
-            i1 = np.clip(np.ceil((xmax - ox - zmap.x0) / zmap.res).astype(int) + 1, 0, zmap.nx)
-            j0 = np.clip(np.floor((ymin - oy - zmap.y0) / zmap.res).astype(int), 0, zmap.ny)
-            j1 = np.clip(np.ceil((ymax - oy - zmap.y0) / zmap.res).astype(int) + 1, 0, zmap.ny)
-            w, hh = i1 - i0, j1 - j0
-            valid = (w > 0) & (hh > 0)
-            flat = h.reshape(-1)
-            for (wk, hk) in {(int(x), int(y)) for x, y in zip(w[valid], hh[valid])}:
-                sel = np.nonzero(valid & (w == wk) & (hh == hk))[0]
-                step = max(1, int(1_500_000 // (wk * hk)))
-                for s0 in range(0, len(sel), step):
-                    k = sel[s0:s0 + step]
-                    ii = i0[k][:, None] + np.arange(wk)[None, :]  # (n, w)
-                    jj = j0[k][:, None] + np.arange(hk)[None, :]  # (n, h)
-                    X = (zmap.xs[ii] + ox)[:, :, None]
-                    Y = (zmap.ys[jj] + oy)[:, None, :]
-                    ak, bk, ck, dk = a[k], b[k], c[k], det[k][:, None, None]
-                    l1 = ((bk[:, 1] - ck[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
-                          + (ck[:, 0] - bk[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
-                    l2 = ((ck[:, 1] - ak[:, 1])[:, None, None] * (X - ck[:, 0][:, None, None])
-                          + (ak[:, 0] - ck[:, 0])[:, None, None] * (Y - ck[:, 1][:, None, None])) / dk
-                    l3 = 1.0 - l1 - l2
-                    eps = -1e-9
-                    inside = (l1 >= eps) & (l2 >= eps) & (l3 >= eps)
-                    if not inside.any():
-                        continue
-                    z = l1 * ak[:, 2][:, None, None] + l2 * bk[:, 2][:, None, None] + l3 * ck[:, 2][:, None, None]
-                    cells = (ii[:, :, None] * zmap.ny + jj[:, None, :])
-                    np.maximum.at(flat, cells[inside], z[inside])
+            for s0 in range(0, len(det), _RASTER_TRIANGLES):
+                k = slice(s0, s0 + _RASTER_TRIANGLES)
+                _raster_max(zmap, a[k], b[k], c[k], det[k], ox, oy, h.reshape(-1))
     if len(hs) == 1:
         return hs[0]
     low = hs[0].copy()
@@ -754,10 +904,11 @@ def _point_triangle_distance(p, A, B, C):
     return np.minimum.reduce([face, seg(A, B), seg(B, C), seg(C, A)])
 
 
-def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=0.05):
+def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_DEFLECTION):
     """Vérifie en 3D les colonnes que la carte de hauteur dit entaillées et remplace leur entaille verticale
-    par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce,
-    nulle si ce point est hors de la pièce (dessous d'un surplomb, que la carte ne voit pas).
+    par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce ;
+    si ce point est hors de la pièce (dessous d'un surplomb), la fraise verticale traverse le surplomb : distance
+    du milieu de la première traversée de la pièce au-dessus du point.
 
     Près d'une paroi raide, une fraise qui entre de 0,05 mm sur le côté abaisse la colonne de toute la hauteur
     de la paroi (1,85 mm signalés sur le casse-noix de l'utilisateur pour 0,05 mm réels). Retourne les
@@ -812,11 +963,16 @@ def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=0.05):
         l3 = 1.0 - l1 - l2
         crosses = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
         zc = l1 * a[:, 2] + l2 * b[:, 2] + l3 * c[:, 2]
-        above = int((crosses & (zc > z)).sum())
-        if above % 2 == 0:
-            gh[i, j] = z  # point coupé hors de la pièce : pas d'entaille
-            continue
-        d = float(_point_triangle_distance(np.array([x, y, z]), a, b, c).min())
+        over = np.sort(zc[crosses & (zc > z)])
+        probe = z
+        if len(over) % 2 == 0:
+            # point coupé hors de la pièce, pièce au-dessus (surplomb) : le corps de la fraise, vertical au-dessus
+            # de sa pointe, traverse la pièce. Pénétration prise au milieu de la première traversée.
+            if not len(over):
+                gh[i, j] = z
+                continue
+            probe = 0.5 * (over[0] + (over[1] if len(over) > 1 else over[0]))
+        d = float(_point_triangle_distance(np.array([x, y, probe]), a, b, c).min())
         if d < reach:
             gh[i, j] = z + min(d, v)
     return gh

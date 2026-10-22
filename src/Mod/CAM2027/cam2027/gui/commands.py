@@ -1256,7 +1256,9 @@ def show_material_result(proj, rep):
 def material_report_text(rep):
     lines = [tr("Material check (height map, {res} mm grid, 3 axes)", res="%g" % rep["resolution"]),
              tr("Removed: {v} cm3", v="%.1f" % (rep["removed_volume"] / 1000.0))]
-    if rep["gouge_max"] > rep["tolerance"]:
+    if not rep.get("simulated"):  # tout sauté (axe A, palpage, outil inconnu) : rien n'a été contrôlé
+        lines.append(tr("No operation simulated: gouges not checked"))
+    elif rep["gouge_max"] > rep["tolerance"]:
         x, y, _z = rep["gouge_at"]
         lines.append(tr("GOUGE: the tool cuts {d} mm into the part (worst at X {x} Y {y}, {n} cells)",
                         d="%.2f" % rep["gouge_max"], x="%.1f" % x, y="%.1f" % y, n=rep["gouge_cells"]))

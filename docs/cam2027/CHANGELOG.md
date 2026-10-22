@@ -47,6 +47,60 @@
   de haut et 3,5 mm de côté sur le plateau `bitTray3030+v7`) : refus avec un message qui dit quel motif choisir.
   Le dépassement voulu d'un os (0,88 mm dans un angle droit, fraise de 6 mm) est dit dans les limites.
 
+- **[B2]** **Contrôle matière, fraises torique et conique sur une pente** : le dessous de la fraise était pris au
+  point du segment le plus proche de la colonne, ce qui laissait jusqu'au dénivelé d'un morceau découpé (0,05 mm)
+  de matière en trop : des entailles de 0,02 à 0,05 mm (au-delà de la tolérance) n'étaient jamais vues sur les
+  rampes, hélices et pentes. Minimum exact sur la plage où le disque couvre la colonne (fonction convexe, section
+  dorée) : la carte = la fraise posée tous les 2 µm à 0,005 mm près (avant : 0,050 mm). Fraises plate et boule
+  inchangées (déjà exactes).
+- **[B2]** **Contrôle matière, dessus de la pièce sur les faces courbes** : la pièce était triangulée à 0,05 mm de
+  flèche, plus que la tolérance d'entaille (0,02 mm) : facettes 0,045 mm au-dessus du fond d'un bol (fausses
+  entailles possibles) et 0,024 mm sous un dôme (entailles manquées). Triangulation à 0,01 mm
+  (`sim.MODEL_DEFLECTION`) : écart au dessus exact de 0,011 mm au plus sur le bol et le dôme de test.
+- **[B2]** **Contrôle matière, fraise sous un surplomb** : la vérification 3D des entailles déclarait « rien » quand
+  le point coupé est hors de la pièce sous un surplomb, alors qu'une fraise verticale ne peut y être sans que son
+  corps traverse le surplomb (entaille manquée). La pénétration est maintenant prise au milieu de la première
+  traversée de la pièce au-dessus du point. C'est le cas de la finition 3D du chauffage (2 corps) : boule de 6 mm
+  à Z 3,9 sous le corps du dessus (pièce pleine de 0 à 3,9 et de 40 à 45 en X 69 Y 18,75) ; l'entaille de 41 mm
+  signalée vient des colonnes non vérifiées en 3D (182 258 candidates, 4 000 vérifiées) et est réelle.
+- **[B2]** **Contrôle matière plus rapide sur les pièces STEP** : dessus de la pièce rastérisé par colonnes
+  (intervalle exact du triangle dans chaque colonne, puis seulement les cellules dedans) au lieu de la boîte entière
+  de chaque triangle. Chauffage (71 000 triangles à 0,01 mm, 5 hauteurs pour la tolérance latérale) : 4,7-5,7 s
+  → 1,4-1,6 s, mêmes cellules, écart 5·10⁻¹⁰ mm ; contrôle de la finition 3D 13,9-16,6 s → 10,7-11,0 s, même
+  entaille, même volume. Plateau STL (3 668 grands triangles) inchangé (0,33 / 0,36 s).
+- **[B2]** **Collisions de la queue et du porte-outil le long des rampes** : la hauteur de la pointe était prise au
+  point du segment le plus proche de chaque colonne, alors que le disque de la queue ou du porte-outil couvre la
+  colonne aussi plus bas sur la rampe (sous-estimation jusqu'à rayon × pente, ≈ 0,7 mm pour un porte-outil Ø28
+  sur une rampe à 3°) : collisions manquées. Hauteur prise au plus bas de la plage couverte (dessous d'un
+  cylindre balayé, exact). Queue Ø6 à côté d'une rampe à 26,6° : dépassement 0,224 mm vu (avant : -0,375).
+- **[B2]** **Contrôle matière plus rapide sur les ébauches à la fraise plate** : le remplissage par colonnes d'un
+  niveau calculait des tableaux (segments × largeur du plus long segment du niveau) ; un seul long segment faisait
+  calculer sa largeur aux 20 000 autres. Paires (segment, colonne) à plat, mêmes formules : carte identique bit à
+  bit. Ébauche 3D du chauffage (344 573 commandes) : remplissage 8,5-8,7 s → 0,6-0,8 s, contrôle 16,6 s → 7,7-9,5 s.
+- **[B2]** **Contrôle matière plus rapide à Z constant avec une fraise boule** : segments horizontaux d'une boule
+  sans les tableaux de la formule de pente (même résultat avec dz = 0). Z constant du plateau (232 212 commandes) :
+  13,4-13,9 s → 11,3-11,4 s, carte identique bit à bit.
+- **[B2]** **Rapport du contrôle matière quand rien n'est simulé** (toutes les opérations sur l'axe A, palpage seul,
+  outils inconnus) : il annonçait « aucune entaille trouvée sur le dessus de la pièce ». Il dit maintenant « aucune
+  opération simulée : entailles non contrôlées ».
+- **[B2]** **Reprise de matière après un perçage en cycles** : le brut restant simulait les opérations précédentes
+  sans développer les cycles de perçage (G81, G83… ignorés), contrairement au contrôle matière : les trous percés
+  restaient pleins dans le brut de la reprise. Cycles développés en mouvements équivalents (`holes.expand_cycles`).
+- **[B2]** **Contrôle matière plus rapide à Z constant avec une fraise boule** (suite) : segments horizontaux d'une
+  boule regroupés par hauteur et évalués sur leurs seules capsules (intervalle exact par colonne, comme la fraise
+  plate) au lieu de fenêtres communes. Z constant du plateau : balayage 5,5-6,2 s → 4,1-4,7 s, contrôle
+  11,5-13,7 s → 10,1-12,2 s, carte identique bit à bit (et cellule pour cellule sur 5 parcours aléatoires).
+- **[B2]** **Pré-contrôle de la queue et du porte-outil plus rapide pour toutes les fraises** : le remplissage par
+  colonnes des segments horizontaux n'était utilisé qu'avec une fraise plate, alors que la queue et le
+  porte-outil sont des disques plats quel que soit le profil. Z constant du plateau (boule) : pré-contrôle
+  2,3-2,9 s → 0,17-0,20 s, contrôle 11,0-12,6 s → 8,1-9,5 s, mêmes événements.
+- **[B2]** **Pré-contrôle des rapides plus rapide** : un rapide dont la pointe reste au-dessus de la plus haute
+  matière de sa fenêtre (moins la tolérance) est écarté sans calcul (le dessous de la fraise n'est jamais sous la
+  pointe). Z constant du plateau : 2,9-3,1 s → 1,0 s, contrôle 11,8-12,0 s → 9,7-9,8 s (sous profileur) ; ébauche
+  3D du chauffage : 4,4-6,5 s → 2,3-2,6 s. Cartes identiques bit à bit, mêmes événements.
+- **[B2]** **Mémoire du dessus de pièce bornée** : la rastérisation par colonnes développait toutes les cellules d'un
+  paquet de 20 000 triangles d'un coup (grands triangles plans sur une grille fine : 257 Mo pour une boîte sur
+  2 M cellules) ; paquets d'au plus 1,5 M cellules comme avant : 154 Mo (199 Mo à `dcb2373`), même carte.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
