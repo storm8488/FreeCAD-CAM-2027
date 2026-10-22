@@ -545,6 +545,8 @@ def strategy_module(kind):
         parallel_waterline.install(mod)
     if kind == "pocket":
         patch_pocket(mod)
+    if kind in ("pocket2d", "adaptive"):
+        patch_combine_faces()
     return mod
 
 
@@ -980,6 +982,72 @@ POCKET_SHAPES_SHA1 = "a9c3e2225a919f4b0d9dff1524197fe101612391"
 POCKET_REMOVAL_SHA1 = "b57fc89eee79edc8a647e0d70f066236ff25c6b7"
 AREA_BUILD_SHA1 = ("c947d9bb22a0e7b54043af311f1572c5fcb30703",  # 1.1.4
                    "af27b6f0ede71f0493e55f8aeaf05ae1dd1660c1")  # 1.0.2
+
+
+#: empreinte SHA-1 de ``Path.Geom.combineHorizontalFaces`` (même code en 1.0.2 et 1.1.4)
+COMBINE_FACES_SHA1 = "429f00578adaff3be8ec5abb57e8048345d1fbdd"
+
+
+def patch_combine_faces():
+    """Poche 2D et adaptative sur des fonds choisis automatiquement : FreeCAD (``combineHorizontalFaces``) réunit
+    les fonds en fusionnant leurs extrusions une à une, chaque fusion reprenant tout le résultat précédent
+    (5,4 s pour les 135 alvéoles du plateau). Copie de la fonction de FreeCAD où la boîte est découpée par toutes
+    les extrusions d'un coup (même région), installée seulement si le code d'origine est exactement celui
+    attendu."""
+    import Path.Geom as geom
+
+    original = getattr(geom, "combineHorizontalFaces", None)
+    if original is None or getattr(original, "cam2027_patched", False) or _sha1(original) != COMBINE_FACES_SHA1:
+        return
+    import FreeCAD
+    import Part
+
+    def combine(faces):
+        if len(faces) < 3:
+            return original(faces)
+        horizontal = list()
+        offset = 10.0
+        topFace = None
+        innerFaces = list()
+        for f in faces:
+            if f.BoundBox.ZMin != 0.0:
+                f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+        allFaces = Part.makeCompound(faces)
+        if hasattr(allFaces, "Area") and geom.isRoughly(allFaces.Area, 0.0):
+            geom.Path.Log.info(geom.translate("PathGeom", "Zero working area to process. Check your selection and settings."))
+            return horizontal
+        afbb = allFaces.BoundBox
+        bboxFace = geom.makeBoundBoxFace(afbb, offset, -5.0)
+        bboxSolid = bboxFace.extrude(FreeCAD.Vector(0.0, 0.0, 10.0))
+        extrudedFaces = [f.extrude(FreeCAD.Vector(0.0, 0.0, 6.0)) for f in faces]
+        cut = bboxSolid.cut(extrudedFaces)  # CAM2027 : une découpe, au lieu de fusionner les extrusions une à une
+        for f in cut.Faces:
+            fbb = f.BoundBox
+            if geom.isRoughly(fbb.ZMin, 5.0) and geom.isRoughly(fbb.ZMax, 5.0):
+                if (geom.isRoughly(afbb.XMin - offset, fbb.XMin) and geom.isRoughly(afbb.XMax + offset, fbb.XMax)
+                        and geom.isRoughly(afbb.YMin - offset, fbb.YMin) and geom.isRoughly(afbb.YMax + offset, fbb.YMax)):
+                    topFace = f
+                else:
+                    innerFaces.append(f)
+        if not topFace:
+            return horizontal
+        outer = [Part.Face(w) for w in topFace.Wires[1:]]
+        if outer:
+            for f in outer:
+                f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+            if innerFaces:
+                inner = innerFaces
+                for f in inner:
+                    f.translate(FreeCAD.Vector(0.0, 0.0, 0.0 - f.BoundBox.ZMin))
+                cut = Part.makeCompound(outer).cut(Part.makeCompound(inner))
+                for f in cut.Faces:
+                    horizontal.append(f)
+            else:
+                horizontal = outer
+        return horizontal
+
+    combine.cam2027_patched = True
+    geom.combineHorizontalFaces = combine
 
 
 def _sha1(fn):

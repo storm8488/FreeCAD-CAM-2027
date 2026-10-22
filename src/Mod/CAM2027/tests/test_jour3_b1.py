@@ -117,6 +117,42 @@ class TestMultiBodySurface(unittest.TestCase):
         self.assertGreater(op.Path.Size, 100)
         self.assertEqual(parallel, op.Path.toGCode())
 
+    def test_combine_faces_same_region_as_freecad(self):
+        """Réunion des fonds (poche 2D, adaptative) : une découpe au lieu des fusions une à une, mêmes faces."""
+        import Path.Geom as geom
+        from cam2027.project import operations
+
+        operations.patch_combine_faces()
+        self.assertTrue(getattr(geom.combineHorizontalFaces, "cam2027_patched", False))  # code FreeCAD reconnu
+
+        def floors():
+            out = []
+            for i in range(6):  # alvéoles disjointes, dont une avec un îlot
+                f = Part.makePlane(8, 8, FreeCAD.Vector(12 * i, 0, 3))
+                if i == 2:
+                    f = f.cut(Part.makePlane(2, 2, FreeCAD.Vector(12 * i + 3, 3, 3)))
+                out.append(f)
+            out.append(Part.makePlane(8, 8, FreeCAD.Vector(4, 4, 3)))  # recouvre la première
+            out.append(Part.makePlane(8, 8, FreeCAD.Vector(80, 0, 3)))  # touche la suivante
+            out.append(Part.makePlane(8, 8, FreeCAD.Vector(88, 0, 3)))
+            return out
+
+        def key(faces):
+            return sorted((round(f.Area, 6), len(f.Wires), tuple(round(v, 6) for v in (
+                f.BoundBox.XMin, f.BoundBox.YMin, f.BoundBox.XMax, f.BoundBox.YMax))) for f in faces)
+
+        import importlib
+
+        fresh = importlib.reload(geom)  # fonction d'origine de FreeCAD
+        try:
+            expected = key(fresh.combineHorizontalFaces(floors()))
+            operations.patch_combine_faces()
+            got = key(geom.combineHorizontalFaces(floors()))
+        finally:
+            operations.patch_combine_faces()
+        self.assertGreater(len(expected), 4)
+        self.assertEqual(got, expected)
+
 class TestSurfaceSpeed(unittest.TestCase):
     """Accélérations de la finition 3D : mêmes points que FreeCAD."""
 

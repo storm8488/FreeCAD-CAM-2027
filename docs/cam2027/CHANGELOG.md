@@ -21,6 +21,11 @@
   niveau après l'autre) sont calculés dans des processus par le même code de FreeCAD (`project/parallel_waterline.py`,
   `CAM2027_PARALLEL_WATERLINE=0` pour le désactiver), même G-code. Chauffage : 15,3 / 14,9 s → 9,1 / 9,1 s ;
   plateau : 5,7 / 5,7 s → 5,0 / 4,6 s.
+- **[B1]** Poche 2D et adaptative sur des fonds choisis automatiquement : la réunion des fonds de FreeCAD
+  (`Path.Geom.combineHorizontalFaces`) fusionnait les extrusions une à une (coût quadratique) ; une seule
+  découpe à outils multiples donne la même région (copie gardée par empreinte SHA-1, `patch_combine_faces`).
+  Plateau, poche 2D : 13,0 / 14,4 s → 8,4 / 8,6 s, même G-code ; adaptative : 14,3 / 11,0 s → 8,4 / 4,6 s, même
+  volume enlevé (607,0 cm³), commandes dans la dispersion habituelle de l'adaptative.
 
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
