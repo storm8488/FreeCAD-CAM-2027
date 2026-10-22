@@ -122,6 +122,14 @@ def add_dressup(job, op, kind, params=None, count=None):
         mod = importlib.import_module(meta["module"])
         name = base_operation(current).Name + meta["suffix"]
         if kind == "tags":
+            # FreeCAD place les attaches sur le parcours de ce qu'elles enveloppent : un habillage ajouté juste
+            # avant (même validation de l'éditeur) n'est pas encore calculé, parcours vide (IndexError)
+            if is_dressup(current) and not current.Path.Commands:
+                current.recompute()
+            if not any(c.Name in ("G1", "G01", "G2", "G02", "G3", "G03") for c in current.Path.Commands):
+                from ..i18n import UserError
+
+                raise UserError("Holding tags need a computed contour toolpath: {op} has no cutting move", op=op.Label)
             obj = mod.Create(current, name=name)
             if obj is None:
                 raise ValueError("FreeCAD refuse les attaches sur %s (contour fermé requis)" % op.Label)

@@ -153,6 +153,44 @@ class TestMultiBodySurface(unittest.TestCase):
         self.assertGreater(len(expected), 4)
         self.assertEqual(got, expected)
 
+class TestDressups(unittest.TestCase):
+    """Habillages sur la plaque des tests."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_pipeline import make_part
+
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-b1d-")
+        cls.step = os.path.join(cls.tmp, "plate.step")
+        make_part(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _profile(self):
+        from cam2027.gui.commands import default_params
+
+        lib = starter_library()
+        proj = Project.create("B1d", lib)
+        proj.import_model(self.step)
+        proj.create_job(proj.model_candidates(), stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        tool = lib.search("6 mm flat end mill 2F")[0]
+        asm = lib.assemblies_for_tool(tool.id)[0]
+        preset = tool.presets[0]
+        op, _rec = proj.add_operation("profile", "profile", asm.id, preset.id,
+                                      base=[(m, []) for m in proj.job.Model.Group],
+                                      params=default_params("profile", tool, preset.resolve(tool)))
+        proj.compute()
+        return proj, op
+
+    def test_tags_on_a_dressup_not_yet_computed(self):
+        """Attaches ajoutées juste après une rampe (même validation de l'éditeur, sans recalcul entre les deux) :
+        FreeCAD lisait le parcours vide de la rampe (« list index out of range »)."""
+        proj, op = self._profile()
+        proj.add_dressup(op, "ramp")
+        tags, _ignored = proj.add_dressup(op, "tags")
+        proj.compute()
+        self.assertEqual(len(tags.Positions), 4)
+        self.assertEqual(proj.operation_state(proj.job.Operations.Group[-1]), "computed")
+
 class TestSurfaceSpeed(unittest.TestCase):
     """Accélérations de la finition 3D : mêmes points que FreeCAD."""
 
