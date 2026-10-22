@@ -84,6 +84,17 @@ class ObjectPattern(object):
             else:
                 out.extend(PathUtils.applyPlacementToPath(pl, path).Commands)
         obj.Path = Path.Path(out)
+        _avoid_keepout(obj)
+
+
+def _avoid_keepout(obj):
+    """Rapides des copies relevés au-dessus des zones interdites (l'original est déjà corrigé, pas ses copies)."""
+    from . import keepout
+
+    try:
+        keepout.apply(obj)
+    except Exception as exc:  # jamais de parcours perdu à cause du correctif
+        FreeCAD.Console.PrintWarning("CAM2027 keep-out: %s\n" % exc)
 
 
 class ViewProviderPattern(object):

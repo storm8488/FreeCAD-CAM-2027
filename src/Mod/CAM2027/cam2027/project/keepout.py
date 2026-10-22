@@ -248,7 +248,9 @@ def _cut_touches(p0, p1, c, bb, radius):
 
 
 def _tool_radius(obj):
-    tc = getattr(obj, "ToolController", None)
+    from . import dressups
+
+    tc = getattr(obj, "ToolController", None) or getattr(dressups.base_operation(obj), "ToolController", None)
     tool = getattr(tc, "Tool", None) if tc is not None else None
     try:
         return float(tool.Diameter) / 2.0

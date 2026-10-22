@@ -6,6 +6,11 @@
   l'avance d'un mouvement G93 (inverse de sa durée) comme une vitesse en mm/s sur la seule longueur X Y Z : rotation
   pure comptée 0 s, autres mouvements faux (11,0 s estimées au lieu de 4,0 s sur le cas d'essai). Chaque mouvement
   G93 compte maintenant pour 1 / F (sans modèle d'accélération) ; test `test_jour3_b4.TestTiming`.
+- **[B4]** Correctif : **zones interdites ignorées par les motifs et par « Limiter à une zone »**. Seuls les rapides
+  des opérations étaient relevés ; les copies d'un motif (rapides de l'original déplacés) et les liaisons recalculées
+  d'une découpe (à la hauteur de dégagement) traversaient une zone plus haute (cas d'essai : rapide à Z 16 dans une
+  zone de 30 mm). Les deux habillages relèvent maintenant leurs rapides comme les opérations (rayon de l'outil de
+  l'opération de base). La reprise de matière (`rest.py`, même moteur de découpe) n'est pas encore corrigée.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
