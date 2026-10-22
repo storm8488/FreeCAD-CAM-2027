@@ -262,3 +262,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   profondeur finale 0,001 mm plus basse.
 - Pas de contrôle de collision avec le mandrin, les mors ou la contre-pointe (champs du profil non
   exploités).
+
+- Motifs de parcours (Usiner > Motif, `project/patterns.py`) : copies du parcours calculé, sans contrôle de la
+  géométrie sous chaque copie (une copie posée hors de la pièce ou sur un autre relief usine quand même : le
+  contrôle matière le montre) ; translation dans le plan XY ou rotation autour de Z seulement (pas de copie en Z,
+  pas de miroir, pas d'aléa) ; une copie du motif par opération (pas de motif commun à plusieurs opérations
+  usiné copie par copie) ; « moins de changements d'outil » regroupe les opérations choisies par outil, dans
+  l'ordre de leur première apparition, sans savoir si une opération d'un autre outil doit passer entre elles
+  (perçage avant taraudage : à vérifier dans la liste) ; réglages modifiables ensuite dans les propriétés de
+  l'habillage (pas encore dans l'éditeur d'opération).

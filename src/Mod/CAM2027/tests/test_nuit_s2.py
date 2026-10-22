@@ -199,5 +199,131 @@ class TestLeads(_PlateCase):
         self.assertEqual([o.Name for o in proj.operations()], [lead.Name])
 
 
+POCKETS = [(10.0 + c * 35.0, 12.0 + r * 40.0) for r in range(2) for c in range(3)]  # coin bas-gauche, 20 x 14
+
+
+def make_grid_part(path):
+    """Plaque 120 x 80 x 10 avec 6 poches 20 x 14 x 4 en 3 colonnes (pas 35) et 2 lignes (pas 40)."""
+    import Part
+
+    shape = Part.makeBox(120, 80, 10)
+    for x, y in POCKETS:
+        shape = shape.cut(Part.makeBox(20, 14, 4, FreeCAD.Vector(x, y, 6)))
+    shape.exportStep(path)
+    return shape
+
+
+def zmap_at(zmap, x, y):
+    return float(zmap.top[int((x - zmap.x0) / zmap.res), int((y - zmap.y0) / zmap.res)])
+
+
+class TestPatterns(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s2p-")
+        cls.step = os.path.join(cls.tmp, "grid.step")
+        make_grid_part(cls.step)
+
+    def project(self, name):
+        lib = starter_library()
+        proj = Project.create(name, lib, machine())
+        part = proj.import_model(self.step, label="Grid").objects[0]
+        job = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        self.addCleanup(proj.close)
+        return proj, lib, job.Model.Group[0]
+
+    def pocket(self, proj, lib, clone, name="Pocket", tool="6 mm flat end mill", index=0):
+        t = lib.search(tool)[0]
+        x, y = POCKETS[index]
+        floor = None
+        for i, f in enumerate(clone.Shape.Faces, 1):
+            bb = f.BoundBox
+            if (f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMin - 6.0) < 1e-6 and abs(bb.ZMax - 6.0) < 1e-6
+                    and abs(bb.XMin - x) < 1e-6 and abs(bb.YMin - y) < 1e-6):
+                floor = "Face%d" % i
+        op, _rec = proj.add_operation("pocket", name, lib.assemblies_for_tool(t.id)[0].id, t.presets[0].id,
+                                      base=[(clone, [floor])], params={"StepDown": 2.0})
+        return op
+
+    def test_grid_3x2(self):
+        """3 x 2 copies d'une poche : 6 poches dans la carte de hauteur aux bons endroits, rien entre elles, aucune
+        entaille, un seul changement d'outil dans le G-code."""
+        from cam2027.project import patterns, export as exportmod
+
+        proj, lib, clone = self.project("Pattern grid")
+        op = self.pocket(proj, lib, clone)
+        proj.compute()
+        n_base = len(op.Path.Commands)
+        single = proj.material_check()["removed_volume"]
+        made = patterns.add_pattern(proj, [op], {"Kind": "Grid", "Columns": 3, "Rows": 2, "StepX": 35.0, "StepY": 40.0})
+        self.assertEqual(len(made), 1)
+        pat = made[0]
+        self.assertEqual([o.Name for o in proj.operations()], [pat.Name])
+        self.assertEqual(patterns.read_params(pat)["Columns"], 3)
+        r = {x["name"]: x for x in proj.compute()}
+        self.assertEqual(len(pat.Path.Commands), 6 * n_base + 5)
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        self.assertEqual(rep["rapid_hits"], 0, rep)
+        z = proj.last_zmap
+        for x, y in POCKETS:
+            self.assertAlmostEqual(zmap_at(z, x + 10.0, y + 7.0), 6.0, delta=0.02)
+            self.assertAlmostEqual(zmap_at(z, x + 4.0, y + 4.0), 6.0, delta=0.02)
+        for x, y in ((37.5, 19.0), (72.5, 59.0), (20.0, 39.0), (115.0, 75.0)):
+            self.assertAlmostEqual(zmap_at(z, x, y), 10.0, delta=0.02)
+        # volume : 6 fois celui de la poche seule (angles arrondis au rayon de la fraise : moins que 6 x 20 x 14 x 4)
+        self.assertAlmostEqual(rep["removed_volume"], 6 * single, delta=0.01 * 6 * single)
+        self.assertLess(rep["removed_volume"], 6 * 20 * 14 * 4)
+        text = "\n".join(g for _n, g in exportmod.postprocess(proj.job))
+        self.assertEqual(sum(1 for line in text.splitlines() if "M6" in line.split()), 1, text[:600])
+        # retrait : retour à la poche seule
+        proj.remove_dressup(op, "pattern")
+        self.assertEqual([o.Name for o in proj.operations()], [op.Name])
+
+    def test_circular(self):
+        """Cercle : 4 copies sur 360° autour de (60, 40) ; chaque copie = l'original tourné de 90°, arcs compris."""
+        from cam2027.project import patterns
+
+        proj, lib, clone = self.project("Pattern circle")
+        op = self.pocket(proj, lib, clone)
+        proj.compute()
+        base = feed_moves(op.Path)
+        pat = patterns.add_pattern(proj, [op], {"Kind": "Circular", "Count": 4, "Centre": (60.0, 40.0, 0.0),
+                                                "Angle": 360.0})[0]
+        proj.compute()
+        moves = feed_moves(pat.Path)
+        self.assertEqual(len(moves), 4 * len(base))
+        n = len(base)
+        for k in range(4):
+            a = math.radians(90.0 * k)
+            for m0, m in zip(base[::7], moves[k * n:(k + 1) * n:7]):
+                x, y = m0[2][0] - 60.0, m0[2][1] - 40.0
+                self.assertAlmostEqual(m[2][0], 60.0 + x * math.cos(a) - y * math.sin(a), places=3)
+                self.assertAlmostEqual(m[2][1], 40.0 + x * math.sin(a) + y * math.cos(a), places=3)
+                self.assertAlmostEqual(m[2][2], m0[2][2], places=4)
+                if m0[3] is not None:  # centre d'arc tourné aussi
+                    cx, cy = m0[3][0] - 60.0, m0[3][1] - 40.0
+                    self.assertAlmostEqual(m[3][0], 60.0 + cx * math.cos(a) - cy * math.sin(a), places=3)
+        with self.assertRaises(UserError):
+            patterns.add_pattern(proj, [op], {"Kind": "Grid", "Columns": 0, "Rows": 2, "StepX": 10, "StepY": 10})
+
+    def test_minimize_tool_changes(self):
+        """Trois opérations (6 mm, 3 mm, 6 mm) en motif : regroupées par outil, un seul changement d'outil."""
+        from cam2027.project import patterns
+
+        proj, lib, clone = self.project("Pattern tools")
+        a = self.pocket(proj, lib, clone, "A")
+        b = self.pocket(proj, lib, clone, "B", tool="3 mm flat end mill", index=1)
+        c = self.pocket(proj, lib, clone, "C", index=2)
+        self.assertEqual(patterns.tool_changes(proj), 2)
+        made = patterns.add_pattern(proj, [a, b, c], {"Kind": "Grid", "Columns": 1, "Rows": 2, "StepX": 0.0,
+                                                      "StepY": 40.0})
+        self.assertEqual(len(made), 3)
+        self.assertEqual([proj.base_operation(o).Label for o in proj.operations()], ["A", "C", "B"])
+        self.assertEqual(patterns.tool_changes(proj), 1)
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+
+
 if __name__ == "__main__":
     unittest.main()

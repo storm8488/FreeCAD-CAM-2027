@@ -52,10 +52,18 @@ DRESSUPS = {
                   "at every step-down; profile, slot and pocket paths. Vertical arcs and sweep angles other than 90° "
                   "need FreeCAD 1.1.",
     },
+    "pattern": {
+        "module": "cam2027.project.patterns",
+        "label": "Pattern",
+        "suffix": "_DressupPattern",
+        "params": (("Kind", "enum"), ("Columns", "int"), ("Rows", "int"), ("StepX", "length"), ("StepY", "length"),
+                   ("Count", "int"), ("Centre", "vector"), ("Angle", "angle")),
+        "limits": "Copies of the computed toolpath on a grid or a circle (Machining > Pattern).",
+    },
 }
 
-ORDER = ("dogbone", "ramp", "tags", "leads")  # ordre d'empilement : du plus proche de l'opération au plus haut
-ON_TOP = ("leads",)  # restent au-dessus des habillages ajoutés après eux (les autres s'empilent)
+ORDER = ("dogbone", "ramp", "tags", "leads", "pattern")  # ordre d'empilement : du plus proche de l'opération au plus haut
+ON_TOP = ("leads", "pattern")  # restent au-dessus des habillages ajoutés après eux (les autres s'empilent)
 
 
 def is_dressup(obj):
@@ -102,7 +110,8 @@ def add_dressup(job, op, kind, params=None, count=None):
     current = top_of(job, op)
     if any(dressup_kind(d) == kind for d in dressup_chain(current)):
         raise ValueError("l'opération %s a déjà un habillage %s" % (op.Label, kind))
-    # ordre d'empilement fixe (ORDER) : les attaches et la rampe sous les entrées/sorties (contour fermé) ; un habillage ajouté après un habillage plus haut est inséré dessous
+    # ordre d'empilement fixe (ORDER) : les attaches et la rampe sous les entrées/sorties (contour fermé), le motif
+    # au-dessus de tout ; un habillage ajouté après un habillage plus haut est inséré dessous
     upper = None
     while is_dressup(current) and dressup_kind(current) in ON_TOP and ORDER.index(dressup_kind(current)) > ORDER.index(kind):
         upper, current = current, current.Base
@@ -125,6 +134,10 @@ def add_dressup(job, op, kind, params=None, count=None):
             from . import leads
 
             obj = leads.create(doc, job, current, name)
+        elif kind == "pattern":
+            from . import patterns
+
+            obj = patterns.create(doc, job, current, name)
         else:
             obj = doc.addObject("Path::FeaturePython", name)
             dbo = mod.ObjectDressup(obj)
@@ -149,6 +162,8 @@ def add_dressup(job, op, kind, params=None, count=None):
                 import Path.Dressup.Gui.Tags as TagsGui
 
                 obj.ViewObject.Proxy = TagsGui.PathDressupTagViewProvider(obj.ViewObject)
+            elif kind == "pattern":
+                pass  # fournisseur de vue posé à la création
             elif kind == "dogbone":
                 import Path.Dressup.Gui.DogboneII as DogboneGui
 
@@ -197,6 +212,10 @@ def set_dressup_params(obj, params):
         ignored = leads.set_params(obj, params)
         _secure_leads(obj)
         return ignored
+    if dressup_kind(obj) == "pattern":
+        from . import patterns
+
+        return patterns.set_params(obj, params)
     from .operations import set_params
 
     return set_params(obj, params)
@@ -228,6 +247,10 @@ def dressup_params(obj):
         from . import leads
 
         return leads.read_params(obj)
+    if kind == "pattern":
+        from . import patterns
+
+        return patterns.read_params(obj)
     values = read_params(obj, [n for n, _k in DRESSUPS[kind]["params"]]) if kind else {}
     if kind == "tags":
         values["Count"] = len(obj.Positions)

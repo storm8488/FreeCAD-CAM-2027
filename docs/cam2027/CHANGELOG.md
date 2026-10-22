@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **[S2]** **Motifs de parcours** (Aspire *Array Copy Toolpath*, Fusion *Pattern*) : Usiner > Motif copie le
+  parcours calculé d'une ou plusieurs opérations en grille (colonnes, lignes, distance entre colonnes / lignes,
+  ordre en serpentin) ou en cercle (nombre de copies, centre, angle total ; 360° = tour complet sans doublon).
+  Habillage CAM2027 `<op>_DressupPattern` (`project/patterns.py`, même principe que `Path.Dressup.Array` de
+  FreeCAD 1.1 : chaque copie transformée par `PathUtils.applyPlacementToPath`, arcs compris), disponible aussi
+  sur 1.0 (FreeCAD 1.0 n'a pas cet habillage), toujours au-dessus des autres habillages, remontée à la hauteur de
+  dégagement entre deux copies. Plusieurs opérations : « Moins de changements d'outil » (coché par défaut, comme
+  Aspire) regroupe les opérations par outil. Plaque de test, poche 20 × 14 répétée 3 × 2 : les 6 poches au fond
+  dans la carte de hauteur, rien entre elles, volume = 6 × celui de la poche, aucune entaille, un seul
+  changement d'outil dans le G-code ; trois opérations 6 / 3 / 6 mm : ordre 6, 6, 3 (1 changement au lieu de 2).
 - **[S2]** **Entrées et sorties en arc** (Fusion : rayon horizontal, angle de balayage, arc vertical) : nouvelle
   case « Entrée et sortie » dans l'onglet « Entrée, sortie et attaches » des contours et rainures (et de la
   passe de profil d'une poche = contour intérieur sur le fond). Type d'entrée / de sortie (arc horizontal, arc

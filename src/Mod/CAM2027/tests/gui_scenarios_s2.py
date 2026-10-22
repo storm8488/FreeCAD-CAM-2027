@@ -73,8 +73,77 @@ def scenario_leads(h, scenario, files):
     h["pump"](0.3)
 
 
+def scenario_pattern(h, scenario, files):
+    """Plateau de 6 alvéoles : poche de la première sélectionnée dans la vue, Usiner > Motif en grille 3 x 2 (pas
+    28 / 26) rempli dans le dialogue ; les 6 alvéoles usinées dans la carte de hauteur, aucune entaille."""
+    import FreeCAD
+    from PySide import QtWidgets
+    from cam2027.project import dressups as dressupmod, patterns as patmod
+    from cam2027.gui import patterns as patgui
+
+    tr = h["tr"]
+    proj = h["new_project"](scenario, "Pattern")
+    h["driver"].open_files.append(files["step"])
+    h["run_command"](scenario, "CAM2027_ImportModel")
+    h["run_command"](scenario, "CAM2027_StockFixture")
+    proj = h["project"]()
+    clone = proj.job.Model.Group[0]
+    floor = None
+    for i, f in enumerate(clone.Shape.Faces, 1):
+        bb = f.BoundBox
+        if f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMax - 4.0) < 1e-6 and abs(bb.XMin - 6.0) < 1e-6                 and abs(bb.YMin - 6.0) < 1e-6:
+            floor = "Face%d" % i
+    gui = h["FreeCADGui"]
+    gui.Selection.clearSelection()
+    gui.Selection.addSelection(proj.doc.Name, clone.Name, floor)
+    h["driver"].handlers[tr("Add operation")] = lambda dlg: (
+        h["combo_select"](h["find_combo_with"](dlg, "pocket"), "pocket"), True)[1]
+    h["run_command"](scenario, "CAM2027_AddOperation")
+    h["accept_open_editors"](scenario)
+    ops = proj.operations()
+    if len(ops) != 1:
+        h["problem"](scenario, "expected one pocket, got %s" % [o.Label for o in ops])
+        return
+    op = proj.base_operation(ops[0])
+    gui.Selection.clearSelection()
+    gui.Selection.addSelection(op)
+
+    def fill(dlg):
+        if not isinstance(dlg, patgui.PatternDialog):
+            return False
+        if dlg.checked_operations() != [op]:
+            h["problem"](scenario, "selected operation not checked in the pattern dialog")
+        h["combo_select"](dlg.kind, "Grid")
+        dlg.columns.setValue(3)
+        dlg.rows.setValue(2)
+        dlg.step_x.setValue(28.0)
+        dlg.step_y.setValue(26.0)
+        dlg.grab().save(os.path.join(h["OUT"], "dialogs", "pattern-filled.png"))
+        return True
+
+    h["driver"].handlers[tr("Toolpath pattern")] = fill
+    msgs = h["run_command"](scenario, "CAM2027_Pattern")
+    tops = proj.operations()
+    if len(tops) != 1 or dressupmod.dressup_kind(tops[0]) != "pattern":
+        h["problem"](scenario, "pattern not on top of the pocket: %s" % [o.Name for o in tops])
+        return
+    if not any(k == "info" and tr("{n} operation(s) repeated; tool changes: {t}.", n=1, t=0) in t for k, t in msgs):
+        h["problem"](scenario, "no pattern confirmation: %s" % msgs)
+    rep = proj.material_check()
+    z = proj.last_zmap
+    floors = [float(z.top[int((6 + i * 28 + 12 - z.x0) / z.res), int((6 + j * 26 + 11 - z.y0) / z.res)])
+              for j in range(2) for i in range(3)]
+    if rep["gouge_max"] > 0.0 or any(abs(f - 4.0) > 0.02 for f in floors):
+        h["problem"](scenario, "pattern: gouge %.3f, floors %s" % (rep["gouge_max"], floors))
+    h["log"]("  pattern ok: %s, floors %s, gouge %.3f, tool changes %d" % (tops[0].Label, floors, rep["gouge_max"],
+                                                                         patmod.tool_changes(proj)))
+    FreeCAD.closeDocument(proj.doc.Name)
+    h["pump"](0.3)
+
+
 def scenarios(h, files, tmp):
     """(nom, fonction) des scénarios S2, dans l'ordre."""
     return (
         ("s2-leads", lambda: scenario_leads(h, "s2-leads", files)),
+        ("s2-pattern", lambda: scenario_pattern(h, "s2-pattern", files)),
     )
