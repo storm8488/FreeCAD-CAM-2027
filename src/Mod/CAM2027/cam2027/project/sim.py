@@ -462,26 +462,28 @@ def split_segments(P0, P1, tool):
 def material_excess(zmap, p0, p1, radius, offset):
     """Plus grand dépassement de matière au-dessus de ``pointe + offset`` dans ``radius`` le long du segment.
 
+    La pointe est prise au plus bas de la plage où le disque de rayon ``radius`` couvre la colonne (dessous d'un
+    cylindre balayé, ``_bottom`` d'une fraise plate) : au point le plus proche, une queue ou un porte-outil le
+    long d'une rampe touchait la matière plus bas sur la rampe sans que le contrôle le voie.
+
     Retourne ``(dépassement, (x, y, z_pointe))`` ; dépassement <= 0 : pas de contact."""
     np = _np()
-    win = zmap._window(min(p0[0], p1[0]) - radius, max(p0[0], p1[0]) + radius,
-                       min(p0[1], p1[1]) - radius, max(p0[1], p1[1]) + radius)
-    if win is None:
+    P0, P1 = np.array([p0], dtype=float), np.array([p1], dtype=float)
+    res = zmap._bottom(P0, P1, ToolProfile("flat", 2.0 * radius))
+    if res is None:
         return 0.0, None
-    i0, i1, j0, j1, (X, Y) = win
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    L2 = dx * dx + dy * dy
-    t = np.zeros_like(X) if L2 < 1e-18 else np.clip(((X - p0[0]) * dx + (Y - p0[1]) * dy) / L2, 0.0, 1.0)
-    d = np.hypot(X - (p0[0] + t * dx), Y - (p0[1] + t * dy))
-    z_tip = min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + t * (p1[2] - p0[2])
-    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1] - (z_tip + offset), -np.inf)
+    i0, i1, j0, j1, z_low, _vertical = res
+    excess = np.where(np.isfinite(z_low[0]), zmap.top[i0:i1, j0:j1] - (z_low[0] + offset), -np.inf)
     k = int(np.argmax(excess))
     worst = float(excess.flat[k])
     if not np.isfinite(worst) or worst <= 0:
         return worst if np.isfinite(worst) else 0.0, None
-    tk = float(np.asarray(t).flat[k]) if L2 >= 1e-18 else 0.0
-    at = (p0[0] + tk * dx, p0[1] + tk * dy, min(p0[2], p1[2]) if L2 < 1e-18 else p0[2] + tk * (p1[2] - p0[2]))
-    return worst, at
+    i, j = np.unravel_index(k, excess.shape)
+    x, y = float(zmap.xs[i0 + i]), float(zmap.ys[j0 + j])
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    L2 = dx * dx + dy * dy
+    tk = 0.0 if L2 < 1e-18 else min(max(((x - p0[0]) * dx + (y - p0[1]) * dy) / L2, 0.0), 1.0)
+    return worst, (p0[0] + tk * dx, p0[1] + tk * dy, float(z_low[0][i, j]))
 
 
 # -- collisions ---------------------------------------------------------------------------------------
@@ -533,24 +535,11 @@ def material_excess_many(zmap, P0, P1, radius, offset):
     de la carte. Les positions ne sont pas retournées : sert de pré-contrôle d'un paquet (aucun dépassement =
     aucun événement, car la matière ne fait que baisser)."""
     np = _np()
-    win = zmap._window(min(P0[:, 0].min(), P1[:, 0].min()) - radius, max(P0[:, 0].max(), P1[:, 0].max()) + radius,
-                       min(P0[:, 1].min(), P1[:, 1].min()) - radius, max(P0[:, 1].max(), P1[:, 1].max()) + radius,
-                       grid=False)
-    if win is None:
+    res = zmap._bottom(P0, P1, ToolProfile("flat", 2.0 * radius))
+    if res is None:
         return np.zeros(len(P0))
-    i0, i1, j0, j1, _grid = win
-    X = zmap.xs[i0:i1][None, :, None]
-    Y = zmap.ys[j0:j1][None, None, :]
-    x0, y0, z0 = (P0[:, k][:, None, None] for k in range(3))
-    x1, y1, z1 = (P1[:, k][:, None, None] for k in range(3))
-    dx, dy = x1 - x0, y1 - y0
-    L2 = dx * dx + dy * dy
-    vertical = L2 < 1e-18
-    t = np.clip(((X - x0) * dx + (Y - y0) * dy) / np.where(vertical, 1.0, L2), 0.0, 1.0)
-    t = np.where(vertical, 0.0, t)
-    z_tip = np.where(vertical, np.minimum(z0, z1), z0 + t * (z1 - z0))
-    d = np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy))
-    excess = np.where(d <= radius + 1e-9, zmap.top[i0:i1, j0:j1][None, :, :] - (z_tip + offset), -np.inf)
+    i0, i1, j0, j1, z_low, _vertical = res
+    excess = np.where(np.isfinite(z_low), zmap.top[i0:i1, j0:j1][None, :, :] - (z_low + offset), -np.inf)
     worst = excess.max(axis=(1, 2))
     return np.where(np.isfinite(worst), worst, 0.0)
 

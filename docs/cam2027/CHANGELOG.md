@@ -23,6 +23,11 @@
   de chaque triangle. Chauffage (71 000 triangles à 0,01 mm, 5 hauteurs pour la tolérance latérale) : 4,7-5,7 s
   → 1,4-1,6 s, mêmes cellules, écart 5·10⁻¹⁰ mm ; contrôle de la finition 3D 13,9-16,6 s → 10,7-11,0 s, même
   entaille, même volume. Plateau STL (3 668 grands triangles) inchangé (0,33 / 0,36 s).
+- **[B2]** **Collisions de la queue et du porte-outil le long des rampes** : la hauteur de la pointe était prise au
+  point du segment le plus proche de chaque colonne, alors que le disque de la queue ou du porte-outil couvre la
+  colonne aussi plus bas sur la rampe (sous-estimation jusqu'à rayon × pente, ≈ 0,7 mm pour un porte-outil Ø28
+  sur une rampe à 3°) : collisions manquées. Hauteur prise au plus bas de la plage couverte (dessous d'un
+  cylindre balayé, exact). Queue Ø6 à côté d'une rampe à 26,6° : dépassement 0,224 mm vu (avant : -0,375).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

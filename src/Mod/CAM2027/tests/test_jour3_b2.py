@@ -154,5 +154,32 @@ class TestOverhang(unittest.TestCase):
         self.assertTrue(31.5 < x < 38.5, rep["gouge_at"])
 
 
+class TestHolderOnRamps(unittest.TestCase):
+    def test_shank_beside_a_ramp_touches_material(self):
+        """Queue (Ø6, 18 mm au-dessus de la pointe) le long d'une rampe à 26,6° : un bloc de matière à 2,5 mm du
+        trajet, au milieu de la rampe, est touché plus bas sur la rampe (pointe à Z 16,67, queue à 34,67 sous un
+        bloc à Z 35). Avant : pointe prise au point le plus proche (Z 17,5), dépassement -0,5, collision manquée."""
+        import numpy as np
+
+        z = sim.ZMap(-5, 0, 20, 20, 0.0, 0.5)
+        i, j = int((5.0 - z.x0) / z.res), int((12.5 - z.y0) / z.res)
+        self.assertAlmostEqual(float(z.xs[i]), 5.25)
+        z.top[i, j] = 35.0  # colonne (5,25 ; 12,75)
+        p0, p1 = (0.0, 10.0, 20.0), (10.0, 10.0, 15.0)
+        # pointe au plus bas sous le disque de la queue (rayon 3) au-dessus de cette colonne
+        x, y = float(z.xs[i]), float(z.ys[j])
+        t = (x + math.sqrt(9.0 - (y - 10.0) ** 2)) / 10.0
+        expected = 35.0 - (20.0 - 5.0 * t + 18.0)
+        self.assertGreater(expected, 0.2)
+        excess, at = sim.material_excess(z, p0, p1, 3.0, 18.0)
+        self.assertAlmostEqual(excess, expected, places=6)
+        self.assertIsNotNone(at)
+        many = sim.material_excess_many(z, np.array([p0]), np.array([p1]), 3.0, 18.0)
+        self.assertAlmostEqual(float(many[0]), expected, places=6)
+        self.assertTrue(z.excess_any(np.array([p0]), np.array([p1]), 3.0, 18.0, 0.05, True))
+        # montée sur la même rampe : même colonne touchée au même point bas
+        self.assertAlmostEqual(sim.material_excess(z, p1, p0, 3.0, 18.0)[0], expected, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()
