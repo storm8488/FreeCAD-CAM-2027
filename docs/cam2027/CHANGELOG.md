@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **[S5]** **Modèles de parcours** (Aspire « Toolpath Templates ») : Usiner > Enregistrer un modèle de parcours
+  écrit les opérations du projet 2D (stratégie, outil par nom, préréglage par nom, réglages, calque et nom du
+  vecteur ciblé) dans un fichier `.cam2027template` ; Usiner > Appliquer un modèle de parcours les recrée sur
+  un autre dessin : vecteurs du même calque (calque Inkscape ou groupe SVG, calque DXF), sinon du même nom,
+  puis calcul. Une opération sans cible ou sans outil est rapportée et non créée. Les calques SVG sont lus à
+  l'import (propriété `CAM2027Layer` des vecteurs).
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

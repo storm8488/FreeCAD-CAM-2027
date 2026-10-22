@@ -768,7 +768,10 @@ def main():
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),
                                                                             p, tmp, "adaptive")))
-                    for i, p in enumerate(user) if p.lower().endswith(".stl")):
+                    for i, p in enumerate(user) if p.lower().endswith(".stl"))             + tuple(__import__("tests.scenarios_s5", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)):
+        only = os.environ.get("CAM2027_SCENARIOS")  # « s5-templates;sheet-svg » : seulement ceux-là
+        if only and name not in only.split(";"):
+            continue
         log("== %s" % name)
         try:
             fn()

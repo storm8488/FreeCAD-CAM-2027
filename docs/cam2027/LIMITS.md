@@ -257,3 +257,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   profondeur finale 0,001 mm plus basse.
 - Pas de contrôle de collision avec le mandrin, les mors ou la contre-pointe (champs du profil non
   exploités).
+
+## Flux Aspire : modèles, dessin, images (nuit 2, S5)
+
+- **Modèles de parcours** : seules les opérations posées sur des vecteurs du dessin 2D sont enregistrées
+  (pas celles sur « toute la pièce », ni le fond plat, l'incrustation ou la gravure enroulée, générés). Une
+  opération recréée prend **tous** les vecteurs du calque ciblé ; sans calque, les vecteurs du même nom
+  (identifiant SVG). L'outil est cherché par nom, sinon par type et diamètre, dans la bibliothèque du
+  projet ; les habillages (attaches, rampes) ne sont pas enregistrés. Calques DXF : seulement quand l'import
+  de l'interface les crée (groupes / calques Draft) ; en console, le lecteur DXF ne les garde pas.
+

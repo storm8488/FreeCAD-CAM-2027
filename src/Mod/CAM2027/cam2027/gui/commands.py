@@ -1338,6 +1338,8 @@ COMMANDS = [
     ("CAM2027_ResetLayout", ResetLayout),
     ("CAM2027_About", About),
 ]
+from . import aspirecmds  # noqa: E402  (S5 : modèles de parcours, dessin, images, décors)
+COMMANDS += aspirecmds.COMMANDS
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
 TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
            "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator", "CAM2027_Export",
@@ -1350,7 +1352,7 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
-                   "Separator", "CAM2027_Compute"]),
+                   "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),
 )
