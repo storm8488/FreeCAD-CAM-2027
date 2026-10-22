@@ -239,7 +239,10 @@ class Project(object):
         previous = FreeCAD.ActiveDocument
         FreeCAD.setActiveDocument(self.doc.Name)
         try:
-            job = PathJob.Create("Job", list(models), None)
+            from ..tools.bridge import plain_toolbit_factory
+
+            with plain_toolbit_factory():  # 1.0 : outil par défaut du job dans l'étape d'annulation de l'action
+                job = PathJob.Create("Job", list(models), None)
         finally:
             if previous is not None and previous.Name != self.doc.Name:
                 try:

@@ -27,6 +27,11 @@
 - **[B3]** Correctif : projet rouvert (dôme, reprise de matière) : le fournisseur de vue du job restait non attaché
   (erreurs `'ViewProvider' object has no attribute 'obj'`) et la page de tâches d'une opération ne s'ouvrait pas ;
   attaché à l'activation du projet. Scénarios `b3-reopen-dome`, `b3-reopen-dome-undo`.
+- **[B3]** Correctif (FreeCAD 1.0) : **Ctrl+Z** après Brut et montage, Ajouter une opération ou Dupliquer :
+  la fabrique de ToolBit de l'interface 1.0 ouvre et valide sa propre transaction (« Create ToolBit ») au milieu de
+  celle de l'action : 2 ou 3 étapes au lieu d'une, et après Brut et montage annulé un objet `Stock` restait dans
+  le document ; l'incrustation débordait sur le projet mâle (question d'annulation sur plusieurs documents).
+  Fabrique de base pendant l'action (`bridge.plain_toolbit_factory`). Scénario `b3-stock-undo`, audit 1.0.2.
 - **[B3]** Rapidité : rafraîchissement du **panneau Projet** à 50 opérations 72 -> 41 ms (médianes de 4 mesures,
   même machine, mêmes états affichés) : le registre des opérations n'est plus relu (JSON) pour chaque ligne et les
   icônes d'état sont gardées en mémoire au lieu d'être relues sur le disque. Le panneau est rafraîchi après chaque

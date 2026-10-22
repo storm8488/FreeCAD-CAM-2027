@@ -12,6 +12,8 @@ n'utilisent que le diamètre, l'angle de pointe et la longueur. Les
 approximations sont signalées dans ``warnings``.
 """
 
+import contextlib
+
 import FreeCAD
 
 from ..compat import tool_api
@@ -98,6 +100,46 @@ def _deg(v):
     return "%.2f °" % float(v)
 
 
+@contextlib.contextmanager
+def plain_toolbit_factory():
+    """FreeCAD 1.0 avec interface : la fabrique de ToolBit de l'interface ouvre et valide sa propre transaction
+    (« Create ToolBit ») au milieu de celle de l'action CAM2027 (ajout d'opération, Brut et montage, qui crée un
+    outil par défaut) : un Ctrl+Z n'en annulait qu'une partie et le brut restait. Fabrique de base pendant le
+    bloc, puis le même fournisseur de vue que l'interface sur les ToolBit créés. Sans effet en 1.1."""
+    if tool_api() == "assets":
+        yield
+        return
+    import Path.Tool.Bit as PathToolBit
+
+    if FreeCAD.GuiUp:
+        import Path.Tool.Gui.Bit  # noqa: F401  (installe sa fabrique : au premier job, elle arrivait pendant le bloc)
+    gui_factory = PathToolBit.Factory
+    if type(gui_factory) is PathToolBit.ToolBitFactory:  # pas d'interface
+        yield
+        return
+    created = []
+
+    class Factory(PathToolBit.ToolBitFactory):
+        def Create(self, name="ToolBit", shapeFile=None, path=None):
+            tool = PathToolBit.ToolBitFactory.Create(self, name, shapeFile, path)
+            created.append((tool, name))
+            return tool
+
+    PathToolBit.Factory = Factory()
+    try:
+        yield
+    finally:
+        PathToolBit.Factory = gui_factory
+        import Path.Base.Gui.IconViewProvider as PathIconViewProvider
+
+        for tool, name in created:
+            try:
+                if tool.ViewObject is not None:
+                    PathIconViewProvider.Attach(tool.ViewObject, name)
+            except Exception:
+                pass  # supprimé entre-temps (outil par défaut du job)
+
+
 def create_toolbit(doc, tool, label=None):
     """Crée l'objet ToolBit FreeCAD dans ``doc`` ; retourne (objet, avertissements)."""
     shape, params, warnings = shape_parameters(tool)
@@ -125,7 +167,8 @@ def create_toolbit(doc, tool, label=None):
         else:
             import Path.Tool.Bit as PathToolBit
 
-            obj = PathToolBit.Factory.CreateFromAttrs(attrs, name=_safe_name(attrs["name"]))
+            with plain_toolbit_factory():
+                obj = PathToolBit.Factory.CreateFromAttrs(attrs, name=_safe_name(attrs["name"]))
     finally:
         if previous is not None and previous.Name != doc.Name:
             try:

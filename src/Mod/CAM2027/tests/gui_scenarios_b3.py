@@ -29,8 +29,9 @@ NO_UNDO = {"CAM2027_ToolLibrary", "CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2
 #: propriétés recalculées (résultat du calcul, pas une donnée de l'utilisateur) ou d'affichage
 DERIVED = {"Path", "Shape", "Mesh", "CycleTime", "ExpressionEngine", "Label2", "Visibility", "MaterialCheck",
            "Placement_", "StopProcessing", "AreaParams", "PathParams", "removalshape", "ModelAwareExperiment",
-           # profondeurs et hauteurs par défaut que FreeCAD recalcule à chaque exécution (parcours inchangé)
-           "OpStartDepth", "OpFinalDepth", "OpToolDiameter", "OpStockZMax", "OpStockZMin"}
+           }
+#: profondeurs et hauteurs par défaut que FreeCAD recalcule à chaque exécution (parcours inchangé) : jamais comparées
+OP_DEFAULTS = {"OpStartDepth", "OpFinalDepth", "OpToolDiameter", "OpStockZMax", "OpStockZMin"}
 
 FREEZE_S = 0.5
 #: stratégies trop gourmandes pour les scénarios B3 (reprise des angles sur le plateau : plus de 6 Go, arrêtée
@@ -83,7 +84,7 @@ def doc_state(doc, derived=True):
         for p in o.PropertiesList:
             if not derived and p in DERIVED:
                 continue
-            if p in ("ExpressionEngine", "Label2"):
+            if p in ("ExpressionEngine", "Label2") or p in OP_DEFAULTS:
                 continue
             try:
                 props[p] = _val(o.getPropertyByName(p))
@@ -530,10 +531,40 @@ def closing(name):
     return None
 
 
+class _ModalWatch(object):
+    """Boîte de message de FreeCAD (C++, non pilotée par le pilote) ouverte plus de 3 s : texte relevé, puis
+    « Non » (sinon la suite reste bloquée : question d'annulation sur plusieurs documents en 1.0)."""
+
+    def __init__(self):
+        self.seen = {}
+        self.timer = QtCore.QTimer()
+        self.timer.setInterval(1000)
+        self.timer.timeout.connect(self.check)
+        self.timer.start()
+
+    def check(self):
+        for w in QtWidgets.QApplication.topLevelWidgets():
+            if isinstance(w, QtWidgets.QMessageBox) and w.isVisible():
+                first = self.seen.setdefault(id(w), time.time())
+                if time.time() - first > 3:
+                    G.problem(_current(), "B3 FreeCAD message box %r left open: %s" % (w.windowTitle(), w.text()[:300]))
+                    button = w.button(QtWidgets.QMessageBox.No) or w.button(QtWidgets.QMessageBox.Cancel) \
+                        or w.button(QtWidgets.QMessageBox.Abort)
+                    if button is not None:
+                        button.click()
+                    else:
+                        w.reject()
+                    self.seen.pop(id(w), None)
+
+
+_watch = None
+
+
 def install(gs, tmp):
     """Audit de toutes les commandes et de toutes les fermetures de projet (``CAM2027_B3_AUDIT=1``)."""
-    global G, _real_close, _tmp
+    global G, _real_close, _tmp, _watch
     G = gs
+    _watch = _watch or _ModalWatch()
     _tmp = tmp
     if not os.environ.get("CAM2027_B3_AUDIT"):
         return
@@ -575,7 +606,7 @@ def _undo_step(scenario, label, doc, action):
         G.problem(scenario, "B3 %s changed nothing" % label)
         return
     if steps != 1:
-        G.problem(scenario, "B3 %s: %d undo steps instead of one" % (label, steps))
+        G.problem(scenario, "B3 %s: %d undo steps instead of one: %s" % (label, steps, doc.UndoNames[:max(steps, 0)]))
         if steps == 0:
             return
     for _i in range(steps):
@@ -600,6 +631,27 @@ def _select_row(index):
     p = G.panel()
     p.tree.setCurrentItem(p.tree.topLevelItem(index))
     G.pump(0.1)
+
+
+def scenario_stock_undo(scenario, files):
+    """Brut et montage puis Ajouter une opération : chacun une étape, Ctrl+Z remet le document exactement (sur 1.0,
+    l'outil par défaut du job et chaque ToolBit faisaient leurs propres étapes et le brut restait)."""
+    G.new_project(scenario, "B3 stock")
+    G.driver.open_files.append(files["step"])
+    G.run_command(scenario, "CAM2027_ImportModel")
+    doc = G.project().doc
+    _undo_step(scenario, "Stock & fixture", doc, lambda: G.run_command(scenario, "CAM2027_StockFixture"))
+    G.driver.handlers[G.tr("Add operation")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "profile"), "profile"), True)[1]
+
+    def add():
+        G.run_command(scenario, "CAM2027_AddOperation")
+        from cam2027.gui import opeditor
+
+        for ed in list(opeditor._open_editors):  # OK sans modification : pas d'étape de plus
+            ed.accept()
+    _undo_step(scenario, "Add operation", doc, add)
+    FreeCAD.closeDocument(doc.Name)
+    G.pump(0.3)
 
 
 def scenario_panel_undo(scenario, files):
@@ -918,7 +970,8 @@ def entries(gs, files, tmp):
                 flush_live("end of %s" % name)
         return name, run
 
-    out = [named("b3-reopen-dome", lambda: scenario_reopen_dome("b3-reopen-dome", tmp)),
+    out = [named("b3-stock-undo", lambda: scenario_stock_undo("b3-stock-undo", files)),
+           named("b3-reopen-dome", lambda: scenario_reopen_dome("b3-reopen-dome", tmp)),
            named("b3-reopen-dome-undo", lambda: scenario_reopen_dome("b3-reopen-dome-undo", tmp, True)),
            named("b3-undo-redo-job", lambda: scenario_undo_redo_job("b3-undo-redo-job", files)),
            named("b3-doc-switch", lambda: scenario_doc_switch("b3-doc-switch", files, tmp)),
