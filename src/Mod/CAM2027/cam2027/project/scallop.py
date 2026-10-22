@@ -382,8 +382,7 @@ def check_size(lines, sample, scallop):
             d = np.hypot(*np.diff(np.asarray(l)[:, :2], axis=0).T)
             total += 1 + int(np.maximum(np.ceil(d / sample), 1).sum())
     if total > MAX_PATH_POINTS:
-        raise UserError("constant scallop finishing: about {n} million points for this area at a {h} mm scallop height: "
-                        "increase the scallop height or the sample interval, or limit the area",
+        raise UserError("constant scallop finishing: about {n} million points for this area at a {h} mm scallop height: increase the scallop height or the sample interval, or limit the area",  # noqa: E501
                         n="%.1f" % (total / 1e6), h="%g" % scallop)
     return total
 

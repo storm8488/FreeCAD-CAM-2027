@@ -458,8 +458,7 @@ def generate(project, op):
             turns = math.ceil((model.x_max - model.x_min) / p["stepover"]) + 2
             limit = rot.max_deg if sign > 0 else (None if rot.min_deg is None else -rot.min_deg)
             if limit is not None and 360.0 * turns > limit + 1e-6:  # A va de 0 à ± 360° x tours
-                raise UserError("rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its "
-                                "travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis",
+                raise UserError("rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis",  # noqa: E501
                                 t=turns, d=360.0 * turns, a=rot.min_deg, b=rot.max_deg)
         moves, info = rotary_moves(model, radius, cutter, tool_r, p["stepover"], p["sample"], safe,
                                    step_down=p["step_down"], leave=p["leave"], spiral=bool(p.get("spiral")))
