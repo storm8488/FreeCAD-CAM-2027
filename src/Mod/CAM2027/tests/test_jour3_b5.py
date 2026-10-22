@@ -226,6 +226,47 @@ class TestFusionImport(unittest.TestCase):
         self.assertIn("skipped {s}", text)
 
 
+class TestModelImport(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="cam2027-b5-")
+        self.proj = Project.create("Import", starter_library())
+        self.addCleanup(self.proj.close)
+
+    def write(self, name, data):
+        path = os.path.join(self.tmp, name)
+        with open(path, "wb") as fp:
+            fp.write(data)
+        return path
+
+    def test_empty_mesh_clear_message(self):
+        """STL / OBJ vide : « No shells or compsolids found in shape » (exception OCC) au lieu d'un message
+        (bug B5-6) ; un maillage vide est « fermé » pour Mesh, sa conversion en solide échouait."""
+        from cam2027.project import importers
+
+        for name in ("empty.stl", "empty.obj"):
+            res = self.proj.import_model(self.write(name, b""))
+            self.assertEqual(res.objects, [], name)
+            self.assertTrue(any("no triangle" in str(w) for w in res.warnings), res.warnings)
+        self.assertEqual([o for o in self.proj.doc.Objects if o.TypeId.startswith("Mesh::")], [])
+        self.assertEqual(importers.meshes_to_solids(self.proj.doc, [])[0], [])
+
+    def test_3mf_imported(self):
+        """3MF (format des trancheuses) : lu par le module Mesh de FreeCAD 1.0 et 1.1, refusé « unsupported
+        format » par CAM2027 (bug B5-7) ; boîte fermée -> solide comme un STL."""
+        import Mesh
+        from cam2027.project import importers
+
+        path = os.path.join(self.tmp, "box.3mf")
+        Mesh.createBox(10, 20, 30).write(path)
+        res = self.proj.import_model(path)
+        self.assertEqual(res.kind, "solid")
+        self.assertEqual(len(res.objects), 1)
+        bb = res.objects[0].Shape.BoundBox
+        self.assertAlmostEqual(res.objects[0].Shape.Volume, 6000.0, places=3)
+        self.assertAlmostEqual(bb.ZLength, 30.0, places=6)
+        self.assertIn(".3mf", importers.SUPPORTED_EXTENSIONS)
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
