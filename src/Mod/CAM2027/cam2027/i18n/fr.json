@@ -1452,5 +1452,6 @@
   "no program end (M2 / M30): the controller keeps the last modal state": "pas de fin de programme (M2 / M30) : le contrôleur garde le dernier état modal",
   "{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)": "{n} ligne(s) avec du texte qui n'est pas du G-code hors des commentaires (GRBL error:1 ou error:2)",
   "{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)": "{n} mouvement(s) de coupe broche arrêtée (avant M3, après M5 ou à S0)",
-  "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée."
+  "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée.",
+  "{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision": "{n} ligne(s) de plus de {m} caractères (GRBL 1.1 error:11) : réduire la précision du postprocesseur"
 }

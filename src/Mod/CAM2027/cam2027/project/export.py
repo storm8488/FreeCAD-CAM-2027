@@ -35,6 +35,8 @@ GRBL_ALLOWED = {
 #: M7 (brouillard) et M56 (forçage du parking) : seulement avec ENABLE_M7 / ENABLE_PARKING_OVERRIDE_CONTROL à la
 #: compilation de GRBL (désactivés par défaut, error:20) ; M7 accepté si le profil machine déclare « mist »
 ALLOWED_BY_CONTROLLER = {"grbl": GRBL_ALLOWED}
+#: tampon de ligne de GRBL 1.1 (``LINE_BUFFER_SIZE``), espaces et commentaires non comptés
+GRBL_LINE_MAX = 80
 
 
 def available_postprocessors():
@@ -223,6 +225,7 @@ def analyze_gcode(text):
     cut_spindle_off = 0  # coupes broche arrêtée (avant M3, après M5, S0)
     max_arc_error = 0.0
     bad_lines = 0  # lignes avec autre chose que des mots G-code hors commentaires
+    long_lines = 0  # lignes de plus de GRBL_LINE_MAX caractères hors espaces (GRBL 1.1 : error:11)
     fs = []  # mots F de la ligne
     for raw in text.splitlines():
         if ";" in raw:
@@ -235,6 +238,8 @@ def analyze_gcode(text):
         lines += 1
         if not _WORDS_ONLY.match(line):
             bad_lines += 1
+        if len(line) > GRBL_LINE_MAX and len(line) - line.count(" ") > GRBL_LINE_MAX:
+            long_lines += 1
         words = _WORD.findall(line)
         not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
         was_inverse = inverse_time
@@ -374,6 +379,7 @@ def analyze_gcode(text):
         "bad_arcs": bad_arcs,
         "cut_spindle_off": cut_spindle_off,
         "bad_lines": bad_lines,
+        "long_lines": long_lines,
         "undefined_feed": undefined_feed,
         "spindle_on_at_end": spindle_on,
         "program_end": program_end,
@@ -419,6 +425,9 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("cut_spindle_off"):
         issues.append(("error", Msg("{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)",
                                     n=analysis["cut_spindle_off"])))
+    if analysis.get("long_lines") and machine.controller == "grbl":
+        issues.append(("error", Msg("{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision",
+                                    n=analysis["long_lines"], m=GRBL_LINE_MAX)))
     if analysis.get("bad_lines"):
         issues.append(("error", Msg("{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)",
                                     n=analysis["bad_lines"])))

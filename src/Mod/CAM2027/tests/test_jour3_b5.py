@@ -396,6 +396,16 @@ class TestGrblProgramState(unittest.TestCase):
         probe = head + "M5\nG91\nG38.2 Z-25 F100\nG10 L20 P1 Z0\nG0 Z2\nG90\nM3 S10000\nG1 X5 F300\nM5\nM2\n"
         self.assertEqual(exportmod.analyze_gcode(probe)["cut_spindle_off"], 0)
 
+    def test_line_too_long(self):
+        """GRBL 1.1 lit au plus 80 caractères par ligne (espaces et commentaires ôtés) : au-delà error:11, programme
+        arrêté. Atteint avec ``--precision=6`` sur un arc hélicoïdal (B5-20)."""
+        long_arc = "G2 X-1234.567890 Y-1234.567890 Z-123.456789 I-1234.567890 J-1234.567890 K0.000000 F12345.678900"
+        a = exportmod.analyze_gcode("G21\nG90\nG54\nM3 S1000\nG1 X0 F100\n" + long_arc + "\nM5\nM2\n")
+        self.assertEqual(a["long_lines"], 1)
+        self.assertTrue(any("error:11" in m for m in self.msgs("G21\nG54\n" + long_arc + "\nM2\n", "error")))
+        short = "G2 X70.100 Y8.000 Z9.500 I-1.900 J0.000 F900.000 (a long comment that does not count for GRBL at all)"
+        self.assertEqual(exportmod.analyze_gcode(short)["long_lines"], 0)
+
     def test_mist_and_parking_codes(self):
         """M7 (brouillard) et M56 (forçage du parking) n'existent dans GRBL 1.1 qu'avec ENABLE_M7 /
         ENABLE_PARKING_OVERRIDE_CONTROL (désactivés par défaut) : error:20 sur la machine, alors que le contrôle
