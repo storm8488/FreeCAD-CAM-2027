@@ -324,6 +324,27 @@ def verify(analysis, machine, stock_bounds=None):
     return issues
 
 
+def tool_number_issues(project):
+    """Deux outils différents sous le même numéro T dans les opérations actives : rien dans le G-code ne les
+    distingue, le programme ne s'arrête donc pas pour changer d'outil (bibliothèque de démarrage T1..T8 et
+    import Fusion T1..T11 dans la même bibliothèque). Liste de (niveau, message)."""
+    lib = project.library
+    active = {op.Name for op in project.operations() if getattr(op, "Active", True)}
+    by_number = {}
+    for name, rec in project.registry.items():
+        if name not in active or not rec.get("assembly_id"):
+            continue
+        try:
+            asm = lib.assembly(rec["assembly_id"])
+            tool = lib.tool(asm.tool_id)
+        except KeyError:
+            continue
+        by_number.setdefault(asm.output.tool_number, {})[tool.id] = tool.name
+    return [("error", Msg("T{n} is used by several tools ({tools}): the program would not stop to change the tool. Give each tool its own number.",
+                          n=n, tools=", ".join(sorted(tools.values()))))
+            for n, tools in sorted(by_number.items()) if len(tools) > 1]
+
+
 def _verify_rotary(analysis, machine):
     """Contrôles 4e axe : A en rapide (3+1) ou en coupe seulement en temps inverse G93 (continu), plage,
     vitesse angulaire, firmware."""

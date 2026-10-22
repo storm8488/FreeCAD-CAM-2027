@@ -1249,7 +1249,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self) \
-            + self.collision_issues() + keepout.issues(self)
+            + self.collision_issues() + keepout.issues(self) + exportmod.tool_number_issues(self)
         if any(level == "error" for level, _m in issues):
             raise ExportBlocked(issues, sections, analysis)
         written = exportmod.write_gcode(sections, path)
@@ -1275,7 +1275,8 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None) \
-            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else []) + keepout.issues(self)
+            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else []) + keepout.issues(self) \
+            + exportmod.tool_number_issues(self)
         return text, analysis, issues
 
     # -- sauvegarde -----------------------------------------------------------

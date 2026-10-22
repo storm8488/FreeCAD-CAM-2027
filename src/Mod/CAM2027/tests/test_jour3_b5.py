@@ -95,6 +95,41 @@ class TestToolChangeStops(_PlateCase):
         self.assertNotIn("M6", analysis["codes"])  # GRBL 1.1 : M6 refusé (error:20)
 
 
+class TestToolNumbers(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-b5-")
+        cls.step = os.path.join(cls.tmp, "plate.step")
+        make_part(cls.step)
+
+    def test_same_number_for_two_tools_blocks_export(self):
+        """Deux outils différents sous le même T (bibliothèque de démarrage T1..T8 + import Fusion T1..T11) : le
+        programme ne s'arrêtait pas entre eux (bug B5-3). Refus à l'export, avec les noms des outils."""
+        lib = starter_library()
+        small = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        big = lib.search("6 mm flat end mill")[0]
+        lib.assemblies_for_tool(small.id)[0].output.tool_number = lib.assemblies_for_tool(big.id)[0].output.tool_number
+        proj = Project.create("Same T", lib, machine())
+        self.addCleanup(proj.close)
+        part = proj.import_model(self.step, label="Plate").objects[0]
+        clone = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0}).Model.Group[0]
+        plib = proj.library
+        for tool, label, side in ((small, "Small", "Inside"), (big, "Big", "Outside")):
+            asm = plib.assemblies_for_tool(tool.id)[0]
+            proj.add_operation("profile", label, asm.id, plib.tool(tool.id).presets[0].id, base=[(clone, [])],
+                               params={"FinalDepth": 5.0, "StepDown": 5.0, "Side": side})
+        proj.compute()
+        text, _analysis, issues = proj.preview_gcode()
+        self.assertEqual(code_lines(text).count("M0"), 0)  # rien dans le G-code ne permet de les distinguer
+        errors = [str(m) for lvl, m in issues if lvl == "error"]
+        self.assertTrue(any("T1 is used by several tools" in e and small.name in e and big.name in e for e in errors),
+                        errors)
+        # même outil dans deux opérations : pas de conflit
+        self.assertEqual(exportmod.tool_number_issues(proj)[0][0], "error")
+        proj.remove_operation(proj.operations()[0])
+        self.assertEqual(exportmod.tool_number_issues(proj), [])
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 

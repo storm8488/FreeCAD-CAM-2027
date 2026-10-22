@@ -1442,5 +1442,6 @@
   "projection on the part: only engraving, contour, V-carving, 2D pocket, slot and chamfer can be projected": "projection sur la pièce : seuls la gravure, le contour, le V-carving, la poche 2D, la rainure et le chanfrein peuvent être projetés",
   "projection on the part: not available on an indexed operation": "projection sur la pièce : impossible sur une opération indexée",
   "{op} is already projected on the part": "{op} est déjà projetée sur la pièce",
-  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce"
+  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce",
+  "T{n} is used by several tools ({tools}): the program would not stop to change the tool. Give each tool its own number.": "T{n} est utilisé par plusieurs outils ({tools}) : le programme ne s'arrêterait pas pour changer d'outil. Donnez à chaque outil son propre numéro."
 }
