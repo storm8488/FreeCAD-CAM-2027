@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **[S3]** **Usinage recto-verso** (comme le « Double Sided » d'Aspire) : Préparer > Usinage recto-verso crée la
+  face B, pièce retournée de 180° autour de X ou de Y par le centre du brut (même brut, même repère G54), dans un
+  second job du document ; boutons « Face A / Face B » dans le panneau Projet (ajout, recalcul, aperçu et export
+  portent sur la face affichée). Repérage « même coin » ou **goujons** : deux trous percés depuis la face A sur
+  l'axe de retournement, à travers le brut et dans le martyr (opération placée en tête de la face A, positions
+  par défaut dans la marge, refus hors de l'axe, hors du brut ou dans la pièce). Contrôle matière **enchaîné** : la
+  carte de hauteur de la face A retournée sert de brut à la face B. Export : un fichier et une fiche par face
+  (`-A.nc`, `-B.nc`), fiche complétée par le retournement, les goujons et l'ordre. Test : plaque à une poche
+  ronde de chaque côté, aucune entaille, dessus et dessous finals = pièce à 0,05 mm hors du pied des parois.
+
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

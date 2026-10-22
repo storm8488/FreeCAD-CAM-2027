@@ -789,6 +789,33 @@ def default_params(kind, tool, values):
     return params
 
 
+class TwoSided(_Base):
+    atelier = "stock"
+    text = "Two-sided machining"
+    tooltip = "Machine the part on both sides: side B is the part turned over (flip about X or Y), with dowel pins or the same corner"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from . import twosided as tsgui
+
+        dlg = tsgui.TwoSidedDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            dlg.apply()
+        except Exception as exc:
+            _warn(tsgui.describe_error(exc))
+            return
+        _after_change()
+        _info(tr("Side B created. Switch between side A and side B in the Project panel."))
+
+
 class Compute(_Base):
     icon = "cam2027-compute.svg"
     atelier = "recalculate"
@@ -886,7 +913,9 @@ class Export(_Base):
 
         def do_export():
             try:
-                result = proj.export_gcode(out.text(), post.currentText(), args.text())
+                from ..project import twosided
+
+                result = twosided.exporter(proj)(out.text(), post.currentText(), args.text())  # recto-verso : un fichier par face
             except ExportBlocked as exc:
                 checks.setHtml(_format_checks(exc.analysis, exc.issues))
                 tabs.setCurrentWidget(checks)
@@ -1137,6 +1166,9 @@ def material_report_text(rep):
             what = kinds[e[0]] + (" %s (%s)" % (e[5], e[6]) if e[0] == "clamp" else "")
             lines.append(tr("COLLISION: {what} - {op}, command {n}, tip at X {x} Y {y} Z {z}",
                             what=what, op=e[1], n=e[2], x="%.2f" % x, y="%.2f" % y, z="%.2f" % z))
+    from . import twosided as tsgui
+
+    lines += tsgui.report_lines(rep)
     lines.append(tr("Not checked: vertical walls and undercuts (height map), A axis operations."))
     return "\n".join(lines)
 
@@ -1328,6 +1360,7 @@ COMMANDS = [
     ("CAM2027_FlatDepth", FlatDepth),
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
+    ("CAM2027_TwoSided", TwoSided),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -1347,7 +1380,7 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
                    "Separator", "CAM2027_Compute"]),

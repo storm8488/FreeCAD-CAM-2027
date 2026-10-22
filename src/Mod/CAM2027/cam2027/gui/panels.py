@@ -941,6 +941,10 @@ class ProjectPanel(QtWidgets.QWidget):
         row0.addWidget(b_new)
         row0.addWidget(b_open)
         lay.addWidget(self.start_row)
+        from . import twosided as tsgui
+
+        self.side_bar = tsgui.SideBar(self._switch_side)  # recto-verso : bascule face A / face B
+        lay.addWidget(self.side_bar)
         self.step_rows = {}
         steps = QtWidgets.QGridLayout()
         steps.setColumnStretch(1, 1)
@@ -1014,6 +1018,14 @@ class ProjectPanel(QtWidgets.QWidget):
 
     # -- affichage -------------------------------------------------------------
 
+    def _switch_side(self, side):
+        from . import twosided as tsgui
+
+        proj = state.active_project()
+        if proj is not None:
+            tsgui.switch_side(proj, side)
+        self.refresh()
+
     def _set_step(self, key, done, detail=""):
         status, text, btn, label = self.step_rows[key]
         status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % (
@@ -1038,6 +1050,7 @@ class ProjectPanel(QtWidgets.QWidget):
         for b in self.buttons.values():
             b.setEnabled(has_project)
         if proj is None:
+            self.side_bar.refresh(None)
             self.title.setText("<b>%s</b><br>%s" % (tr("No CAM2027 project in the active document."),
                                                      tr("Workflow: Project > Model > Stock & fixture > Operations > Export")))
             for key in self.step_rows:
@@ -1045,6 +1058,7 @@ class ProjectPanel(QtWidgets.QWidget):
             self.steps.setText("")
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
+        self.side_bar.refresh(proj)
         from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES
         from ..project.wrap import KIND as WRAP_KIND, LABEL as WRAP_LABEL
         from ..project.inlay import CORNERS_KIND, CORNERS_LABEL

@@ -40,6 +40,15 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Montage : repère G54–G59 + brides **visuelles** (boîtes). Les brides ne sont **pas**
   prises en compte par une détection de collision (il n'y en a pas).
 - Un seul job par projet, un seul repère actif par job dans l'interface.
+- **Recto-verso** (S3) : la face B est un second job ; le lien « Job » du projet désigne la face affichée.
+  Retournement de 180° autour d'une droite parallèle à X ou à Y passant par le **centre du brut** (le brut doit
+  être une boîte) : le brut garde ses cotes, le repère G54 se règle au même coin du brut. La copie retournée de la
+  pièce est figée (`twosided.resync` après une modification de la pièce). Contrôle enchaîné : une colonne de la
+  carte de hauteur ne connaît que son dessus ; après retournement, la matière laissée par la face A est
+  `[zmin + zmax − hA, zmax]`, mais si la face B descend sous ce fond (débouche dans une poche de la face A),
+  ce vide n'est pas vu (rapides et volume comptés comme dans la matière) — signalé ici, pas détecté.
+  Les brides sont communes aux deux faces. Goujons : trous par plongées avec débourrage (opération « Custom »,
+  pas de G81 sous GRBL), outil de même diamètre que le goujon ; jeu non géré.
 
 ## Opérations
 

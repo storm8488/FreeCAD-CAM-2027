@@ -632,20 +632,25 @@ class Project(object):
         report["objects"] = [o for o in objs if o.Name in placed]
         return report
 
-    def material_check(self, resolution=None, tolerance=0.02):
+    def material_check(self, resolution=None, tolerance=0.02, start_zmap=None):
         """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.
 
         Retourne un dict : volume enlevé, entaille maximale (et position), reste maximal / moyen,
         rapides dans la matière, opérations simulées / non simulées (avec la raison), approximations.
-        La carte calculée reste dans ``self.last_zmap`` (affichage).
+        La carte calculée reste dans ``self.last_zmap`` (affichage). ``start_zmap`` : carte de départ (face B
+        d'un recto-verso) ; ``False`` = brut neuf même en recto-verso.
         """
         from . import sim
+        from . import twosided
+
+        if start_zmap is None and twosided.is_two_sided(self):
+            return twosided.material_check(self, resolution, tolerance)
 
         if getattr(self.job.Stock, "Radius", None) is not None:
             raise UserError("material check: round stock (4th axis) is not supported, only box stock")
         resolution = resolution or sim.DEFAULT_RESOLUTION
         self.compute()
-        zmap = sim.ZMap.from_bounds(self.stock_bounds(), resolution)
+        zmap = start_zmap or sim.ZMap.from_bounds(self.stock_bounds(), resolution)
         simulated, skipped, approximations = [], [], []
         from . import stock as stockmod
 
@@ -897,8 +902,10 @@ class Project(object):
         """Empreinte des parcours actifs (un contrôle de collisions ne vaut que pour ces parcours-là)."""
         import hashlib
 
+        from . import twosided
+
         h = hashlib.sha1()
-        for obj in self.operations():
+        for obj in twosided.all_operations(self):  # recto-verso : le contrôle enchaîné vaut pour les deux faces
             base = dressupmod.base_operation(obj)
             h.update(obj.Name.encode())
             h.update(b"1" if getattr(base, "Active", True) else b"0")
