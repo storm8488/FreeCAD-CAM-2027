@@ -100,6 +100,9 @@ def import_file(doc, path, label=None):
         warnings.append(Msg("no object created from {file}", file=os.path.basename(path)))
     if label and len(objects) == 1:
         objects[0].Label = label
+    for o in objects:  # STEP écrit par OpenCascade sans nom de produit : le nom du fichier, pas celui du traducteur
+        if o.Label.startswith("Open CASCADE STEP translator"):
+            o.Label = os.path.splitext(os.path.basename(path))[0]
     if kind == "mesh":
         objects, mesh_warnings = meshes_to_solids(doc, objects)
         warnings.extend(mesh_warnings)

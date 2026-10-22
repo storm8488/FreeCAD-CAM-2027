@@ -275,6 +275,16 @@ class TestModelImport(unittest.TestCase):
         self.assertEqual([o for o in self.proj.doc.Objects if o.TypeId.startswith("Mesh::")], [])
         self.assertEqual(importers.meshes_to_solids(self.proj.doc, [])[0], [])
 
+    def test_step_default_product_name(self):
+        """STEP écrit par OpenCascade sans nom de produit : la pièce s'appelait « Open CASCADE STEP translator 7.8
+        1 » dans l'arbre, la fiche et les messages (B5-19) ; elle prend le nom du fichier."""
+        import Part
+
+        path = os.path.join(self.tmp, "Bracket v2.step")
+        Part.makeBox(10, 20, 5).exportStep(path)
+        res = self.proj.import_model(path)
+        self.assertEqual([o.Label for o in res.objects if o.TypeId.startswith("Part::")], ["Bracket v2"])
+
     def test_3mf_imported(self):
         """3MF (format des trancheuses) : lu par le module Mesh de FreeCAD 1.0 et 1.1, refusé « unsupported
         format » par CAM2027 (bug B5-7) ; boîte fermée -> solide comme un STL."""
