@@ -1525,10 +1525,40 @@ STAGE_MENUS = STAGE_MENUS[:1] + (("Drawing", aspirecmds.DRAWING_MENU),) + STAGE_
 _registered = False
 
 
+def register_task_pages():
+    """Pages de tâches FreeCAD des stratégies propres à CAM2027 (crête constante, plats, angles), posées dans
+    leur module : le fournisseur de vue d'une opération rouverte les y cherche au double-clic. Elles n'étaient
+    créées qu'à l'ajout d'une opération : projet rouvert dans une nouvelle session, double-clic sans effet
+    (AttributeError ``TaskPanelOpPage``). Leur filtre de sélection est celui de la finition 3D de FreeCAD
+    (``Selection.select`` ne connaît que ses opérations : KeyError, aucune page, même dans la session)."""
+    import importlib
+    import Path.Op.Gui.Selection as PathSelection
+    from ..project import operations as opsmod
+
+    if not getattr(PathSelection.select, "cam2027", False):
+        known = PathSelection.select
+
+        def select(op_name):
+            try:
+                return known(op_name)
+            except KeyError:
+                return PathSelection.surfaceselect
+
+        select.cam2027 = True
+        PathSelection.select = select
+    for kind, meta in STRATEGIES.items():
+        if meta["module"].startswith("cam2027."):
+            try:
+                opsmod._own_strategy_resources(importlib.import_module(meta["module"]), kind)
+            except Exception as exc:
+                FreeCAD.Console.PrintWarning("CAM2027: task page of %s not registered: %s\n" % (kind, exc))
+
+
 def register():
     global _registered
     if _registered:
         return
     for name, cls in COMMANDS:
         FreeCADGui.addCommand(name, cls())
+    register_task_pages()
     _registered = True
