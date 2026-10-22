@@ -40,6 +40,25 @@ SURFACE_STRATEGIES = ("surface3d", "waterline", "millface", "scallop")  # surfa�
 from .machine import MachineProfile, lunyee_4040_nova
 
 
+def attach_job_view(job):
+    """Fournisseur de vue FreeCAD du job, comme l'atelier CAM le pose (``Path.Main.Gui.Job.Create``). Sans lui,
+    la page de tâches d'une opération ouverte par un double-clic dans l'arbre ne se fermait plus (Annuler et OK
+    levaient une erreur, transaction laissée ouverte). Annuler sur la page du job ne le supprime pas.
+    Retourne True s'il a été posé (job créé ici, ou projet enregistré avant ce correctif)."""
+    if not FreeCAD.GuiUp or job is None or job.ViewObject is None \
+            or hasattr(job.ViewObject.Proxy, "setupEditVisibility"):
+        return False
+    import Path.Main.Gui.Job as PathJobGui
+
+    job.ViewObject.Proxy = PathJobGui.ViewProvider(job.ViewObject)
+    try:
+        job.ViewObject.addExtension("Gui::ViewProviderGroupExtensionPython")
+    except Exception:
+        pass  # déjà là
+    job.ViewObject.Proxy.deleteOnReject = False
+    return True
+
+
 class Project(object):
     def __init__(self, doc, info):
         self.doc = doc
@@ -221,6 +240,7 @@ class Project(object):
                 except Exception:
                     pass
         job.Label = "Job"
+        attach_job_view(job)
         self.info.Job = job
         if FreeCAD.GuiUp:
             # surface 3D issue d'un gros maillage : le clone du job reste masqué (avant le recalcul : sinon il
