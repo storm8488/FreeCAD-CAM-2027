@@ -669,6 +669,10 @@ class Project(object):
                 skipped.append((obj.Label, Msg("indexed at A{a:g}", a=rec["index_deg"])))
                 pos = None
                 continue
+            if rec.get("kind") == "probe":  # palpage : aucune coupe, position inconnue ensuite
+                skipped.append((obj.Label, Msg("probing (no cut)")))
+                pos = None
+                continue
             if not rec.get("tool_id"):
                 skipped.append((obj.Label, Msg("unknown tool")))
                 continue

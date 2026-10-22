@@ -206,6 +206,7 @@ def analyze_gcode(text):
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
         "ends_in_g93": inverse_time,
+        "probe": __import__("cam2027.project.probe", fromlist=["analyze"]).analyze(text),
     }
 
 
@@ -274,6 +275,9 @@ def verify(analysis, machine, stock_bounds=None):
             issues.append(("warning", Msg("Z goes {d:.2f} mm below the stock bottom", d=stock_bounds["zmin"] - z[0])))
     if not analysis["fixtures"]:
         issues.append(("warning", Msg("no work coordinate system (G54...) in the output")))
+    from . import probe as probemod
+
+    issues.extend(probemod.verify(analysis, machine))
     return issues
 
 

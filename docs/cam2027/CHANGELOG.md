@@ -2,6 +2,17 @@
 
 ## Non publié
 
+- **[S2]** **Palper l'origine** (Fusion *Probe WCS*) : Usiner > Palper l'origine ajoute en tête du programme une
+  opération de palpage GRBL : surface Z, coin (avant/arrière, gauche/droite : Z, puis X et Y par l'extérieur) ou
+  centre de trou (un contact par axe et le diamètre nominal : GRBL n'a pas de variables pour faire la moyenne de
+  deux contacts). Déplacements relatifs (G91) tant que l'axe n'est pas connu, `G38.2` avec avance et course,
+  origine fixée par `G10 L20 P1..P6` (repère G54..G59 enregistré) ou `G92`, en tenant compte du rayon de la
+  bille et de l'épaisseur de la plaque de touche, broche arrêtée (M5). Réglages du palpeur dans le profil
+  machine (`probe` : présence, diamètre de bille, plaque, avance, course, numéro d'outil), saisis dans le
+  dialogue ; le palpeur apparaît comme un outil dans la fiche. `export.verify` refuse un palpage sur un profil
+  sans palpeur, broche en marche, sans avance, ou un `G10` sans L2/L20 et P1..P6, et signale une course plus
+  longue que celle du palpeur ; le contrôle matière ne simule pas le palpage. G-code vérifié ligne à ligne en
+  test, après le postprocesseur GRBL.
 - **[S2]** **Perçage intelligent** (Fusion *Hole Recognition*) : Usiner > Perçage intelligent reconnaît les
   trous verticaux ouverts par le dessus (faces cylindriques regroupées par axe et rayon, tour complet, centre
   vide : diamètre, haut, fond, débouchant ou borgne, chanfrein d'entrée = cône coaxial) et les regroupe par

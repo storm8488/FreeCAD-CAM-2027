@@ -485,5 +485,112 @@ class TestHoles(unittest.TestCase):
                                       ("G0", {"Z": 12.0})])
 
 
+PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
+
+CORNER_FL = ["(CAM2027 probe origin: corner front-left)", "M5", "G21", "G90", "G54", "G91",
+             "G38.2 Z-25 F100", "G10 L20 P1 Z0", "G0 Z2",
+             "G0 X-16", "G0 Z-5", "G38.2 X11 F100", "G10 L20 P1 X-1", "G0 X-5", "G0 Z5",
+             "G90", "G0 X10", "G91",
+             "G0 Y-16", "G0 Z-5", "G38.2 Y11 F100", "G10 L20 P1 Y-1", "G0 Y-5", "G0 Z5",
+             "G90", "G0 X0 Y0"]
+
+
+def gcode_words(line):
+    """Mots d'une ligne de G-code normalisés (nombres en float, sans commentaire) ; None si rien."""
+    import re
+
+    line = re.sub(r"\(.*?\)", "", line.split(";")[0]).strip().upper()
+    words = re.findall(r"([A-Z])\s*([-+]?\d*\.?\d+)", line)
+    if not words:
+        return None
+    out = []
+    for letter, n in words:
+        if letter == "G":
+            out.append((letter, n.rstrip("0").rstrip(".") if "." in n else str(int(n))))
+        else:
+            out.append((letter, float(n)))
+    return tuple(out)
+
+
+class TestProbe(unittest.TestCase):
+    def test_gcode_line_by_line(self):
+        """Coin avant gauche, Z de surface, centre de trou, G92 : G-code attendu ligne à ligne."""
+        from cam2027.project import probe
+
+        m = machine(probe=dict(PROBE))
+        self.assertEqual(probe.probe_gcode(m, "corner"), CORNER_FL)
+        self.assertEqual(probe.probe_gcode(m, "z"), ["(CAM2027 probe origin: z)", "M5", "G21", "G90", "G54", "G91",
+                                                     "G38.2 Z-25 F100", "G10 L20 P1 Z0", "G0 Z2", "G90"])
+        back_right = probe.probe_gcode(m, "corner", corner="back-right", wcs="G55")
+        self.assertIn("G0 X16", back_right)
+        self.assertIn("G38.2 X-11 F100", back_right)
+        self.assertIn("G10 L20 P2 X1", back_right)
+        self.assertIn("G10 L20 P2 Y1", back_right)
+        hole = probe.probe_gcode(m, "hole", hole_diameter=8.0, offset_mode="G92")
+        self.assertEqual(hole[5:], ["G91", "G38.2 X9 F100", "G92 X3", "G90", "G0 X0",
+                                    "G91", "G38.2 Y9 F100", "G92 Y3", "G90", "G0 X0 Y0"])
+        plate = machine(probe=dict(PROBE, plate_thickness_mm=19.6))
+        self.assertIn("G10 L20 P1 Z19.6", probe.probe_gcode(plate, "z"))
+        with self.assertRaises(UserError):
+            probe.probe_gcode(machine(), "z")  # profil sans palpeur
+        with self.assertRaises(UserError):
+            probe.probe_gcode(machine(probe={"present": True}), "corner")  # pointe inconnue
+        with self.assertRaises(UserError):
+            probe.probe_gcode(m, "hole", hole_diameter=1.5)
+
+    def test_verify(self):
+        """export.verify : palpage refusé sans palpeur, broche en marche, sans avance, G10 incomplet."""
+        from cam2027.project import export as exportmod, probe
+
+        m = machine(probe=dict(PROBE))
+        text = "\n".join(probe.probe_gcode(m, "corner"))
+        issues = exportmod.verify(exportmod.analyze_gcode(text), m)
+        self.assertEqual([i for i in issues if "prob" in i[1] or "G10" in i[1]], [], issues)
+        errors = [i[1] for i in exportmod.verify(exportmod.analyze_gcode(text), machine()) if i[0] == "error"]
+        self.assertTrue(any("has no probe" in e for e in errors), errors)
+        bad = "G21\nG54\nM3 S10000\nG91\nG38.2 Z-5\nG10 L20 Z0\n"
+        errors = [i[1] for i in exportmod.verify(exportmod.analyze_gcode(bad), m) if i[0] == "error"]
+        self.assertTrue(any("spindle running" in e for e in errors), errors)
+        self.assertTrue(any("without a feed rate" in e for e in errors), errors)
+        self.assertTrue(any("G10 line" in e for e in errors), errors)
+
+
+class TestProbeProject(_PlateCase):
+    def test_probe_operation_exported(self):
+        """Palpage du coin en tête du programme : G-code exporté vérifié ligne à ligne, aucune erreur de
+        contrôle, pas simulé comme une coupe ; export refusé sur un profil sans palpeur."""
+        from cam2027.project import export as exportmod, probe
+
+        proj, lib, clone = self.project("Probe", probe=dict(PROBE))
+        asm, pre = self.tool(lib)
+        op, _rec = proj.add_operation("profile", "Contour", asm, pre, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0})
+        pop = probe.add_probe(proj, "corner")
+        self.assertTrue(probe.is_probe_op(pop))
+        self.assertEqual([o.Name for o in proj.operations()], [pop.Name, op.Name])
+        proj.compute()
+        text = "\n".join(g for _n, g in exportmod.postprocess(proj.job))
+        lines = text.splitlines()
+        start = next(i for i, l in enumerate(lines) if l.startswith("(Begin operation: %s" % pop.Label))
+        end = next(i for i, l in enumerate(lines) if i > start and l.startswith("(Begin operation:"))
+        got = [w for w in (gcode_words(l) for l in lines[start:end]) if w and w[0][0] == "G" and w[0][1] in
+               ("0", "10", "38.2", "90", "91")]
+        expected = [gcode_words(l) for l in CORNER_FL if l.startswith(("G0", "G10", "G38.2", "G90", "G91"))]
+        # le postprocesseur réordonne les mots (« G10 Z0 L20 P1 ») : même commande, mêmes mots
+        norm = lambda ws: [(w[0], tuple(sorted(w[1:]))) for w in ws]
+        self.assertEqual(norm(got), norm(expected), "\n".join(lines[start:end]))
+        # broche arrêtée pendant le palpage : aucun M3 avant la fin du palpage
+        self.assertFalse(any(w and ("M", 3.0) in w for w in (gcode_words(l) for l in lines[:end])))
+        issues = exportmod.verify(exportmod.analyze_gcode(text), proj.machine)
+        self.assertEqual([i for i in issues if i[0] == "error"], [], issues)
+        rep = proj.material_check()
+        self.assertEqual(rep["simulated"], [op.Label])
+        self.assertEqual([s[0] for s in rep["skipped"]], [pop.Label])
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        # même programme, profil sans palpeur : refusé
+        errors = [i[1] for i in exportmod.verify(exportmod.analyze_gcode(text), machine()) if i[0] == "error"]
+        self.assertTrue(any("has no probe" in e for e in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()

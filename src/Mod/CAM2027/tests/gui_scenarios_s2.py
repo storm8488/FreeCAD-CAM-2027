@@ -192,10 +192,62 @@ def scenario_holes(h, scenario, tmp):
     h["pump"](0.3)
 
 
+def scenario_probe(h, scenario, files, tmp):
+    """Contour puis Usiner > Palper l'origine (coin avant gauche, bille de 2 mm saisie dans le dialogue) : palpage
+    en tête du programme, G-code exporté par le dialogue d'export avec G38.2 et G10 L20, aucune erreur."""
+    import FreeCAD
+    from cam2027.gui import probe as probegui
+    from cam2027.project import probe as probemod
+
+    tr = h["tr"]
+    proj = h["new_project"](scenario, "Probe")
+    h["driver"].open_files.append(files["step"])
+    h["run_command"](scenario, "CAM2027_ImportModel")
+    h["run_command"](scenario, "CAM2027_StockFixture")
+    h["FreeCADGui"].Selection.clearSelection()
+    h["driver"].handlers[tr("Add operation")] = lambda dlg: (
+        h["combo_select"](h["find_combo_with"](dlg, "profile"), "profile"), True)[1]
+    h["run_command"](scenario, "CAM2027_AddOperation")
+    h["accept_open_editors"](scenario)
+    proj = h["project"]()
+
+    def fill(dlg):
+        if not isinstance(dlg, probegui.ProbeDialog):
+            return False
+        dlg.tip.setValue(2.0)
+        h["combo_select"](dlg.mode, "corner")
+        h["combo_select"](dlg.corner, "front-left")
+        if "G38.2" not in dlg.preview.toPlainText():
+            h["problem"](scenario, "no G38.2 in the probe preview")
+        dlg.grab().save(os.path.join(h["OUT"], "dialogs", "probe-filled.png"))
+        return True
+
+    h["driver"].handlers[tr("Probe the origin")] = fill
+    msgs = h["run_command"](scenario, "CAM2027_Probe")
+    ops = proj.operations()
+    if not ops or not probemod.is_probe_op(ops[0]):
+        h["problem"](scenario, "probe operation not first: %s" % [o.Name for o in ops])
+        return
+    if not (proj.machine.probe or {}).get("present"):
+        h["problem"](scenario, "probe not stored in the machine profile")
+    out = os.path.join(tmp, "%s.nc" % scenario)
+    h["driver"].handlers[tr("Export G-code")] = lambda dlg: h["_export"](dlg, out)
+    emsgs = h["run_command"](scenario, "CAM2027_Export")
+    text = open(out, encoding="utf-8").read() if os.path.isfile(out) else ""
+    g10x = [l for l in text.splitlines() if l.startswith("G10") and "X-1." in l and "L20" in l and "P1" in l]
+    if text.count("G38.2") != 3 or not g10x:
+        h["problem"](scenario, "exported G-code without the probing lines (%d chars), messages %s" % (len(text), emsgs))
+    h["log"]("  probe ok: %s, %d G38.2 in the file, messages %s" % (ops[0].Label, text.count("G38.2"),
+                                                                    [t[:100] for _k, t in msgs + emsgs]))
+    FreeCAD.closeDocument(proj.doc.Name)
+    h["pump"](0.3)
+
+
 def scenarios(h, files, tmp):
     """(nom, fonction) des scénarios S2, dans l'ordre."""
     return (
         ("s2-leads", lambda: scenario_leads(h, "s2-leads", files)),
         ("s2-pattern", lambda: scenario_pattern(h, "s2-pattern", files)),
         ("s2-holes", lambda: scenario_holes(h, "s2-holes", tmp)),
+        ("s2-probe", lambda: scenario_probe(h, "s2-probe", files, tmp)),
     )

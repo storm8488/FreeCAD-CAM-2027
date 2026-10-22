@@ -280,3 +280,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   pas d'alésoir ; pointage à 0,9 × diamètre (pas de valeur Fusion documentée) ; un trou borgne garde le cône
   de pointe du foret sous son fond plat (comme une vraie pièce percée). Les cycles de perçage sont simulés sans
   les remontées de débourrage (même matière enlevée).
+
+- Palpage de l'origine (`project/probe.py`) : GRBL seulement (G38.2, G10 L20 / G92, sans variables) ; centre de
+  trou par le diamètre nominal (pas de mesure des deux côtés) ; coin palpé par l'extérieur seulement (pas de coin
+  intérieur ni de bossage) ; aucune vérification que le trajet de palpage est libre (l'opérateur place le
+  palpeur ; un contact absent déclenche l'alarme GRBL) ; pas d'inspection de surface ni d'alignement (Fusion
+  *Part Alignment*) ; les réglages du palpeur se saisissent dans le dialogue de palpage, pas encore dans le
+  dialogue Profil machine.
