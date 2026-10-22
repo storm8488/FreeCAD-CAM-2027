@@ -20,6 +20,13 @@
 - **[B3]** Correctif : **fuite des dialogues** : chaque dialogue fermé restait en mémoire (enfant de la fenêtre
   principale), 150 après 50 ajouts d'opérations ; détruits à la fermeture (`qt.dispose`, éditeur d'opération).
   Scénario `b3-long-session` (50 opérations ajoutées, renommées, dupliquées, supprimées, puis 20 Ctrl+Z).
+- **[B3]** Correctif : **« Modifier »** du panneau Projet sur une opération générée par sa commande (angles vifs du
+  V-carving, palpage, Photo V-Carve, moulure, cannelures, texture, prisme) levait une exception (`Base` absente) et
+  rien ne s'ouvrait ; l'éditeur s'ouvre (onglet Géométrie sans choix) et nomme la stratégie en clair au lieu de
+  l'identifiant interne (`vcarve_corners`, `probe`). Trouvé par l'audit `CAM2027_B3_AUDIT=1` des scénarios.
+- **[B3]** Correctif : projet rouvert (dôme, reprise de matière) : le fournisseur de vue du job restait non attaché
+  (erreurs `'ViewProvider' object has no attribute 'obj'`) et la page de tâches d'une opération ne s'ouvrait pas ;
+  attaché à l'activation du projet. Scénarios `b3-reopen-dome`, `b3-reopen-dome-undo`.
 - **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
   d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
 

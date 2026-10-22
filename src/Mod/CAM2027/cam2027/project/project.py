@@ -45,8 +45,15 @@ def attach_job_view(job):
     la page de tâches d'une opération ouverte par un double-clic dans l'arbre ne se fermait plus (Annuler et OK
     levaient une erreur, transaction laissée ouverte). Annuler sur la page du job ne le supprime pas.
     Retourne True s'il a été posé (job créé ici, ou projet enregistré avant ce correctif)."""
-    if not FreeCAD.GuiUp or job is None or job.ViewObject is None \
-            or hasattr(job.ViewObject.Proxy, "setupEditVisibility"):
+    if not FreeCAD.GuiUp or job is None or job.ViewObject is None:
+        return False
+    proxy = job.ViewObject.Proxy
+    if hasattr(proxy, "setupEditVisibility"):
+        if not hasattr(proxy, "obj"):
+            # rouvert sans être attaché (vu sur le dôme des scénarios) : le double-clic levait
+            # « 'ViewProvider' object has no attribute 'obj' »
+            proxy.attach(job.ViewObject)
+            return True
         return False
     import Path.Main.Gui.Job as PathJobGui
 

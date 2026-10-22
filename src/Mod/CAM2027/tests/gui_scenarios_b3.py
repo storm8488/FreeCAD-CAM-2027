@@ -28,9 +28,14 @@ NO_UNDO = {"CAM2027_ToolLibrary", "CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2
            "CAM2027_Compute", "CAM2027_MaterialCheck", "CAM2027_NewProject"}
 #: propriétés recalculées (résultat du calcul, pas une donnée de l'utilisateur) ou d'affichage
 DERIVED = {"Path", "Shape", "Mesh", "CycleTime", "ExpressionEngine", "Label2", "Visibility", "MaterialCheck",
-           "Placement_", "StopProcessing", "AreaParams", "PathParams", "removalshape", "ModelAwareExperiment"}
+           "Placement_", "StopProcessing", "AreaParams", "PathParams", "removalshape", "ModelAwareExperiment",
+           # profondeurs et hauteurs par défaut que FreeCAD recalcule à chaque exécution (parcours inchangé)
+           "OpStartDepth", "OpFinalDepth", "OpToolDiameter", "OpStockZMax", "OpStockZMin"}
 
 FREEZE_S = 0.5
+#: stratégies trop gourmandes pour les scénarios B3 (reprise des angles sur le plateau : plus de 6 Go, arrêtée
+#: par le garde-fou du brief ; même page de tâches que les plats, vérifiée avec eux)
+HEAVY = ("pencil",)
 #: Annuler sur une page de tâches sans modification : rien à recalculer
 CANCEL_MAX_S = 2.0
 
@@ -143,7 +148,7 @@ class Heartbeat(object):
         self.last = now
 
     def __enter__(self):
-        self.last = time.time()
+        self.last = self.first = time.time()
         self.worst = 0.0
         self.timer.start()
         return self
@@ -187,6 +192,18 @@ def live_dialogs():
 
 
 # -- audit des commandes : Ctrl+Z / Ctrl+Y ----------------------------------------------------------------------
+
+
+def flush_live(note=""):
+    """Rapport écrit au fil de l'eau (celui de la suite n'est écrit qu'à la fin : rien si le processus est
+    arrêté), avec la mémoire du processus."""
+    if note:
+        G.log("  B3 %s, memory %.0f MB" % (note, memory_mb()[0]))
+    try:
+        with open(os.path.join(G.OUT, "gui_scenarios_b3_live.txt"), "w", encoding="utf-8") as fp:
+            fp.write("\n".join(G.lines) + "\n")
+    except OSError:
+        pass
 
 stats = {"commands": 0, "undo_checked": 0, "freezes": []}
 
@@ -275,11 +292,13 @@ def audited(cls, name):
             if hb.worst > FREEZE_S:
                 stats["freezes"].append((name, round(hb.worst, 2)))
                 G.log("  B3 FREEZE %s: interface not refreshed for %.2f s" % (name, hb.worst))
+            flush_live("%s done in %.1f s" % (name, hb.last - hb.first))
             if doc is not None and FreeCAD.ActiveDocument is doc:
                 try:
                     audit_undo(_current(), name, doc, before, n0, editors0)
                 except Exception:
                     G.problem(_current(), "B3 audit of %s crashed:\n%s" % (name, traceback.format_exc()))
+                flush_live("%s audited" % name)
             return result
 
     Audited.__name__ = cls.__name__
@@ -329,6 +348,7 @@ def check_reopen(scenario, doc_name):
     _real_close(doc.Name)
     G.pump(0.2)
     t0 = time.time()
+    opening = _ConsoleErrors()
     try:
         doc = FreeCAD.openDocument(path)
     except Exception:
@@ -337,6 +357,13 @@ def check_reopen(scenario, doc_name):
     FreeCADGui.ActiveDocument = FreeCADGui.getDocument(doc.Name)
     G.pump(0.5)
     proj = Project.from_document(doc)
+    jvp = getattr(proj.job.ViewObject, "Proxy", None) if proj.has_job else None
+    G.log("  B3 reopen: job view provider %s, attached %s" % (type(jvp).__name__, hasattr(jvp, "obj")))
+    G.pump(0.5)  # la vue rapport reçoit ses lignes en différé : pas comptées pour le double-clic qui suit
+    for err in opening.close():
+        # écrites par FreeCAD pendant la relecture du job (fournisseur de vue pas encore attaché, voir
+        # project.attach_job_view) : signalées, sans effet ensuite
+        G.log("  B3 reopen: errors written while opening the project: %s" % err.splitlines()[-1].strip())
     after = _summary(proj)
     if after != before:
         G.problem(scenario, "B3 reopen: operations differ after reopening: %s / %s" % (
@@ -430,8 +457,11 @@ class _ConsoleErrors(object):
         if self.report is None:
             return []
         text = self.report.toPlainText()[self.start:]
-        return ["report view: %s" % l.strip()[:160] for l in text.splitlines()
-                if "Error" in l or "Traceback" in l or "has no attribute" in l][:3]
+        lines = [l for l in text.splitlines() if "[scenarios]" not in l]
+        if not any("Error" in l or "Traceback" in l for l in lines):
+            return []
+        start = next(i for i, l in enumerate(lines) if "Error" in l or "Traceback" in l)
+        return ["report view:\n    " + "\n    ".join(l.rstrip()[:200] for l in lines[start:start + 14])]
 
 
 def check_panel_edit(scenario, proj, kinds):
@@ -494,6 +524,7 @@ def closing(name):
             check_reopen(_current(), name)
     except Exception:
         G.problem(_current(), "B3 reopen check of %s crashed:\n%s" % (name, traceback.format_exc()))
+    flush_live("closing %s" % name)
     if name in FreeCAD.listDocuments():
         return _real_close(name)
     return None
@@ -653,6 +684,23 @@ def scenario_long_session(scenario, files):
             gc.collect()
             G.log("  B3 long session %d: %d ops, memory %.0f / %.0f MB, dialogs %d, panel %.3f s" % (
                 i + 1, p.tree.topLevelItemCount(), memory_mb()[0], memory_mb()[1], len(live_dialogs()), t_panel[-1][1]))
+    if os.environ.get("CAM2027_B3_PROFILE"):
+        import cProfile
+        import io
+        import pstats
+
+        prof = cProfile.Profile()
+        prof.enable()
+        for _r in range(10):
+            panels.refresh_project_panel()
+        prof.disable()
+        out = io.StringIO()
+        pstats.Stats(prof, stream=out).sort_stats("cumulative").print_stats(14)
+        G.log("  B3 profile of 10 panel refreshes (%d ops):\n%s" % (p.tree.topLevelItemCount(), out.getvalue()[-3500:]))
+    t0 = time.time()
+    for _r in range(10):
+        panels.refresh_project_panel()
+    G.log("  B3 panel refresh with %d operations: %.1f ms" % (p.tree.topLevelItemCount(), (time.time() - t0) * 100))
     gc.collect()
     mem1 = memory_mb()
     dlg1 = len(live_dialogs())
@@ -692,7 +740,10 @@ def scenario_reopen(scenario, files, tmp):
 
     proj = _tray_project(scenario, files, "B3 reopen")
     for strategy in STRATEGIES:
+        if strategy in HEAVY:
+            continue
         _add(scenario, strategy)
+        flush_live("%s added" % strategy)
     proj = G.project()
     kinds = sorted({proj.registry.get(proj.base_operation(o).Name, {}).get("kind") for o in proj.operations()})
     G.log("  B3 reopen: %d operations, kinds %s" % (len(proj.operations()), kinds))
@@ -713,7 +764,7 @@ def scenario_reopen(scenario, files, tmp):
 def scenario_tree_edit(scenario, files):
     """Même session : double-clic sur une opération dans l'arbre (page de tâches FreeCAD), Annuler puis OK."""
     proj = _tray_project(scenario, files, "B3 tree")
-    for strategy in ("profile", "scallop", "pencil"):
+    for strategy in ("profile", "scallop"):
         _add(scenario, strategy)
     proj = G.project()
     states = {}
@@ -727,6 +778,65 @@ def scenario_tree_edit(scenario, files):
         G.problem(scenario, "B3 Project panel %s after the task pages, project %s" % (panel_ops(), project_ops(proj.doc)))
     FreeCAD.closeDocument(proj.doc.Name)
     G.pump(0.3)
+
+
+def scenario_undo_redo_job(scenario, files):
+    """Brut annulé puis rétabli (Ctrl+Z, Ctrl+Y), surfaçage ajouté, annulé, rétabli : le recalcul suivant donne le
+    même parcours, et le double-clic sur l'opération ouvre et ferme sa page sans erreur."""
+    proj = G.new_project(scenario, "B3 redo")
+    G.driver.open_files.append(files["step"])
+    G.run_command(scenario, "CAM2027_ImportModel")
+    G.run_command(scenario, "CAM2027_StockFixture")
+    doc = G.project().doc
+    _gui_undo(doc)
+    _gui_undo(doc, redo=True)
+    proj = G.project()
+    if not proj.has_job:
+        G.problem(scenario, "B3 no job after Ctrl+Z, Ctrl+Y of Stock & fixture")
+        return
+    _add(scenario, "millface")
+    proj = G.project()
+    op = proj.operations()[0]
+    ref = (round(op.OpStartDepth.Value, 3), len(op.Path.Commands))
+    _gui_undo(doc)
+    _gui_undo(doc, redo=True)
+    op = proj.doc.getObject(op.Name)
+    redone = (round(op.OpStartDepth.Value, 3), len(op.Path.Commands))
+    op.touch()
+    proj.compute()
+    again = (round(op.OpStartDepth.Value, 3), len(op.Path.Commands))
+    ref, again = ref[1:], again[1:]  # OpStartDepth : défaut recalculé par FreeCAD, seul le parcours compte
+    G.log("  B3 facing (OpStartDepth, commands): added %s, after Ctrl+Y %s, recomputed %s" % (ref, redone, again))
+    if again != ref:
+        G.problem(scenario, "B3 facing recomputed after Ctrl+Z, Ctrl+Y differs: %s instead of %s" % (again, ref))
+    kind = proj.registry.get(op.Name, {}).get("kind")
+    G.log("  B3 tree double-click after Ctrl+Z / Ctrl+Y: %s" % tree_edit(scenario, proj, op, kind))
+    FreeCAD.closeDocument(proj.doc.Name)
+    G.pump(0.3)
+
+
+def scenario_reopen_dome(scenario, tmp, undo_stock=False):
+    """Dôme, finition à crête constante, enregistré, fermé, rouvert (sans l'audit) ; ``undo_stock`` : le brut est
+    d'abord annulé puis rétabli (Ctrl+Z, Ctrl+Y)."""
+    import Part
+
+    V = FreeCAD.Vector
+    dome = Part.makeSphere(25.0, V(30, 20, -15)).common(Part.makeBox(60, 40, 30, V(0, 0, 5)))
+    path = os.path.join(tmp, "b3dome.step")
+    Part.makeBox(60, 40, 5).fuse(dome).removeSplitter().exportStep(path)
+    G.new_project(scenario, "B3 dome")
+    G.driver.open_files.append(path)
+    G.run_command(scenario, "CAM2027_ImportModel")
+    G.run_command(scenario, "CAM2027_StockFixture")
+    if undo_stock:
+        doc = G.project().doc
+        _gui_undo(doc)
+        _gui_undo(doc, redo=True)
+    _add(scenario, "scallop")
+    global _real_close, _tmp
+    _real_close = _real_close or FreeCAD.closeDocument
+    _tmp = _tmp or tmp
+    check_reopen(scenario, G.project().doc.Name)
 
 
 def _panel_title():
@@ -794,10 +904,17 @@ def entries(gs, files, tmp):
 
     def named(name, fn):
         def run():
-            fn()
+            flush_live()
+            try:
+                fn()
+            finally:
+                flush_live("end of %s" % name)
         return name, run
 
-    out = [named("b3-doc-switch", lambda: scenario_doc_switch("b3-doc-switch", files, tmp)),
+    out = [named("b3-reopen-dome", lambda: scenario_reopen_dome("b3-reopen-dome", tmp)),
+           named("b3-reopen-dome-undo", lambda: scenario_reopen_dome("b3-reopen-dome-undo", tmp, True)),
+           named("b3-undo-redo-job", lambda: scenario_undo_redo_job("b3-undo-redo-job", files)),
+           named("b3-doc-switch", lambda: scenario_doc_switch("b3-doc-switch", files, tmp)),
            named("b3-tree-edit", lambda: scenario_tree_edit("b3-tree-edit", files)),
            named("b3-reopen", lambda: scenario_reopen("b3-reopen", files, tmp)),
            named("b3-panel-undo",lambda: scenario_panel_undo("b3-panel-undo", files)),
