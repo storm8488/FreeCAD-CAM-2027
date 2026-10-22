@@ -370,29 +370,70 @@ def _dilate(mask, n):
 
 
 def order_passes(lines):
-    """Ordre des passes : plus proche voisin (boucles tournées, lignes ouvertes retournées au besoin)."""
+    """Ordre des passes : plus proche voisin (boucles tournées, lignes ouvertes retournées au besoin).
+
+    Même règle qu'une recherche de toutes les passes restantes à chaque pas (plus courte distance, puis la première
+    passe de la liste ; départ d'une boucle à son sommet le plus proche, ligne ouverte par le bout le plus proche,
+    son début à égalité), avec un arbre des points de départ possibles : 34 000 passes sur le plateau 220 x 220 mm
+    au lieu de plusieurs centaines de millions de comparaisons."""
     np = _np()
+    from scipy.spatial import cKDTree
+
     todo = [np.asarray(l) for l in lines if len(l) >= 2]
-    out, cur = [], None
-    while todo:
-        best, best_d, best_line = 0, None, None
-        for k, line in enumerate(todo):
-            if cur is None:
-                cand, d = line, 0.0
-            elif np.allclose(line[0], line[-1]):
-                dd = np.hypot(*(line[:-1] - cur).T)
-                m = int(np.argmin(dd))
-                cand, d = np.vstack([line[m:-1], line[:m + 1]]), float(dd[m])
-            else:
-                d0, d1 = float(np.hypot(*(line[0] - cur))), float(np.hypot(*(line[-1] - cur)))
-                cand, d = (line, d0) if d0 <= d1 else (line[::-1], d1)
-            if best_d is None or d < best_d:
-                best, best_d, best_line = k, d, cand
-            if cur is None:
+    if not todo:
+        return []
+    closed = [bool(np.allclose(l[0], l[-1])) for l in todo]
+    pts, owner = [], []
+    for k, (line, c) in enumerate(zip(todo, closed)):
+        p = line[:-1] if c else line[[0, -1]]
+        pts.append(p[:, :2])
+        owner.append(np.full(len(p), k))
+    pts, owner = np.vstack(pts), np.concatenate(owner)
+    tree = cKDTree(pts)
+    used = np.zeros(len(todo), dtype=bool)
+    alive = len(pts)  # points dont la passe reste à faire
+
+    def candidate(k, cur):
+        line = todo[k]
+        if closed[k]:
+            dd = np.hypot(*(line[:-1] - cur).T)
+            m = int(np.argmin(dd))
+            return np.vstack([line[m:-1], line[:m + 1]]), float(dd[m])
+        d0, d1 = float(np.hypot(*(line[0] - cur))), float(np.hypot(*(line[-1] - cur)))
+        return (line, d0) if d0 <= d1 else (line[::-1], d1)
+
+    out = [todo[0]]
+    used[0] = True
+    alive -= int((owner == 0).sum())
+    cur = todo[0][-1]
+    while alive > 0:
+        if alive < len(pts) // 2:  # arbre refait sur les points restants (sinon les k plus proches sont déjà faits)
+            keep = ~used[owner]
+            pts, owner = pts[keep], owner[keep]
+            tree = cKDTree(pts)
+        k_query = 16
+        while True:
+            dist, idx = tree.query(cur[:2], k=min(k_query, len(pts)))
+            dist, idx = np.atleast_1d(dist), np.atleast_1d(idx)
+            ok = ~used[owner[idx]]
+            if ok.any() or k_query >= len(pts):
                 break
-        todo.pop(best)
-        out.append(best_line)
-        cur = best_line[-1]
+            k_query *= 4
+        # toutes les passes à la plus courte distance (à l'arrondi près de l'arbre) : distance exacte, puis la
+        # première de la liste
+        near = dist[ok][0]
+        within = np.asarray(tree.query_ball_point(cur[:2], near + 1e-6), dtype=int)
+        within = within[~used[owner[within]]]
+        best = None
+        for k in sorted(set(owner[within].tolist())):
+            cand, d = candidate(k, cur)
+            if best is None or d < best[1]:
+                best = (k, d, cand)
+        k, _d, cand = best
+        used[k] = True
+        alive -= 2 if not closed[k] else len(todo[k]) - 1
+        out.append(cand)
+        cur = cand[-1]
     return out
 
 

@@ -53,6 +53,10 @@
 - **[B4]** Correctif : **perçage intelligent sous un autre corps**. Un trou d'un corps couvert par un autre corps posé
   dessus était proposé : le foret traversait le corps du dessus. Ces trous sont écartés, avec un message dans le
   dialogue (« N trou(s) sous un autre corps de la pièce laissé(s) de côté »).
+- **[B4]** Optimisation : **ordre des passes de `scallop`** par un arbre des points de départ (même règle et mêmes
+  égalités que la recherche exhaustive d'avant, comparées dans un test). ER16 : 17,0 s → 0,23 s pour l'ordre (calcul
+  complet 42–50 s → 25–29 s, mêmes 536 205 commandes, même volume enlevé), disque : 1,7 s → 0,04 s ; ordre identique sur les deux. Sur le plateau (34 000 passes)
+  l'ancien ordre ne finissait pas en 25 minutes.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

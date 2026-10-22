@@ -165,6 +165,65 @@ class TestHolesBodies(unittest.TestCase):
             self.assertLess(top, 0.0, x)  # percé jusqu'en dessous du fond
 
 
+class TestStackedBodies(unittest.TestCase):
+    """Pièce en deux corps, l'un posé sur l'autre (chauffage Vz330 de l'utilisateur) : la face du dessous n'est
+    accessible par le dessus qu'en dehors de l'empreinte du corps du dessus."""
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def _project(self, name, plate, block):
+        lib = starter_library()
+        proj = Project.create(name, lib, machine())
+        objs = []
+        for label, shape in (("Plate", plate), ("Block", block)):
+            o = proj.doc.addObject("Part::Feature", label)
+            o.Shape = shape
+            objs.append(o)
+        proj.doc.recompute()
+        proj.create_job(objs, stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        return proj, lib
+
+    def test_flat_finish_skips_the_block_footprint(self):
+        """Finition des plats : le dessus de la plaque (Z 10) est fini autour du bloc posé dessus, pas sous lui ; le
+        dessus du bloc (Z 20) aussi. Avant : la passe traversait le bloc (entaille de 10 mm ; 5 mm sur le chauffage)."""
+        from cam2027.gui.commands import default_params
+
+        proj, lib = self._project("B4 stacked flat", Part.makeBox(60, 40, 10), Part.makeBox(20, 20, 10, V(20, 10, 10)))
+        mill = lib.search("6 mm flat end mill")[0]
+        op, _rec = proj.add_operation("flat3d", "Flats", lib.assemblies_for_tool(mill.id)[0].id, mill.presets[0].id,
+                                      base=[(m, []) for m in proj.job.Model.Group],
+                                      params=default_params("flat3d", mill, mill.presets[0].resolve(mill)))
+        res = {r["name"]: r for r in proj.compute()}
+        self.assertTrue(res["Flats"]["valid"], res)
+        rep = proj.material_check(resolution=0.25)
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        cuts = [c.Parameters for c in op.Path.Commands if c.Name == "G1" and "X" in c.Parameters]
+        self.assertTrue(any(abs(p["Z"] - 10.0) < 1e-6 for p in cuts))  # plaque finie autour du bloc
+        self.assertTrue(any(abs(p["Z"] - 20.0) < 1e-6 for p in cuts))  # dessus du bloc fini
+        near = [(p["X"], p["Y"]) for p in cuts if abs(p["Z"] - 10.0) < 1e-6
+                and math.hypot(max(20.0 - p["X"], 0.0, p["X"] - 40.0), max(10.0 - p["Y"], 0.0, p["Y"] - 30.0)) < 3.0 - 0.02]
+        self.assertEqual(near, [])  # centre de la fraise jamais à moins d'un rayon du bloc
+
+    def test_holes_under_a_body_left_out(self):
+        """Trou débouchant de la plaque sous le bloc : écarté (le foret traversait le bloc) ; l'autre trou est percé."""
+        from cam2027.project import holes
+
+        plate = Part.makeBox(60, 40, 10).cut(Part.makeCylinder(1.5, 10, V(30, 20, 0))).cut(Part.makeCylinder(1.5, 10, V(8, 8, 0)))
+        proj, lib = self._project("B4 stacked holes", plate, Part.makeBox(20, 20, 10, V(20, 10, 10)))
+        covered = []
+        found = holes.find_job_holes(proj, covered)
+        self.assertEqual([(round(h.x, 3), round(h.y, 3)) for h in found], [(8.0, 8.0)])
+        self.assertEqual([(round(h.x, 3), round(h.y, 3)) for h in covered], [(30.0, 20.0)])
+        steps, _notes = holes.plan(lib, found)
+        holes.apply_plan(proj, proj.job.Model.Group[0], steps)
+        proj.compute()
+        rep = proj.material_check(resolution=0.25)
+        self.assertEqual(rep["gouge_max"], 0.0, rep)  # bloc intact (le brut boîte monte au dessus du bloc : les
+        # rapides du perçage traversent le brut au-dessus de la plaque, sans rapport avec ce correctif)
+
+
 def ball_penetration(commands, boxes, radius, step=0.01):
     """Pénétration maximale (mm, distance normale) d'une boule de rayon ``radius`` (pointe = point du parcours) dans
     une union de boîtes ``(xmin, ymin, zmin, xmax, ymax, zmax)`` le long des mouvements de coupe (calcul exact)."""
@@ -242,6 +301,64 @@ class TestScallopWalls(unittest.TestCase):
         self.assertAlmostEqual(res["sample"], 0.1)
         self.assertGreater(len(res["shallow"]), 10)
         self.assertEqual(res["uncovered"], 0)
+
+
+def order_passes_reference(lines):
+    """Ordre des passes de ``scallop`` avant l'optimisation (recherche dans toutes les passes restantes)."""
+    import numpy as np
+
+    todo = [np.asarray(l) for l in lines if len(l) >= 2]
+    out, cur = [], None
+    while todo:
+        best, best_d, best_line = 0, None, None
+        for k, line in enumerate(todo):
+            if cur is None:
+                cand, d = line, 0.0
+            elif np.allclose(line[0], line[-1]):
+                dd = np.hypot(*(line[:-1] - cur).T)
+                m = int(np.argmin(dd))
+                cand, d = np.vstack([line[m:-1], line[:m + 1]]), float(dd[m])
+            else:
+                d0, d1 = float(np.hypot(*(line[0] - cur))), float(np.hypot(*(line[-1] - cur)))
+                cand, d = (line, d0) if d0 <= d1 else (line[::-1], d1)
+            if best_d is None or d < best_d:
+                best, best_d, best_line = k, d, cand
+            if cur is None:
+                break
+        todo.pop(best)
+        out.append(best_line)
+        cur = best_line[-1]
+    return out
+
+
+class TestScallopOrder(unittest.TestCase):
+    def test_same_order_as_reference(self):
+        """Ordre des passes par arbre = ordre de la recherche exhaustive d'avant, égalités comprises (points sur une
+        grille entière : beaucoup de distances égales), boucles, lignes ouvertes, points isolés doublés."""
+        import random
+        import numpy as np
+        from cam2027.project import scallop
+
+        rnd = random.Random(7)
+        for _case in range(4):
+            lines = []
+            for _k in range(300):
+                x, y = rnd.randint(0, 40), rnd.randint(0, 40)
+                kind = rnd.random()
+                if kind < 0.3:  # boucle
+                    r = rnd.randint(1, 4)
+                    pts = [(x + r * math.cos(a), y + r * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 9)]
+                    pts[-1] = pts[0]
+                elif kind < 0.4:  # point isolé doublé (ligne de crête d'un seul point)
+                    pts = [(x, y), (x, y)]
+                else:
+                    pts = [(x + i, y + rnd.randint(-1, 1)) for i in range(rnd.randint(2, 6))]
+                lines.append(np.array(pts, dtype=float))
+            ref = order_passes_reference(lines)
+            new = scallop.order_passes(lines)
+            self.assertEqual(len(ref), len(new))
+            for a, b in zip(ref, new):
+                self.assertTrue(np.array_equal(a, b))
 
 
 class TestRotarySpiral(unittest.TestCase):
