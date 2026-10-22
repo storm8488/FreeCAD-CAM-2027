@@ -418,6 +418,9 @@ class Project(object):
         """(Re)calcule le G-code enroulé depuis le dessin, le brut rond et le profil machine."""
         reg = self.registry
         rec = reg[op.Name]
+        if rec["kind"] != wrapmod.KIND:  # contour, poche et finition 3D enroulés
+            from . import rotary
+            return rotary.generate(self, op)[0]
         p = rec["params"]
         cy, cz, sign = indexing.check_machine(self.machine)
         radius = wrapmod.radius_of_stock(self.job)

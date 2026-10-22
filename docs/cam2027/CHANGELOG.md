@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **[S4]** **Usinage rotatif continu** (Usiner > Usinage rotatif, `project/rotary.py`) : contour et poche
+  enroulés d'un dessin déroulé, la compensation du rayon d'outil faite au rayon de chaque niveau (dessin
+  ramené au plan réel `Y × r / R`, décalé, puis redéroulé), et finition 3D rotative comme Fusion « Rotary
+  parallel » : une ligne le long de l'axe par angle, pièce tournée à cet angle et hauteur de la pointe par
+  OpenCamLib (fraise pointée vers l'axe), niveaux d'ébauche radiaux optionnels. X, Z et A simultanés en G93
+  (avance réelle au rayon de coupe), aperçu 3D du trajet réel. Cylindre R20 avec une poche (fond R18) et une
+  bosse sphérique, brut R21, boule 6 puis plate 3 : carte radiale déroulée simulée = pièce à ± 0,05 mm (fond
+  de poche, cylindre, bosse), aucune entaille, vitesse réelle = avance à 2 %, export vérifié sans erreur ;
+  finition 3D 6,7 s, poche 0,2 s.
 - **[S4]** **Finition 3D à crête constante, pentu / peu incliné** (stratégie `scallop`, comme Fusion
   « Scallop » et « Steep and Shallow ») : « Hauteur de crête maximale » -> pas 3D déduit du rayon de la boule
   (`2 sqrt(h (2R - h))`, plus la partie plate d'une torique) ; hauteurs de la pointe par OpenCamLib

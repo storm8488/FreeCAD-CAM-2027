@@ -666,6 +666,20 @@ def scenario_machine_and_wrap(scenario, files):
     proj = project()
     if not proj.wrapped_operations():
         problem(scenario, "wrapped engraving not created")
+    # [S4] usinage rotatif continu par le dialogue : poche enroulée du dessin, puis finition 3D rotative
+    for kind in ("wrap_pocket", "rotary3d"):
+        before = len(project().wrapped_operations())
+        driver.handlers[tr("Rotary machining (continuous A axis)")] =             lambda dlg, kind=kind: (combo_select(find_combo_with(dlg, kind), kind), True)[1]
+        run_command(scenario, "CAM2027_RotaryMachining")
+        proj = project()
+        ops = proj.wrapped_operations()
+        if len(ops) != before + 1:
+            problem(scenario, "rotary machining %s not created" % kind)
+            continue
+        state = proj.operation_state(ops[-1])
+        log("  rotary %s: %s, %d G-code lines" % (kind, state, len(ops[-1].Gcode)))
+        if state in ("failed", "todo") or not ops[-1].Gcode:
+            problem(scenario, "rotary machining %s not computed (%s)" % (kind, state))
     run_command(scenario, "CAM2027_Inlay")
     FreeCAD.closeDocument(proj.doc.Name)
     pump(0.3)

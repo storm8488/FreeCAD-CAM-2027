@@ -245,10 +245,27 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - **Continu : gravure enroulée seulement** (Usiner > Gravure enroulée). Le dessin est tracé à
   plat dans le repère déroulé (X le long de l'axe, Y = longueur d'arc sur le brut, Y 0 à A 0, un
   tour = 2πR) ; la fraise suit les traits à profondeur constante. Pas de compensation du rayon
-  d'outil, pas de poche ni de contour décalé enroulés, pas d'usinage 3D rotatif. Les coupes sont
+  d'outil pour la gravure (voir l'usinage rotatif ci-dessous pour le contour, la poche et la 3D). Les coupes sont
   en G93 (F = 1 / durée en minutes, calculée à la longueur réelle au rayon de coupe) puis G94.
   Le brut rond doit être centré sur l'axe A du profil. La vue des parcours de FreeCAD ignore A :
   l'opération est masquée et remplacée par un aperçu « (preview) » du trajet réel sur la pièce.
+- **[S4] Usinage rotatif continu** (Usiner > Usinage rotatif) : **contour et poche enroulés** d'un dessin
+  déroulé et **finition 3D rotative** de la pièce, en G93 comme la gravure enroulée (mêmes contrôles d'export,
+  même aperçu « (preview) »). Compensation du rayon d'outil faite dans le plan réel au rayon de chaque
+  niveau (le dessin déroulé est à l'échelle du brut) ; l'outil reste radial (Y fixe, pas de décalage en Y) :
+  les parois d'une poche enroulée ne sont pas des plans radiaux, elles s'écartent d'au plus
+  `rayon outil × passe / rayon` entre deux niveaux (0,04 mm pour une fraise de 3 mm, passe 0,5 mm, R18) ;
+  angles de la poche au rayon de la fraise. Contour : extérieur / intérieur / sur le trait, pas d'entrée en
+  arc ni d'attaches ; poche : anneaux décalés du centre vers les parois, plongée verticale (pas de rampe ni
+  d'hélice), liaisons à la profondeur seulement dans la zone déjà vidée. Finition 3D rotative : lignes le long
+  de l'axe (aller-retour) seulement, pas de spirale ni de passes circulaires ; une ligne par angle (pas
+  angulaire = pas / rayon maximal de la pièce), chaque ligne relevée à la hauteur de sécurité ; hauteurs par
+  OpenCamLib sur la pièce tournée (exactes pour une fraise pointée vers l'axe) ; surépaisseur appliquée
+  radialement (pas normale à la surface) ; niveaux d'ébauche radiaux optionnels depuis le brut rond, sans
+  contrôle d'engagement (passe pleine largeur) ; contre-dépouilles par rapport à la direction radiale non
+  usinées. Contrôle matière 3 axes non applicable (opérations sur A sautées) : la vérification passe par une
+  carte radiale (`rotary.RadialMap`) dans les tests seulement. Opérations figées à leur création pour
+  l'outil et le dessin (recréer pour les changer), recalculées à chaque « Recalculer ».
 - FreeCAD 1.0 replie A dans ±180° avant le postprocesseur, même pour un placement neutre
   (`PathUtils.getPathWithPlacement` → `Command.transform`). Pendant l'export, CAM2027 applique la
   règle de FreeCAD 1.1 (parcours rendu tel quel si le placement est neutre) ; un saut de A de plus

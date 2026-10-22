@@ -159,5 +159,198 @@ class TestScallop(unittest.TestCase):
         proj.close()
 
 
+ROT_STOCK = 21.0
+ROT_POCKET_HALF = 10.0 / 18.0  # demi-largeur angulaire de la poche (10 mm d'arc au fond)
+
+
+def rotary_part_radius(x, theta):
+    """Rayon de la pièce rotative de test : cylindre R20 (X 0..80), poche jusqu'à R18 (X 10..30, autour de A 180°),
+    bosse sphérique R5 centrée à 15,5 mm de l'axe (X 60, A 0)."""
+    import numpy as np
+
+    x, theta = np.broadcast_arrays(np.asarray(x, dtype=float), np.asarray(theta, dtype=float))
+    t = np.mod(theta, 2 * math.pi)
+    pocket = (x >= 10) & (x <= 30) & (np.abs(t - math.pi) <= ROT_POCKET_HALF)
+    r = np.where(pocket, 18.0, 20.0)
+    c = 15.5 * np.cos(theta)
+    disc = c * c - (15.5 ** 2 + (x - 60.0) ** 2 - 25.0)
+    bump = np.where(disc >= 0, c + np.sqrt(np.maximum(disc, 0.0)), -np.inf)
+    return np.maximum(r, bump)
+
+
+class TestRotary(unittest.TestCase):
+    """Usinage rotatif continu : finition 3D rotative, poche et contour enroulés (G93), carte radiale."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s4r-")
+        cls.step = os.path.join(cls.tmp, "rotary.step")
+        V = FreeCAD.Vector
+        cyl = Part.makeCylinder(20.0, 80.0, V(0, 0, 0), V(1, 0, 0))
+        # poche : secteur X 10..30 autour de A 180° (le bas, z < 0), fond à R18
+        ring = Part.makeCylinder(25.0, 20.0, V(10, 0, 0), V(1, 0, 0)).cut(
+            Part.makeCylinder(18.0, 20.0, V(10, 0, 0), V(1, 0, 0)))
+        # secteur angulaire |A - 180°| <= demi-largeur (y = r sin A, z = r cos A) : triangle extrudé le long de X
+        s, c = 30.0 * math.sin(ROT_POCKET_HALF), -30.0 * math.cos(ROT_POCKET_HALF)
+        tri = Part.Face(Part.makePolygon([V(10, 0, 0), V(10, s, c), V(10, -s, c), V(10, 0, 0)]))
+        sector = ring.common(tri.extrude(V(20, 0, 0)))
+        bump = Part.makeSphere(5.0, V(60, 0, 15.5))
+        cyl.cut(sector).fuse(bump).removeSplitter().exportStep(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _project(self, name):
+        from cam2027.project.machine import RotaryAxis
+
+        lib = starter_library()
+        machine = MachineProfile("test", controller="grbl", post_processor="grbl",
+                                 post_processor_args="--no-show-editor --precision=4")
+        machine.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0),
+                                    positive_direction="right_hand", min_deg=-720.0, max_deg=720.0)
+        proj = Project.create(name, lib, machine)
+        part = proj.import_model(self.step, label="Rotary").objects[0]
+        proj.create_job([part], stock={"kind": "cylinder_x", "radius": ROT_STOCK, "length": 84.0, "x_start": -2.0,
+                                       "center": (0.0, 0.0)})
+        return proj, lib
+
+    def test_part_geometry(self):
+        """La pièce de test est celle que décrit ``rotary_part_radius`` (contrôle du contrôle)."""
+        shape = Part.read(self.step)
+        V = FreeCAD.Vector
+        for x, theta in ((20.0, math.pi), (20.0, math.pi + 0.5), (20.0, 0.5), (60.0, 0.0), (61.0, 0.2), (40.0, 2.0)):
+            r_exp = float(rotary_part_radius(x, theta))
+            line = Part.makeLine(V(x, 0, 0), V(x, 30 * math.sin(theta), 30 * math.cos(theta)))
+            pts = [v.Point for v in shape.section(line).Vertexes]
+            r_got = max(math.hypot(p.y, p.z) for p in pts)
+            self.assertAlmostEqual(r_got, r_exp, delta=1e-3, msg=(x, theta))
+
+    def _speeds(self, text, feeds):
+        """Vitesse réelle de chaque mouvement G93 (longueur au rayon de coupe x F) comparée à l'avance de
+        l'opération en cours (``feeds`` : {nom de l'opération : (avance, plongée)}, repérée par son commentaire)."""
+        inverse, prev, checked = False, None, 0
+        feed, plunge = None, None
+        for raw in text.splitlines():
+            line = raw.strip()
+            if line.startswith("("):
+                feed, plunge = feeds.get(line.strip("() "), (feed, plunge))
+                continue
+            if not line:
+                continue
+            if line.startswith("G93"):
+                inverse = True
+            elif line.startswith("G94"):
+                inverse = False
+            words = dict((w[0], float(w[1:])) for w in line.split() if w[0] in "XAZF" and len(w) > 1)
+            if line.startswith("G1") and inverse and prev is not None:
+                x, a, z = words.get("X", prev[0]), words.get("A", prev[1]), words.get("Z", prev[2])
+                r_mid = (z + prev[2]) / 2.0
+                length = math.sqrt((x - prev[0]) ** 2 + (math.radians(a - prev[1]) * r_mid) ** 2 + (z - prev[2]) ** 2)
+                if length > 0.05:
+                    self.assertIsNotNone(feed, line)
+                    self.assertIn("F", words, line)
+                    speed = length * words["F"]
+                    pure_z = abs(x - prev[0]) < 1e-6 and abs(a - prev[1]) < 1e-6
+                    target = plunge if pure_z else feed
+                    self.assertAlmostEqual(speed, target, delta=0.02 * target, msg=line)
+                    checked += 1
+            if line.startswith(("G0", "G1")):
+                prev = (words.get("X", prev[0] if prev else 0.0), words.get("A", prev[1] if prev else 0.0),
+                        words.get("Z", prev[2] if prev else 0.0))
+        return checked
+
+    def test_rotary_finishing_and_wrapped_pocket(self):
+        """Finition 3D rotative (boule 6) puis poche enroulée (plate 3) : carte radiale déroulée = pièce à ± 0,05 mm,
+        vitesse réelle = avance ± 2 %, export vérifié."""
+        import numpy as np
+        from cam2027.project import rotary
+
+        proj, lib = self._project("Rotary")
+        ball = lib.search("6 mm ball end mill")[0]
+        flat = lib.search("3 mm flat end mill")[0]
+        t0 = time.time()
+        op3d, rec3d = rotary.add_operation(proj, "rotary3d", "Rotary finishing", lib.assemblies_for_tool(ball.id)[0].id,
+                                           ball.presets[0].id, params={"stepover": 0.5, "sample": 0.25, "step_down": 1.0})
+        t_3d = time.time() - t0
+        self.assertEqual(rec3d["kind"], "rotary3d")
+        self.assertGreaterEqual(rec3d["info"]["levels"], 3)
+        # dessin déroulé de la poche : rectangle X 10..30, Y = arc au rayon du brut autour de A 180°
+        V = FreeCAD.Vector
+        y0 = (math.pi - ROT_POCKET_HALF) * ROT_STOCK
+        y1 = (math.pi + ROT_POCKET_HALF) * ROT_STOCK
+        drawing = proj.doc.addObject("Part::Feature", "PocketDrawing")
+        drawing.Shape = Part.makePolygon([V(10, y0, 0), V(30, y0, 0), V(30, y1, 0), V(10, y1, 0), V(10, y0, 0)])
+        proj.doc.recompute()
+        t0 = time.time()
+        opp, recp = rotary.add_operation(proj, "wrap_pocket", "Wrapped pocket", lib.assemblies_for_tool(flat.id)[0].id,
+                                         flat.presets[0].id, base=[(drawing, [])],
+                                         params={"depth": -3.0, "step_down": 1.0, "stepover": 0.4})
+        t_pocket = time.time() - t0
+        FreeCAD.Console.PrintMessage("rotary3d %.1f s, wrapped pocket %.1f s\n" % (t_3d, t_pocket))
+        summary = {r["name"]: r for r in proj.compute()}
+        self.assertTrue(summary["Rotary finishing"]["valid"] and summary["Wrapped pocket"]["valid"], summary)
+        text, analysis, issues = proj.preview_gcode()
+        self.assertIn("G93", analysis["codes"])
+        self.assertEqual((analysis["a_feed_lines"], analysis["g93_missing_f"], analysis["ends_in_g93"]), (0, 0, False))
+        self.assertNotIn("error", [lvl for lvl, _m in issues], issues)
+        checked = self._speeds(text, dict((r["label"], (r["values"]["feed_mm_min"], r["values"]["plunge_feed_mm_min"])) for r in (rec3d, recp)))
+        self.assertGreater(checked, 1000)
+        # carte radiale déroulée sur deux bandes : la poche (et le cylindre autour), la bosse
+        _l, moves3d = rotary.generate(proj, op3d)
+        _l, movesp = rotary.generate(proj, opp)
+        for window in ((14.0, 26.0, math.pi - 1.0, math.pi + 1.0), (52.0, 68.0, -0.45, 0.45)):
+            x0, x1, t0_, t1_ = window
+            rmap = rotary.RadialMap(x0, x1, t0_, t1_, ROT_STOCK, res_x=0.1)
+            rmap.sweep_moves(moves3d, ROT_STOCK, "ball", 3.0)
+            rmap.sweep_moves(movesp, ROT_STOCK, "flat", 1.5)
+            X, T = np.meshgrid(rmap.xs, rmap.ts, indexing="ij")
+            part = rotary_part_radius(X, T)
+            err = rmap.r - part
+            # le bas de la boule ne rentre pas dans les angles concaves (raccord bosse / cylindre, parois de poche)
+            dist_wall = np.abs(np.abs(np.mod(T, 2 * math.pi) - math.pi) - ROT_POCKET_HALF) * 18.0
+            pocket_floor = (part < 18.5) & (dist_wall > 0.5) & (X > 10.5) & (X < 29.5)
+            cylinder = (np.abs(part - 20.0) < 1e-9) & (dist_wall > 3.5) & (np.hypot(X - 60, T * 20) > 9.5)
+            bump = part > 20.25
+            for name, sel in (("pocket floor", pocket_floor), ("cylinder", cylinder), ("bump", bump)):
+                if sel.any():
+                    self.assertLess(float(np.abs(err[sel]).max()), 0.05, (name, window, float(np.abs(err[sel]).max())))
+            self.assertGreater(int((pocket_floor | cylinder | bump).sum()), 1000)
+            self.assertGreater(float(err.min()), -0.05, window)  # aucune entaille dans la bande
+        preview = proj.doc.getObject(op3d.Name + "_Preview")
+        self.assertIsNotNone(preview)
+        self.assertGreater(len(preview.Shape.Edges), 100)
+        proj.close()
+
+    def test_wrapped_contour(self):
+        """Contour enroulé extérieur d'un rectangle : centre de l'outil à un rayon d'outil du dessin dans le plan réel
+        du niveau (compensation au rayon courant), deux niveaux ; outil trop gros pour l'intérieur refusé."""
+        from cam2027.project import rotary
+
+        proj, lib = self._project("Wrapped contour")
+        flat = lib.search("3 mm flat end mill")[0]
+        V = FreeCAD.Vector
+        drawing = proj.doc.addObject("Part::Feature", "ContourDrawing")
+        drawing.Shape = Part.makePolygon([V(35, 20, 0), V(50, 20, 0), V(50, 50, 0), V(35, 50, 0), V(35, 20, 0)])
+        proj.doc.recompute()
+        op, rec = rotary.add_operation(proj, "wrap_contour", "Wrapped contour", lib.assemblies_for_tool(flat.id)[0].id,
+                                       flat.presets[0].id, base=[(drawing, [])],
+                                       params={"depth": -2.0, "step_down": 1.0, "side": "outside"})
+        _lines, moves = rotary.generate(proj, op)
+        cuts = [m for m in moves if m[0] == "cut"]
+        self.assertGreater(len(cuts), 40)
+        self.assertEqual(sorted(set(round(m[3], 6) for m in cuts)), [-2.0, -1.0])
+        for _k, x, y, z in cuts:
+            k = (ROT_STOCK + z) / ROT_STOCK
+            real = Part.makePolygon([V(35, 20 * k, 0), V(50, 20 * k, 0), V(50, 50 * k, 0), V(35, 50 * k, 0),
+                                     V(35, 20 * k, 0)])
+            d = real.distToShape(Part.Vertex(V(x, y * k, 0)))[0]
+            self.assertAlmostEqual(d, 1.5, delta=0.02)
+        _t, _a, issues = proj.preview_gcode()
+        self.assertNotIn("error", [lvl for lvl, _m in issues], issues)
+        drawing.Shape = Part.makePolygon([V(35, 20, 0), V(37, 20, 0), V(37, 22, 0), V(35, 22, 0), V(35, 20, 0)])
+        proj.doc.recompute()
+        with self.assertRaises(Exception):
+            rotary.update_operation(proj, op, side="inside")
+        proj.close()
+
+
 if __name__ == "__main__":
     unittest.main()

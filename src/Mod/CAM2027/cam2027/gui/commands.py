@@ -643,12 +643,35 @@ class WrapEngrave(_Base):
         open_wrap_dialog(proj)
 
 
-def open_wrap_dialog(proj, op=None):
-    """Création ou modification d'une gravure enroulée ; retourne l'opération ou None."""
+class RotaryMachining(_Base):
+    atelier = "axis-a"
+    text = "Rotary machining (A axis)"
+    tooltip = "Wrapped contour or pocket of an unrolled drawing, or rotary 3D finishing of the part: X, Z and A move together (continuous 4th axis, G93)"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        open_wrap_dialog(proj, rotary=True)
+
+
+def open_wrap_dialog(proj, op=None, rotary=False):
+    """Création ou modification d'une gravure enroulée (``rotary`` : contour, poche ou finition 3D rotatifs) ;
+    retourne l'opération ou None."""
     from .wrapdlg import WrapDialog
+    from ..project import rotary as rotarymod
 
     selected = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
-    dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
+    if rotary or (op is not None and proj.registry.get(op.Name, {}).get("kind") in rotarymod.KINDS):
+        from .rotarydlg import RotaryDialog
+
+        dlg = RotaryDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
+    else:
+        dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
     if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
         return None
     try:
@@ -1328,6 +1351,7 @@ COMMANDS = [
     ("CAM2027_StockFixture", StockFixture),
     ("CAM2027_AddOperation", AddOperation),
     ("CAM2027_WrapEngrave", WrapEngrave),
+    ("CAM2027_RotaryMachining", RotaryMachining),
     ("CAM2027_FlatDepth", FlatDepth),
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
@@ -1352,7 +1376,7 @@ WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout"
 STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
-    ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
+    ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave", "CAM2027_RotaryMachining",
                    "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),
