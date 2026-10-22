@@ -619,6 +619,32 @@ class TestUiLogic(unittest.TestCase):
         top = [f for f in half if isinstance(f.Surface, Part.Plane) and f.BoundBox.ZLength < 1e-9][0]
         self.assertAlmostEqual(opsmod._face_shadow(top).Area, 40.0, delta=1e-6)
 
+    def test_pocket_floors_by_depth(self):
+        """Fonds de poche à plusieurs hauteurs (disque WobbleRing : rainures à 142,58, logements d'écrou à
+        141,57 que FreeCAD laissait à 142,58) : regroupés par hauteur ; un trou débouchant dans un fond n'est
+        pas un îlot (la poche 2D peut usiner le contour seul), une colonne de matière l'est."""
+        V = FreeCAD.Vector
+        solid = Part.makeBox(60, 30, 10)
+        solid = solid.cut(Part.makeBox(10, 10, 3, V(5, 5, 7)))                     # fond à 7
+        solid = solid.cut(Part.makeBox(10, 10, 4, V(25, 5, 6)))                    # fond à 6 ...
+        solid = solid.cut(Part.makeCylinder(2, 10, V(30, 10, 0)))                  # ... percé de part en part
+        solid = solid.cut(Part.makeBox(12, 12, 4, V(44, 5, 6)))                    # fond à 6 ...
+        solid = solid.fuse(Part.makeCylinder(2, 4, V(50, 11, 6))).removeSplitter()  # ... avec un îlot
+
+        class Obj(object):
+            Shape = solid
+
+        obj = Obj()
+        base = [(obj, opsmod.pocket_floor_faces(obj))]
+        groups = opsmod.floor_groups(base)
+        self.assertEqual([round(z, 6) for z, _g in groups], [7.0, 6.0])
+        lower = groups[1][1]
+        holed = [(o, [x for x in subs if solid.getElement(x).BoundBox.XMax < 40]) for o, subs in lower]
+        island = [(o, [x for x in subs if solid.getElement(x).BoundBox.XMin > 40]) for o, subs in lower]
+        self.assertFalse(opsmod.floors_have_islands(holed))
+        self.assertTrue(opsmod.floors_have_islands(island))
+        self.assertIsNone(opsmod.floor_groups([(obj, ["Edge1"])]))
+
     def test_undo_removes_an_added_operation(self):
         """Ctrl+Z : l'ajout d'une opération est une étape d'annulation entière. Le document temporaire de la forme
         du ToolBit n'est fermé qu'après la transaction (sinon, dans l'interface, l'opération et son ToolController

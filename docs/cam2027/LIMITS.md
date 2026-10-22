@@ -84,6 +84,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   travers le surplomb). Un fond partiellement couvert est écarté en entier : le sélectionner à la main.
 - La poche FreeCAD (décalage/zigzag) **n'est pas** adaptative ; « adaptative » est
   l'opération Adaptive de FreeCAD (engagement contrôlé 2D, monothread).
+- Poches à plusieurs profondeurs (fonds trouvés ou sélectionnés) : une opération par hauteur de fond (poche,
+  poche 2D, adaptative). Le contour extérieur seul (trous débouchants ouverts) n'est pris que sans sélection,
+  pour la poche 2D et l'adaptative. Ébauche 3D : pas de passe à la hauteur des plats ;
+  un fond à moins de la surépaisseur sous un niveau garde jusqu'à un pas de matière.
 - Surfaçage : faces planes (la pièce entière sélectionnée vaut sans sélection : faces du dessus, sinon dessus du
   brut) ; avec `ClearEdges` (activé par le dialogue) le centre de
   l'outil dépasse juste les bords de la face (la fraise déborde d'un rayon + 0,1 mm).

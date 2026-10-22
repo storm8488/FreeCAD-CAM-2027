@@ -2,6 +2,24 @@
 
 ## Non publié
 
+- **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
+  sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
+  (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par
+  hauteur de fond (« Poche 2D 1 (Z 141.57 mm) »...). Le fond le plus bas comme profondeur finale faisait
+  descendre FreeCAD partout (entailles de 1 mm sur le disque, 40 mm sur le chauffage, trouvées par la
+  matrice). La poche 2D trouve maintenant les fonds seule, comme la poche. Un fond percé d'un trou
+  débouchant est usiné par son contour extérieur (`UseOutline`, le trou reste ouvert : l'anneau de 1,1 mm
+  autour du trou n'accepte pas une fraise de 3 mm), jamais quand un îlot de matière y dépasse. Une profondeur
+  où la fraise ne passe pas est signalée (« Laissé de côté... »). Un îlot est cherché dans toute la colonne
+  au-dessus du trou (un îlot en anneau, vide en son centre, donnait une entaille de 1,6 mm sur le chauffage).
+  Disque, fraise de 3 mm : poche 0,21 -> 0,68 cm³, poche 2D refusée -> 0,69 cm³, adaptative 0,15 -> 0,69 cm³ ;
+  disque, chauffage, plaque, plateau : aucune entaille.
+- **Reste après l'ébauche 3D** (3,2 mm signalé sur le disque) : pas un défaut. Bande de 0,5 mm de
+  surépaisseur latérale le long des parois des logements (le contrôle la compte à la hauteur de la paroi),
+  rainures de 3,1 mm plus étroites que fraise + surépaisseur, coins des hexagones. Surépaisseurs à 0 : cellules
+  à plus de 1 mm 1 262 -> 385 (rainures). Essayé et non gardé : un niveau de plus à la hauteur de chaque face
+  plane (« zones plates » de Fusion) : reste moyen 0,658 -> 0,657 mm, calcul 17 s -> 266 s, entaille de 1,7 mm
+  (coupe juste au-dessus d'un plat, projection fausse).
 - **Ébauche 3D sur une pièce aux nombreuses petites faces** (disque WobbleRing de l'utilisateur, STEP de
   181 faces) : « aucun parcours sur la pièce entière ». Quatre défauts de FreeCAD/OpenCascade, l'un après
   l'autre : projection des faces sur XY en échec (« Wire is not closed », même face par face), contour d'une

@@ -555,18 +555,40 @@ class AddOperation(_Base):
             else:
                 _warn(tr("Nothing to machine found automatically for this strategy: select the faces in the 3D view (click, Ctrl+click), then add the operation."))
                 return
+        label = name.text().strip() or tr(STRATEGIES[k]["label"]).split(" (")[0]
+        parts = [(label, base)]
+        # fonds de poche à plusieurs hauteurs : chacun jusqu'à son fond, comme Fusion. FreeCAD les usine jusqu'au
+        # plus haut ; avec le plus bas comme profondeur finale, il descend partout (entailles de 1 mm sur le
+        # disque WobbleRing, 40 mm sur le chauffage) : une opération par hauteur.
+        groups = opsmod.floor_groups(base) if k in ("pocket", "pocket2d", "adaptive") else None
+        if groups and len(groups) > 1:
+            parts = [(tr("{name} (Z {z} mm)", name=label, z="%.2f" % z), group) for z, group in groups]
         try:
             index_deg = index.value() if index.isEnabled() and index.value() > index.minimum() else None
-            op, rec = proj.add_operation(k, name.text().strip() or tr(STRATEGIES[k]["label"]).split(" (")[0],
-                                         a.id, preset.currentData(), base=base, params=params, index_deg=index_deg)
+            added_ops = []
+            for part_label, part_base in parts:
+                part_params = dict(params)
+                if (not explicit and k in ("pocket2d", "adaptive") and opsmod.floor_groups(part_base)
+                        and not opsmod.floors_have_islands(part_base)):
+                    part_params.setdefault("UseOutline", True)  # trous débouchants laissés ouverts (Fusion)
+                added_ops.append(proj.add_operation(k, part_label, a.id, preset.currentData(), base=part_base,
+                                                    params=part_params, index_deg=index_deg))
             with busy(tr("Computing the toolpaths..."), stoppable=proj):
                 proj.compute()
         except Exception as exc:
             _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
             _after_change()
             return
-        if not explicit and proj.operation_state(op) == "failed":
-            proj.remove_operation(op)
+        skipped = []
+        if not explicit:
+            failed = [o for o, _r in added_ops if proj.operation_state(o) == "failed"]
+            skipped = [o.Label for o in failed]
+            for o in failed:
+                proj.remove_operation(o)
+            added_ops = [(o, r) for o, r in added_ops if o not in failed]
+        if added_ops and skipped:
+            _info(tr("Left out, no toolpath with this tool (too narrow?): {names}", names=", ".join(skipped)))
+        if not added_ops:
             _after_change()
             fit = opsmod.largest_tool_for(base) if k in ("pocket", "pocket2d", "adaptive") else None
             if fit is not None and fit < tool.geometry.diameter:
@@ -575,6 +597,12 @@ class AddOperation(_Base):
                 return
             _warn(tr("This strategy produced no toolpath on the whole part: select the faces or edges to machine, then add the operation again."))
             return
+        if len(added_ops) > 1:
+            _after_change()
+            _info(tr("One operation per pocket depth, each down to its own floor: {names}",
+                     names=", ".join(o.Label for o, _r in added_ops)))
+            return
+        op, rec = added_ops[0]
         if rec["warnings"]:
             _info("\n".join(tr_msg(w) for w in rec["warnings"]))
         _after_change()

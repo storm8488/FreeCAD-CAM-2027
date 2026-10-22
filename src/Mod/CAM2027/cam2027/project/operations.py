@@ -256,7 +256,7 @@ def stock_top_face(stock):
 def auto_geometry(kind, models):
     """Géométrie choisie sans sélection : ``[(objet, sous-éléments)]``, ``[]`` si rien de pertinent, ``None``
     quand la stratégie travaille sur la pièce entière."""
-    if kind in ("pocket", "adaptive"):
+    if kind in ("pocket", "pocket2d", "adaptive"):  # poche 2D : faces planes (fonds trouvés, comme la poche)
         finder = pocket_floor_faces
     elif kind == "millface":
         finder = top_faces
@@ -271,6 +271,58 @@ def auto_geometry(kind, models):
         if subs:
             out.append((obj, subs))
     return out
+
+
+def floor_groups(base, tol=1e-3):
+    """Fonds de poche de ``base`` regroupés par hauteur, du plus haut au plus bas : ``[(z, base)]`` ; None si
+    ``base`` contient autre chose que des faces planes horizontales. FreeCAD usine des fonds sélectionnés
+    ensemble jusqu'au plus haut d'entre eux (disque WobbleRing : logements d'écrou à 141,57 laissés à 142,58)."""
+    import Part
+
+    groups = {}
+    for obj, subs in base or []:
+        for sub in subs:
+            if not sub.startswith("Face"):
+                return None
+            face = obj.Shape.getElement(sub)
+            if not isinstance(face.Surface, Part.Plane) or face.BoundBox.ZLength > 1e-6:
+                return None
+            z = face.BoundBox.ZMin
+            key = next((k for k in groups if abs(k - z) <= tol), z)
+            group = groups.setdefault(key, [])
+            entry = next((e for e in group if e[0] is obj), None)
+            if entry is None:
+                group.append((obj, [sub]))
+            else:
+                entry[1].append(sub)
+    return [(z, groups[z]) for z in sorted(groups, reverse=True)] if groups else None
+
+
+def floors_have_islands(base):
+    """True si un fond de ``base`` entoure de la matière (îlot, tube autour d'un trou...) ; False si ses trous
+    sont vides sur toute la hauteur (trou débouchant d'un logement d'écrou du disque WobbleRing). Sans îlot, la
+    poche 2D et l'adaptative peuvent usiner le contour extérieur seul (``UseOutline``), comme Fusion qui laisse
+    ouvert un trou : le fond seul y est un anneau de 1,1 mm où une fraise de 3 mm ne passe pas. La colonne
+    entière au-dessus du trou est testée (un îlot en anneau est vide en son centre : entaille de 1,6 mm sur le
+    chauffage avec le seul centre)."""
+    import FreeCAD
+    import Part
+
+    for obj, subs in base or []:
+        shape = obj.Shape
+        top = shape.BoundBox.ZMax
+        for sub in subs:
+            face = shape.getElement(sub)
+            z = face.BoundBox.ZMax
+            for w in face.Wires:
+                if w.isSame(face.OuterWire):
+                    continue
+                inner = Part.Face(w)
+                inner.translate(FreeCAD.Vector(0, 0, 1e-3))
+                column = inner.extrude(FreeCAD.Vector(0, 0, top - z + 1.0))
+                if column.common(shape).Volume > 1e-6:
+                    return True
+    return False
 
 
 def largest_tool_for(base, precision=0.05):
