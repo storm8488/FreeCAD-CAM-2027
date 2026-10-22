@@ -117,6 +117,8 @@ class MachineProfile(object):
         self.coolant_options = list(kwargs.pop("coolant_options", ["none"]))
         self.feed_mode_rotary = kwargs.pop("feed_mode_rotary", None)  # "G93" | "G94" | None
         self.notes = kwargs.pop("notes", "")
+        # palpeur : present, tip_diameter_mm, plate_thickness_mm, feed_mm_min, travel_mm, tool_number (project/probe.py)
+        self.probe = dict(kwargs.pop("probe", None) or {})
         rotary = kwargs.pop("rotary", None)
         self.rotary = RotaryAxis.from_dict(rotary) if isinstance(rotary, dict) else (rotary or RotaryAxis())
         if kwargs:
@@ -136,6 +138,7 @@ class MachineProfile(object):
         for f in self.FIELDS:
             d[f] = getattr(self, f)
         d["rotary"] = self.rotary.to_dict()
+        d["probe"] = dict(self.probe)
         return d
 
     @classmethod

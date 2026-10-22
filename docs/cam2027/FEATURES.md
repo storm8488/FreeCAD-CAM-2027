@@ -36,9 +36,12 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Gravure | disponible | `Path.Op.Engrave` | auto (`test_helix_and_engrave`) | — |
 | Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |
+| Perçage intelligent (reconnaissance des trous, pointage, perçage, chanfrein, filetage) | disponible | `project/holes.py`, Usiner > Perçage intelligent ; cycles simulés au contrôle matière | auto (`test_nuit_s2.TestHoles` : 6 trous de 3 tailles reconnus, 7 opérations, carte de hauteur, chanfrein) + scénario `s2-holes` | taraudage (pas de type taraud), trous inclinés, lamages à la fraise |
 | Alésage hélicoïdal | disponible | `Path.Op.Helix` | auto (`test_helix_and_engrave`) | — |
 | Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
-| Attaches, rampes, dogbones | disponible | habillages FreeCAD `Path.Dressup.Tags`, `RampEntry`, `DogboneII` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`, `test_dogbones`) + visuel | entrées/sorties en arc (LeadInOut), positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
+| Attaches, rampes, dogbones | disponible | habillages FreeCAD `Path.Dressup.Tags`, `RampEntry`, `DogboneII` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`, `test_dogbones`) + visuel | positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |
+| Motifs de parcours (grille, cercle, moins de changements d'outil) | disponible | habillage CAM2027 `project/patterns.py` (principe de `Path.Dressup.Array`), Usiner > Motif | auto (`test_nuit_s2.TestPatterns` : 3 × 2 poches dans la carte de hauteur, cercle, ordre par outil) + scénario `s2-pattern` | motif commun copie par copie, miroir, réglages dans l'éditeur |
+| Entrées / sorties en arc (horizontal, vertical, droite) | disponible | habillage `LeadInOut` (1.0 et 1.1) via `project/leads.py`, contrôle de collision et départ déplacé (1.1) | auto (`test_nuit_s2.TestLeads` : arc R3 tangent, aucune entaille, 1.0 / 1.1) + scénario `s2-leads` | arc vertical et balayage ≠ 90° sur 1.0 |
 
 ## Opérations 3D
 
@@ -87,6 +90,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Collisions (outil, porte-outil, brides) | disponible | Simuler > Contrôle matière et collisions (`project/sim.py`) : enveloppe de l'assemblage (partie taillée, queue jusqu'à la sortie, tronçons du porte-outil) ; matière au-dessus de la longueur de coupe, porte-outil dans la matière (brut restant + pièce), brides (boîtes du montage, rapides compris), rapides dans la matière ; opération, n° de commande et position de la pointe ; marqueurs rouges ; erreurs bloquantes à l'export si les parcours n'ont pas changé, sinon « non vérifiable » | auto (`test_sim.py` : collisions connues de chaque type, projet propre, « non contrôlé » sans bride / sans porte-outil, export bloqué puis non vérifiable) | parois verticales et contre-dépouilles, 4e axe, brides non rectangulaires, tronçons coniques au rayon maximal |
 | Postprocesseur identifié, unités, axes, commandes autorisées | disponible | `export.py` | auto | listes de codes pour autres contrôleurs |
 | Aperçu G-code, fiche de préparation | disponible | dialogue Export | visuel | PDF |
+| Palpage de l'origine (surface Z, coin, centre de trou) | disponible | `project/probe.py` (G38.2, G10 L20 / G92), Usiner > Palper l'origine, contrôles dans `export.verify` | auto (`test_nuit_s2.TestProbe*` : G-code ligne à ligne avant et après postprocesseur, refus sans palpeur / broche en marche / sans avance) + scénario `s2-probe` | coin intérieur, mesure du diamètre, inspection |
 | Transfert volontaire vers CNCjs | disponible (manuel) | fichier `.nc` | — | aucun envoi automatique (voulu) |
 | Sauvegarde / réouverture | disponible | `.FCStd` + `CAM2027Project` | auto | tests de migration de données |
 

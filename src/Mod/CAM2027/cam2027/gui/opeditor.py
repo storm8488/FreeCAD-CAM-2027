@@ -17,6 +17,7 @@ from .labels import preset_label
 from ..tools import bridge
 from ..project.operations import STRATEGIES, param_kind, read_params, thread_names
 from ..project import paramspec, undo
+from ..project import leads as _leads
 from . import state, panels, theme
 
 
@@ -27,6 +28,8 @@ _DRESSUP_CHOICES = {
     "Style": ("Dogbone", "T-bone horizontal", "T-bone vertical", "T-bone long edge", "T-bone short edge"),
     "Side": ("Left", "Right"),
     "Incision": ("adaptive", "fixed", "custom"),
+    "StyleIn": _leads.styles(),
+    "StyleOut": _leads.styles(),
 }
 _DRESSUP_LABELS = {
     "Style": "Bone style",
@@ -41,6 +44,12 @@ _DRESSUP_LABELS = {
     "RampFeedRate": "Ramp feed rate",
     "UseStartDepth": "Only below a start depth",
     "DressupStartDepth": "Ramp start depth",
+    "StyleIn": "Lead-in style",
+    "RadiusIn": "Lead-in radius",
+    "AngleIn": "Lead-in sweep angle",
+    "StyleOut": "Lead-out style",
+    "RadiusOut": "Lead-out radius",
+    "AngleOut": "Lead-out sweep angle",
 }
 
 
@@ -364,8 +373,10 @@ class OperationEditor(QtWidgets.QDialog):
         info.setWordWrap(True)
         lay.addWidget(info)
         existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
-        for key in ("tags", "ramp", "dogbone"):
+        for key in ("tags", "ramp", "dogbone", "leads"):
             if key == "tags" and self.kind != "profile":
+                continue
+            if key == "leads" and self.kind not in ("profile", "slot"):
                 continue
             if key == "dogbone" and self.kind not in ("profile", "pocket", "adaptive"):
                 continue
@@ -403,7 +414,6 @@ class OperationEditor(QtWidgets.QDialog):
 
     def _apply_dressups(self):
         from ..project import dressups as dressupmod
-        from ..project.operations import set_params
 
         existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
         for key, (box, widgets) in self.dressup_boxes.items():
@@ -416,7 +426,7 @@ class OperationEditor(QtWidgets.QDialog):
                 self.proj.add_dressup(self.op, key, params=params or None, count=count)
             elif wanted:
                 obj = existing[key]
-                set_params(obj, params)
+                dressupmod.set_dressup_params(obj, params)
                 if key == "tags" and count is not None and (count != len(obj.Positions) or params):
                     obj.Proxy.generateTags(obj, int(count))
             elif key in existing:

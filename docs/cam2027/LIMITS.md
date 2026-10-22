@@ -128,8 +128,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   indexé par son nom. Positions des attaches réparties automatiquement (nombre, largeur,
   hauteur, angle, rayon réglables ; déplacement individuel = panneau FreeCAD « Holding
   Tags » dans l'atelier CAM standard). Dogbones : angles détectés sur le parcours calculé
-  (styles dogbone / T-bone, longueur adaptative, fixe ou personnalisée). Pas d'entrées/sorties
-  en arc (LeadInOut : propriétés différentes entre 1.0 et 1.1, non exposé), pas de rampe sur
+  (styles dogbone / T-bone, longueur adaptative, fixe ou personnalisée). Entrées/sorties en arc
+  (`project/leads.py`, habillage `LeadInOut`) : contours et rainures seulement (pas la poche en zigzag :
+  FreeCAD poserait un arc à chaque segment, dans les parois) ; sur 1.0, arc horizontal d'un quart de tour
+  seulement (angle de balayage ignoré et signalé, arc vertical refusé) et pas de déplacement du point de départ
+  (un arc qui toucherait la pièce est refusé, avec la position) ; contrôle des collisions fait à l'ajout et à la
+  modification de l'habillage, pas quand l'opération de base change ensuite (le contrôle matière le voit) ;
+  arc vertical d'une rainure : prolonge la rainure du rayon à chaque bout (comme Fusion). Pas de rampe sur
   perçage/hélice/filetage. Dupliquer une opération ne copie
   pas ses habillages.
 
@@ -289,3 +294,27 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   coupés deviennent des segments ; entrée de chaque morceau par plongée verticale (pas d'hélice ni de rampe) ; les
   liaisons recalculées passent par la hauteur de dégagement.
 
+- Motifs de parcours (Usiner > Motif, `project/patterns.py`) : copies du parcours calculé, sans contrôle de la
+  géométrie sous chaque copie (une copie posée hors de la pièce ou sur un autre relief usine quand même : le
+  contrôle matière le montre) ; translation dans le plan XY ou rotation autour de Z seulement (pas de copie en Z,
+  pas de miroir, pas d'aléa) ; une copie du motif par opération (pas de motif commun à plusieurs opérations
+  usiné copie par copie) ; « moins de changements d'outil » regroupe les opérations choisies par outil, dans
+  l'ordre de leur première apparition, sans savoir si une opération d'un autre outil doit passer entre elles
+  (perçage avant taraudage : à vérifier dans la liste) ; réglages modifiables ensuite dans les propriétés de
+  l'habillage (pas encore dans l'éditeur d'opération).
+
+- Perçage intelligent (`project/holes.py`) : trous d'axe Z ouverts par le dessus seulement (pas de trous
+  inclinés ni par en dessous, pas de trous partiels) ; un lamage ou un trou étagé donne un groupe par diamètre,
+  chacun usiné depuis son propre haut (pas de lamage à la fraise) ; taraudage (`Path.Op.Tapping`) non proposé :
+  la bibliothèque n'a pas de type « taraud » (filetage à la fraise à fileter seulement, désignation choisie à la
+  main : la géométrie STEP ne dit pas qu'un trou est taraudé) ; forets choisis au diamètre exact (± 0,02 mm),
+  pas d'alésoir ; pointage à 0,9 × diamètre (pas de valeur Fusion documentée) ; un trou borgne garde le cône
+  de pointe du foret sous son fond plat (comme une vraie pièce percée). Les cycles de perçage sont simulés sans
+  les remontées de débourrage (même matière enlevée).
+
+- Palpage de l'origine (`project/probe.py`) : GRBL seulement (G38.2, G10 L20 / G92, sans variables) ; centre de
+  trou par le diamètre nominal (pas de mesure des deux côtés) ; coin palpé par l'extérieur seulement (pas de coin
+  intérieur ni de bossage) ; aucune vérification que le trajet de palpage est libre (l'opérateur place le
+  palpeur ; un contact absent déclenche l'alarme GRBL) ; pas d'inspection de surface ni d'alignement (Fusion
+  *Part Alignment*) ; les réglages du palpeur se saisissent dans le dialogue de palpage, pas encore dans le
+  dialogue Profil machine.

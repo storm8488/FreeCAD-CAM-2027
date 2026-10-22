@@ -37,6 +37,54 @@
   1 314 mm de coupe gardés sur 17 431, aucune entaille, aucun rapide dans la matière, 0,5 s de calcul de la
   reprise (rapport affiché dans l'onglet). Plaque à rainure étroite : 220 points de coupe gardés sur 3 380,
   même volume enlevé que la reprise complète.
+- **[S2]** **Palper l'origine** (Fusion *Probe WCS*) : Usiner > Palper l'origine ajoute en tête du programme une
+  opération de palpage GRBL : surface Z, coin (avant/arrière, gauche/droite : Z, puis X et Y par l'extérieur) ou
+  centre de trou (un contact par axe et le diamètre nominal : GRBL n'a pas de variables pour faire la moyenne de
+  deux contacts). Déplacements relatifs (G91) tant que l'axe n'est pas connu, `G38.2` avec avance et course,
+  origine fixée par `G10 L20 P1..P6` (repère G54..G59 enregistré) ou `G92`, en tenant compte du rayon de la
+  bille et de l'épaisseur de la plaque de touche, broche arrêtée (M5). Réglages du palpeur dans le profil
+  machine (`probe` : présence, diamètre de bille, plaque, avance, course, numéro d'outil), saisis dans le
+  dialogue ; le palpeur apparaît comme un outil dans la fiche. `export.verify` refuse un palpage sur un profil
+  sans palpeur, broche en marche, sans avance, ou un `G10` sans L2/L20 et P1..P6, et signale une course plus
+  longue que celle du palpeur ; le contrôle matière ne simule pas le palpage. G-code vérifié ligne à ligne en
+  test, après le postprocesseur GRBL.
+- **[S2]** **Perçage intelligent** (Fusion *Hole Recognition*) : Usiner > Perçage intelligent reconnaît les
+  trous verticaux ouverts par le dessus (faces cylindriques regroupées par axe et rayon, tour complet, centre
+  vide : diamètre, haut, fond, débouchant ou borgne, chanfrein d'entrée = cône coaxial) et les regroupe par
+  taille. Séquence proposée, une opération par étape et par taille, dans l'ordre pointage → perçage → chanfrein →
+  filetage : pointage à l'outil en V à 90° (diamètre 0,9 × trou), foret au diamètre à 0,02 mm (G83 au-delà de
+  3 D, pas = D ; débouchant : pointe entière sous le fond + 0,5 mm ; borgne : pointe au fond) ou, sans foret,
+  alésage hélicoïdal à la plus grosse fraise qui passe, chanfrein par plongée d'un outil en V du même angle
+  jusqu'au diamètre du chanfrein, filetage à la fraise à fileter si un filet est choisi pour la taille. Les
+  trous sans outil sont signalés. Un alésage hélicoïdal sous le dessus du brut commence au-dessus du brut
+  quand la colonne du trou ne contient que du brut (l'hélice de FreeCAD descend sinon en rapide dans le brut
+  restant : 10 rapides dans la matière sur le disque WobbleRing, 36 sur le chauffage, 0 maintenant). Un lamage
+  posé sur un trou plus petit a un fond (pas « débouchant », vu sur le chauffage). Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
+  G98/G99) : ils n'enlevaient rien avant. Plaque de test à 3 diamètres (3 débouchant, 5 borgne, 8 débouchant
+  chanfreiné) : 7 opérations, trous au bon diamètre et à la bonne profondeur dans la carte de hauteur, chanfrein
+  à 45° à 0,05 mm, aucune entaille.
+- **[S2]** **Motifs de parcours** (Aspire *Array Copy Toolpath*, Fusion *Pattern*) : Usiner > Motif copie le
+  parcours calculé d'une ou plusieurs opérations en grille (colonnes, lignes, distance entre colonnes / lignes,
+  ordre en serpentin) ou en cercle (nombre de copies, centre, angle total ; 360° = tour complet sans doublon).
+  Habillage CAM2027 `<op>_DressupPattern` (`project/patterns.py`, même principe que `Path.Dressup.Array` de
+  FreeCAD 1.1 : chaque copie transformée par `PathUtils.applyPlacementToPath`, arcs compris), disponible aussi
+  sur 1.0 (FreeCAD 1.0 n'a pas cet habillage), toujours au-dessus des autres habillages, remontée à la hauteur de
+  dégagement entre deux copies. Plusieurs opérations : « Moins de changements d'outil » (coché par défaut, comme
+  Aspire) regroupe les opérations par outil. Plaque de test, poche 20 × 14 répétée 3 × 2 : les 6 poches au fond
+  dans la carte de hauteur, rien entre elles, volume = 6 × celui de la poche, aucune entaille, un seul
+  changement d'outil dans le G-code ; trois opérations 6 / 3 / 6 mm : ordre 6, 6, 3 (1 changement au lieu de 2).
+- **[S2]** **Entrées et sorties en arc** (Fusion : rayon horizontal, angle de balayage, arc vertical) : nouvelle
+  case « Entrée et sortie » dans l'onglet « Entrée, sortie et attaches » des contours et rainures (et de la
+  passe de profil d'une poche = contour intérieur sur le fond). Type d'entrée / de sortie (arc horizontal, arc
+  vertical, droite tangente ou perpendiculaire), rayon, angle de balayage. Habillage `LeadInOut` de FreeCAD,
+  encapsulé dans `project/leads.py` (propriétés 1.1 `StyleIn/RadiusIn/AngleIn`, traduites en `StyleOn/Length`
+  sur 1.0 ; arc vertical et angle ≠ 90° demandent 1.1). Les entrées restent au-dessus des attaches et de la
+  rampe. Contrôle des collisions : chaque mouvement ajouté est vérifié contre la carte de hauteur du dessus de
+  la pièce sur la zone des entrées (aucune colonne plus haute que la pointe à moins d'un rayon d'outil ; 1,1 s
+  sur le chauffage Vz330, 1 523 commandes) ; sur 1.1, le point de départ est déplacé le long
+  du parcours avec recouvrement (`OffsetIn/OffsetOut`) tant qu'un arc toucherait la pièce, sinon refus avec la
+  position. La poche en zigzag n'en a pas (arcs dans les parois : entaille de 4,2 mm mesurée). Plaque de test,
+  contour R3 : premier mouvement de coupe = arc de R3 tangent au contour à chaque passe, aucune entaille.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par
