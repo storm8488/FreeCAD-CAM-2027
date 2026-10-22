@@ -72,7 +72,7 @@ def _resolution(bounds, wanted):
 
 def remaining_stock(project, tops, resolution=DEFAULT_RESOLUTION):
     """Carte de hauteur du brut après les parcours ``tops`` (dans l'ordre)."""
-    from . import sim, dressups as dressupmod
+    from . import sim, dressups as dressupmod, holes as holesmod
 
     if getattr(project.job.Stock, "Radius", None) is not None:
         raise UserError("rest machining: round stock (4th axis) is not supported, only box stock")
@@ -83,7 +83,10 @@ def remaining_stock(project, tops, resolution=DEFAULT_RESOLUTION):
         rec = project.registry.get(dressupmod.base_operation(obj).Name) or {}
         _asm, tool, _holder = project.library.resolve_assembly(rec["assembly_id"])
         profile, _note = sim.ToolProfile.from_library_tool(tool)
-        items.append((obj.Path.Commands, profile))
+        commands = obj.Path.Commands
+        if holesmod.has_cycles(commands):  # cycles de perçage : mouvements équivalents, comme le contrôle matière
+            commands = holesmod.expand_cycles(commands)
+        items.append((commands, profile))
     sim.simulate_paths(zmap, items)
     return zmap
 

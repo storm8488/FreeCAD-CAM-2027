@@ -38,6 +38,9 @@
 - **[B2]** **Rapport du contrôle matière quand rien n'est simulé** (toutes les opérations sur l'axe A, palpage seul,
   outils inconnus) : il annonçait « aucune entaille trouvée sur le dessus de la pièce ». Il dit maintenant « aucune
   opération simulée : entailles non contrôlées ».
+- **[B2]** **Reprise de matière après un perçage en cycles** : le brut restant simulait les opérations précédentes
+  sans développer les cycles de perçage (G81, G83… ignorés), contrairement au contrôle matière : les trous percés
+  restaient pleins dans le brut de la reprise. Cycles développés en mouvements équivalents (`holes.expand_cycles`).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

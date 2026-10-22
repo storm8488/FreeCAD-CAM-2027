@@ -198,5 +198,47 @@ class TestReport(unittest.TestCase):
         self.assertIn("No gouge found", material_report_text(rep))
 
 
+class TestRestStock(unittest.TestCase):
+    def test_drilling_cycles_remove_stock_for_rest_machining(self):
+        """Reprise de matière après un perçage en cycles (G81) : les trous sont enlevés du brut restant, comme au
+        contrôle matière (avant : cycles ignorés, brut intact au droit des trous)."""
+        import Path as P
+        from cam2027.project import rest
+        from cam2027.tools.library import starter_library
+
+        lib = starter_library()
+        drill = lib.search("3 mm drill")[0]
+
+        class Obj(object):
+            Name = "Drill"
+            Path = P.Path([P.Command("G0", {"X": 10.0, "Y": 10.0, "Z": 15.0}), P.Command("G99"),
+                           P.Command("G81", {"X": 10.0, "Y": 10.0, "Z": -5.0, "R": 12.0, "F": 300.0}),
+                           P.Command("G81", {"X": 30.0, "Y": 20.0}), P.Command("G0", {"Z": 15.0})])
+
+        class BoxStock(object):
+            pass
+
+        class Job(object):
+            Stock = BoxStock()
+
+        class Lib(object):
+            def resolve_assembly(self, _aid):
+                return None, drill, None
+
+        class Proj(object):
+            job = Job()
+            library = Lib()
+            registry = {"Drill": {"assembly_id": "a"}}
+
+            def stock_bounds(self):
+                return {"xmin": 0.0, "ymin": 0.0, "xmax": 40.0, "ymax": 30.0, "zmax": 11.0}
+
+        zmap = rest.remaining_stock(Proj(), [Obj()], resolution=0.25)
+        for x, y in ((10.0, 10.0), (30.0, 20.0)):
+            i, j = int((x - zmap.x0) / zmap.res), int((y - zmap.y0) / zmap.res)
+            self.assertLess(float(zmap.top[i, j]), -4.0, (x, y))
+        self.assertAlmostEqual(float(zmap.top.max()), 11.0)
+
+
 if __name__ == "__main__":
     unittest.main()
