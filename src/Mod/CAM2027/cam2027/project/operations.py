@@ -555,10 +555,92 @@ def patch_surface_keepalive():
 
     def simplify(line, tolerance=1e-4):
         keep_gui_alive()
-        return original(line, tolerance=tolerance)
+        if len(line) < SIMPLIFY_NUMPY_MIN:
+            return original(line, tolerance=tolerance)
+        return simplify_3d_line(line, tolerance)
 
     simplify.cam2027_patched = True
     PathUtils.simplify3dLine = simplify
+    _patch_pattern_edges()
+
+
+#: en dessous (points d'une ligne ou d'une plage), Douglas-Peucker en Python comme FreeCAD : numpy y coûte plus
+SIMPLIFY_NUMPY_MIN = 64
+
+
+def simplify_3d_line(line, tolerance=1e-4):
+    """``PathUtils.simplify3dLine`` de FreeCAD (Douglas-Peucker, mêmes points gardés) avec les distances des
+    longues plages calculées par numpy : 13 millions d'appels à ``distanceToLineSegment`` (7,5 s) sur la
+    finition 3D du chauffage Vz330."""
+    import numpy as np
+
+    n = len(line)
+    pts = np.array([(v.x, v.y, v.z) for v in line], dtype=float)
+    keep = []
+    stack = [(0, n - 1)]
+    while stack:
+        start, end = stack.pop()
+        if end - start < 2:
+            keep.extend(range(start, end))
+            continue
+        if end - start < SIMPLIFY_NUMPY_MIN:
+            index, distance = 0, 0.0
+            a, b = line[start], line[end]
+            for i in range(start + 1, end):
+                d = line[i].distanceToLineSegment(a, b).Length
+                if d > distance:
+                    index, distance = i, d
+        else:
+            a, b = pts[start], pts[end]
+            seg = b - a
+            q = pts[start + 1:end]
+            l2 = float(seg.dot(seg))
+            if l2 == 0.0:
+                closest = a
+            else:
+                t = np.clip((q - a).dot(seg) / l2, 0.0, 1.0)
+                closest = a + t[:, None] * seg
+            d = np.sqrt(((closest - q) ** 2).sum(axis=1))
+            k = int(np.argmax(d))
+            index, distance = start + 1 + k, float(d[k])
+        if distance > tolerance:
+            stack.append((index, end))
+            stack.append((start, index))
+        else:
+            keep.append(start)
+    keep.append(n - 1)
+    return [line[i] for i in keep]
+
+
+class _CachedEdges(object):
+    """Composé de passes vu par les fonctions de motif de FreeCAD : ``compGeoShp.Edges[i]`` dans leur boucle
+    reconstruit à chaque fois la liste de toutes les arêtes (coût quadratique : 5,2 s sur le chauffage Vz330) ;
+    la liste est lue une fois."""
+
+    def __init__(self, shape):
+        self._shape = shape
+        self.Edges = shape.Edges
+
+    def __getattr__(self, name):
+        return getattr(self._shape, name)
+
+
+def _patch_pattern_edges():
+    import Path.Op.SurfaceSupport as support
+
+    for name in ("pathGeomToLinesPointSet", "pathGeomToZigzagPointSet", "pathGeomToCircularPointSet",
+                 "pathGeomToSpiralPointSet"):
+        original = getattr(support, name, None)
+        if original is None or getattr(original, "cam2027_patched", False):
+            continue
+
+        def wrapper(*args, _original=original):
+            if args and hasattr(args[-1], "Edges") and not isinstance(args[-1], _CachedEdges):
+                args = args[:-1] + (_CachedEdges(args[-1]),)
+            return _original(*args)
+
+        wrapper.cam2027_patched = True
+        setattr(support, name, wrapper)
 
 
 def _all_models_stl(group, types, obj, ocl):

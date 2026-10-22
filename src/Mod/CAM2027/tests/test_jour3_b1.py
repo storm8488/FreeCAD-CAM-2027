@@ -90,5 +90,51 @@ class TestMultiBodySurface(unittest.TestCase):
             self.assertNotIn(5.0, [round(z, 3) for z in zs], kind)
 
 
+class TestSurfaceSpeed(unittest.TestCase):
+    """Accélérations de la finition 3D : mêmes points que FreeCAD."""
+
+    def test_simplify_same_points_as_freecad(self):
+        import math
+        import random
+
+        from cam2027.project import operations
+
+        rnd = random.Random(3)
+        for n in (3, 40, 63, 64, 65, 500, 6000):
+            # ligne de balayage : relief lisse, plats, marches et bruit d'OpenCamLib
+            line = []
+            for i in range(n):
+                x = -150.0 + 300.0 * i / max(n - 1, 1)
+                z = 5.0 * math.sin(x / 7.0) if x < 0 else (10.0 if x < 60 else 3.0)
+                line.append(FreeCAD.Vector(x, 20.0, z + rnd.uniform(-2e-4, 2e-4)))
+            for tol in (1e-4, 1e-3, 0.01):
+                expected = _freecad_simplify(line, tol)
+                got = operations.simplify_3d_line(line, tol)
+                self.assertEqual([(v.x, v.y, v.z) for v in got], [(v.x, v.y, v.z) for v in expected], (n, tol))
+
+
+def _freecad_simplify(line, tolerance):
+    """Copie de ``PathUtils.simplify3dLine`` de FreeCAD 1.1.4 (référence, non patchée)."""
+    stack = [(0, len(line) - 1)]
+    results = []
+    while stack:
+        start, end = stack.pop()
+        if end - start < 2:
+            results.extend(line[start:end])
+            continue
+        index, distance = 0, 0.0
+        for i in range(start + 1, end):
+            d = line[i].distanceToLineSegment(line[start], line[end]).Length
+            if d > distance:
+                index, distance = i, d
+        if distance > tolerance:
+            stack.append((index, end))
+            stack.append((start, index))
+        else:
+            results.append(line[start])
+    results.append(line[-1])
+    return results
+
+
 if __name__ == "__main__":
     unittest.main()

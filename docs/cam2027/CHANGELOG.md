@@ -12,6 +12,11 @@
   écarté que si la matière de **son** corps le recouvrait ; le fond de la cavité d'un socle fermée par un couvercle
   (autre corps) était choisi et vidé à travers le couvercle. La matière de tous les corps du job compte maintenant
   (`operations.pocket_floor_faces(..., others)`).
+- **[B1]** Finition 3D plus rapide, parcours identique (même G-code octet pour octet) : la simplification des lignes
+  de FreeCAD (Douglas-Peucker, 13 millions d'appels Python sur le chauffage) calcule les longues plages avec
+  numpy, et les fonctions de motif (lignes, zigzag, cercles, spirale) lisent la liste des arêtes une fois au lieu
+  de la reconstruire à chaque arête. Plateau `bitTray3030+v7` : 23,0 / 25,5 s → 11,0 / 12,1 s ; chauffage :
+  ≈ −3 % (OpenCamLib, déjà parallèle sur tous les cœurs, domine).
 
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
