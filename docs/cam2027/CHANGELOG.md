@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **[S5]** **Texture** (Aspire « Texture Toolpath ») : Usiner > Texture remplit un vecteur fermé de coups de
+  gouge courts en rangées décalées (boule ou V-bit), longueur et profondeur tirées au hasard autour des valeurs
+  (numéro de motif = graine : même texture à chaque calcul), chaque coup plongeant en arc ; près du bord, un
+  coup est coupé là où la fraise ne resterait plus entière dans la zone. Disque R18 au V-bit 60° : rien coupé
+  hors du disque (carte simulée à 0,1 mm), jamais plus profond que la profondeur maximale tirée.
 - **[S5]** **Moulure et cannelures** (Aspire « Moulding » et « Fluting ») : Usiner > Moulure balaie à la fraise
   boule une section (quart-de-rond, gorge, chanfrein, doucine ; largeur, profondeur, côté) le long d'un vecteur
   du dessin, en passes parallèles au rail au pas latéral demandé, paliers d'ébauche en option ; la hauteur de

@@ -471,6 +471,36 @@ class TestDecor(unittest.TestCase):
             self.assertAlmostEqual(float(zmap.top[i, j - 1:j + 2].min()), expected, delta=0.05, msg=x)
         self.assertGreaterEqual(float(zmap.top.min()), -2.0 - 0.02)
 
+    def test_texture_inside_region(self):
+        """Texture au V-bit 60° dans un disque R18 : rien coupé hors du disque, jamais plus profond que la
+        profondeur maximale tirée, une bonne part du disque texturée, même texture pour la même graine."""
+        from cam2027.project import decor, vectors
+
+        lib = starter_library()
+        proj = frame_project("Texture", lib, 100.0, 40.0)
+        disc = vectors.add_vector(proj, Part.Compound([Part.Wire(Part.makeCircle(18.0, V(50, 20, 0)))]), "Disc")
+        vbit, vasm = tool_ids(lib, "V-bit", lambda t: t.geometry.tip_included_angle_deg == 60.0)
+        face = vectors.faces_of(disc.Shape)
+        hw = lambda d: decor.tool_half_width(vbit, d)
+        a = decor.texture_strokes(face, 3.0, 10.0, 1.0, hw, 0.3, seed=7)
+        self.assertEqual(a, decor.texture_strokes(face, 3.0, 10.0, 1.0, hw, 0.3, seed=7))
+        self.assertNotEqual(a, decor.texture_strokes(face, 3.0, 10.0, 1.0, hw, 0.3, seed=8))
+        op, _rec = decor.add_texture(proj, "Texture", vasm.id, vbit.presets[0].id, disc, 3.0, 10.0, 1.0, 0.3, seed=7)
+        self.assertGreater(len(op.Path.Commands), 100)
+        proj.material_check(resolution=0.1)
+        zmap = proj.last_zmap
+        import numpy as np
+
+        X, Y = np.meshgrid(zmap.xs, zmap.ys, indexing="ij")
+        r = np.hypot(X - 50.0, Y - 20.0)
+        cut = zmap.top < -0.01
+        self.assertGreater(int(cut.sum()), 0)
+        self.assertLessEqual(float(r[cut].max()), 18.0 + 0.05)  # rien hors du disque
+        self.assertGreaterEqual(float(zmap.top.min()), -1.3 - 0.02)
+        # traits de ~1 mm tous les 3 mm : environ un quart du disque ; coups coupés au bord, pas jetés
+        self.assertGreater(float(cut[r < 15.0].mean()), 0.15)
+        self.assertGreater(float(cut[(r > 16.0) & (r < 18.0)].mean()), 0.05)
+
 V = FreeCAD.Vector
 
 

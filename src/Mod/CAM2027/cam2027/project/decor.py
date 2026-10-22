@@ -10,6 +10,11 @@ descend sur la section (*drop cutter*) : la boule touche la section sans jamais 
 
 **Cannelures** : chaque vecteur ouvert est suivi à profondeur variable : rampe de 0 à la profondeur sur une
 longueur de départ, palier, rampe de retour à 0 sur une longueur de fin (V-bit ou boule : la largeur suit).
+
+**Texture** : coups de gouge courts dans une zone fermée, en rangées décalées ; longueur et profondeur tirées au
+hasard autour des valeurs demandées (graine fixe : même texture à chaque calcul) ; chaque coup plonge en arc
+(profondeur maximale au milieu). Près du bord, un coup est coupé là où la fraise, à sa profondeur, ne
+reste plus entière dans la zone (plongée ou remontée verticale à la coupure).
 """
 
 import math
@@ -21,6 +26,7 @@ from ..i18n import UserError
 DECOR_PREFIX = "CAM2027Decor"
 MOULDING_KIND = "moulding"
 FLUTING_KIND = "fluting"
+TEXTURE_KIND = "texture"
 
 #: sections prédéfinies : nom -> fonction(largeur, profondeur) -> points (u, z)
 PROFILES = ("quarter_round", "cove", "chamfer", "ogee")
@@ -241,3 +247,75 @@ def add_fluting(proj, name, assembly_id, preset_id, rail_objs, depth, ramp_start
 
     params = {"rails": [o.Name for o in rail_objs], "depth": depth, "ramp_start": ramp_start, "ramp_end": ramp_end}
     return add_decor_operation(proj, FLUTING_KIND, name, assembly_id, preset_id, lines, params)
+
+
+def tool_half_width(tool, depth):
+    """Demi-largeur de la trace de l'outil à ``depth`` mm sous le dessus (boule, V-bit, plate)."""
+    g = tool.geometry
+    r = g.diameter / 2.0
+    if tool.tool_type == "ballend":
+        return math.sqrt(max(0.0, r * r - max(0.0, r - depth) ** 2)) if depth < r else r
+    angle = g.tip_included_angle_deg
+    if angle:
+        tip = float(getattr(g, "tip_diameter", 0.0) or 0.0) / 2.0
+        return min(r, tip + depth * math.tan(math.radians(float(angle)) / 2.0))
+    return r
+
+
+def texture_strokes(face, spacing, length, depth, half_width, variation=0.3, seed=1, step=0.25, z_top=0.0):
+    """Coups de gouge ``[[(x, y, z)]]`` dans ``face`` (plane, à Z 0) : rangées horizontales tous les
+    ``spacing`` mm, décalées d'une demi-longueur une rangée sur deux ; longueur et profondeur ×(1 ± variation)
+    au hasard ; ``half_width(profondeur)`` = demi-largeur de la trace (fraise entière dans la zone)."""
+    import random
+    import Part
+
+    if spacing <= 0 or length <= 0 or depth <= 0:
+        raise UserError("texture: spacing, stroke length and depth must be above 0")
+    rnd = random.Random(seed)
+    bb = face.BoundBox
+    V = FreeCAD.Vector
+    outline = Part.Compound(face.Edges)
+    strokes = []
+    row = 0
+    y = bb.YMin + spacing / 2.0
+    while y < bb.YMax:
+        x = bb.XMin + (length / 2.0 if row % 2 else 0.0) - rnd.random() * length / 2.0
+        while x < bb.XMax:
+            L = length * (1.0 + variation * (2 * rnd.random() - 1))
+            d = depth * (1.0 + variation * (2 * rnd.random() - 1))
+            d = min(d, depth * (1.0 + variation))
+            n = max(2, int(math.ceil(L / step)))
+            pts = [(x + L * k / n, y, z_top - d * math.sin(math.pi * k / n)) for k in range(n + 1)]
+            run = []  # parties du coup où la fraise, à la profondeur du point, reste entière dans la zone
+            for px, py, pz in pts:
+                v = Part.Vertex(V(px, py, 0))
+                if face.distToShape(v)[0] <= 1e-6 and outline.distToShape(v)[0] >= half_width(z_top - pz):
+                    run.append((px, py, pz))
+                    continue
+                if len(run) >= 2:
+                    strokes.append(run)
+                run = []
+            if len(run) >= 2:
+                strokes.append(run)
+            x += L + spacing * 0.5
+        y += spacing
+        row += 1
+    return strokes
+
+
+def add_texture(proj, name, assembly_id, preset_id, region_obj, spacing=3.0, length=12.0, depth=1.0, variation=0.3,
+                seed=1):
+    """Texture dans le vecteur fermé ``region_obj`` (boule ou V-bit). Retourne ``(op, record)``."""
+    from . import vectors
+
+    face = vectors.faces_of(region_obj.Shape)
+
+    def lines(tool, z_top):
+        if tool.tool_type not in ("ballend", "vbit", "engrave"):
+            raise UserError("texture needs a ball end mill or a V-bit")
+        return texture_strokes(face, spacing, length, depth, lambda d: tool_half_width(tool, d), variation, seed,
+                               z_top=z_top)
+
+    params = {"region": region_obj.Name, "spacing": spacing, "length": length, "depth": depth,
+              "variation": variation, "seed": seed}
+    return add_decor_operation(proj, TEXTURE_KIND, name, assembly_id, preset_id, lines, params)

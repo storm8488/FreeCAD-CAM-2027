@@ -1156,5 +1156,16 @@
   "fluting: the ramps ({r:.1f} mm) are longer than the vector ({l:.1f} mm)": "cannelures : les rampes ({r:.1f} mm) sont plus longues que le vecteur ({l:.1f} mm)",
   "{op}: nothing to cut": "{op} : rien à usiner",
   "moulding needs a ball end mill": "la moulure demande une fraise boule",
-  "fluting needs a ball end mill or a V-bit": "les cannelures demandent une fraise boule ou un V-bit"
+  "fluting needs a ball end mill or a V-bit": "les cannelures demandent une fraise boule ou un V-bit",
+  "Texture": "Texture",
+  "Random short strokes in a closed vector (ball end mill or V-bit), same pattern number = same texture": "Coups de gouge courts au hasard dans un vecteur fermé (fraise boule ou V-bit), même numéro de motif = même texture",
+  "Area (closed vector)": "Zone (vecteur fermé)",
+  "Row spacing (mm)": "Écart entre rangées (mm)",
+  "Stroke length (mm)": "Longueur des coups (mm)",
+  "Stroke depth (mm)": "Profondeur des coups (mm)",
+  "Random variation (%)": "Variation aléatoire (%)",
+  "Pattern number": "Numéro de motif",
+  "Short strokes in staggered rows; length and depth vary at random around the values (same pattern number = same texture). Strokes stop where the tool would leave the area.": "Coups courts en rangées décalées ; longueur et profondeur varient au hasard autour des valeurs (même numéro de motif = même texture). Les coups s'arrêtent là où l'outil sortirait de la zone.",
+  "texture: spacing, stroke length and depth must be above 0": "texture : l'écart, la longueur des coups et la profondeur doivent être supérieurs à 0",
+  "texture needs a ball end mill or a V-bit": "la texture demande une fraise boule ou un V-bit"
 }

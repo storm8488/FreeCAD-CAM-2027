@@ -23,7 +23,7 @@ from ..i18n import Msg, UserError
 PHOTO_PREFIX = "CAM2027PhotoVCarve"
 PHOTO_KIND = "photo_vcarve"
 #: libellés (anglais, traduits par l'interface) des opérations générées du flux S5, pour la liste des opérations
-KIND_LABELS = {PHOTO_KIND: "Photo V-carve", "moulding": "Moulding", "fluting": "Fluting"}
+KIND_LABELS = {PHOTO_KIND: "Photo V-carve", "moulding": "Moulding", "fluting": "Fluting", "texture": "Texture"}
 
 
 def _grid(path, cells):

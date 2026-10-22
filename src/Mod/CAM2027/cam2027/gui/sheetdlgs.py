@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication,
-vectorisation d'image et Photo V-Carve, moulure et cannelures."""
+vectorisation d'image et Photo V-Carve, moulure, cannelures et texture."""
 
 from ..i18n import tr, tr_msg
 from .labels import preset_label
@@ -381,3 +381,46 @@ class FlutingDialog(QtWidgets.QDialog):
             raise ValueError(tr("Choose at least one vector"))
         return decor.add_fluting(self.proj, tr("Fluting"), self.asm.currentData(), self.preset.currentData(), rails,
                                  self.depth.value(), self.ramp_start.value(), self.ramp_end.value())
+
+
+class TextureDialog(QtWidgets.QDialog):
+    """Texture (Aspire « Texture Toolpath ») : coups de gouge aléatoires dans un vecteur fermé."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(TextureDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Texture"))
+        form = QtWidgets.QFormLayout(self)
+        self.region = QtWidgets.QComboBox()
+        names = [o.Name for o in selected]
+        for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+            if sheetmod.closed_wires(obj):
+                self.region.addItem(obj.Label, obj.Name)
+        form.addRow(tr("Area (closed vector)"), self.region)
+        self.asm, self.preset = tool_pickers(proj, lambda t: is_ball(t) or is_vbit(t))
+        form.addRow(tr("Ball end mill or V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.spacing = _spin(0.2, 100, 3.0)
+        self.length = _spin(0.5, 500, 12.0)
+        self.depth = _spin(0.05, 20, 1.0)
+        self.variation = _spin(0, 90, 30, 0)
+        self.seed = QtWidgets.QSpinBox()
+        self.seed.setRange(1, 999999)
+        form.addRow(tr("Row spacing (mm)"), self.spacing)
+        form.addRow(tr("Stroke length (mm)"), self.length)
+        form.addRow(tr("Stroke depth (mm)"), self.depth)
+        form.addRow(tr("Random variation (%)"), self.variation)
+        form.addRow(tr("Pattern number"), self.seed)
+        _hint(form, tr("Short strokes in staggered rows; length and depth vary at random around the values (same pattern number = same texture). Strokes stop where the tool would leave the area."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.region.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        region = self.proj.doc.getObject(self.region.currentData())
+        return decor.add_texture(self.proj, tr("Texture"), self.asm.currentData(), self.preset.currentData(), region,
+                                 self.spacing.value(), self.length.value(), self.depth.value(),
+                                 self.variation.value() / 100.0, self.seed.value())
+

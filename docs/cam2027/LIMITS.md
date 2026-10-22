@@ -293,5 +293,6 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   normales du rail (une section plus large que le rayon de courbure intérieur se recoupe). Pas de coin
   d'onglet aux angles d'un rail fermé (les passes tournent avec le rail).
 - **Cannelures** : profondeur seule réglable (la largeur suit la forme de l'outil) ; rampes linéaires.
-- **Texture et prisme** (Aspire) : non faits.
+- **Texture** : coups horizontaux seulement (pas d'angle ni de motif croisé), forme de coup en arc fixe.
+- **Prisme** (Aspire « Prism ») : non fait.
 
