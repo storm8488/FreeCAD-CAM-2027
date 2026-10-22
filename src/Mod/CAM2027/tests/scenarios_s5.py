@@ -244,6 +244,49 @@ def scenario_setup_pdf(gs, scenario, files, tmp):
     gs.pump(0.3)
 
 
+def scenario_decor(gs, scenario, files):
+    """Moulure quart-de-rond le long du rectangle du dessin et cannelures sur le triangle, par leurs dialogues."""
+    proj = _sheet_project(gs, scenario, "Decor", files["svg"])
+    if proj is None:
+        return
+    from cam2027.project import sheet as sheetmod
+
+    vectors = sheetmod.vector_objects(proj.doc)
+    rect = [v for v in vectors if len(v.Shape.Edges) == 4]
+    tri = [v for v in vectors if len(v.Shape.Edges) == 3]
+
+    def moulding(dlg):
+        dlg.width.setValue(5.0)
+        dlg.depth.setValue(5.0)
+        dlg.stepover.setValue(0.5)
+        return True
+
+    def fluting(dlg):
+        dlg.depth.setValue(1.5)
+        dlg.ramp_start.setValue(5.0)
+        dlg.ramp_end.setValue(5.0)
+        return True
+
+    for name, title, handler, target in (("CAM2027_Moulding", "Moulding", moulding, rect),
+                                         ("CAM2027_Fluting", "Fluting", fluting, tri)):
+        FreeCADGui.Selection.clearSelection()
+        if target:
+            FreeCADGui.Selection.addSelection(target[0])
+        gs.driver.handlers[gs.tr(title)] = handler
+        gs.run_command(scenario, name)
+    gs.run_command(scenario, "CAM2027_Compute")
+    proj = gs.project()
+    states = [(o.Label, proj.operation_state(o), len(o.Path.Commands)) for o in proj.operations()]
+    gs.log("  moulding and fluting: %s" % states)
+    if len(states) != 2:
+        gs.problem(scenario, "2 operations expected (moulding, fluting), got %s" % states)
+    for label, st, n in states:
+        if st != "computed" or n < 10:
+            gs.problem(scenario, "operation %s is %s (%d moves)" % (label, st, n))
+    FreeCAD.closeDocument(proj.doc.Name)
+    gs.pump(0.3)
+
+
 def entries(gs, files, tmp):
     """(nom, fonction) des scénarios S5 pour la boucle de ``gui_scenarios.main``."""
     return (
@@ -251,4 +294,5 @@ def entries(gs, files, tmp):
         ("s5-vectors", lambda: scenario_vectors(gs, "s5-vectors")),
         ("s5-bitmap", lambda: scenario_bitmap(gs, "s5-bitmap", tmp)),
         ("s5-setup-pdf", lambda: scenario_setup_pdf(gs, "s5-setup-pdf", files, tmp)),
+        ("s5-decor", lambda: scenario_decor(gs, "s5-decor", files)),
     )

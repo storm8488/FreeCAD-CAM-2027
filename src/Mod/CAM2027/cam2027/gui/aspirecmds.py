@@ -175,6 +175,38 @@ class SetupSheetPdf(base._Base):
         base._info(tr("Setup sheet written: {file}", file=path))
 
 
+class _DecorCommand(base._Base):
+    atelier = "surface"
+    dialog = ""
+
+    @base._undoable
+    def Activated(self):
+        proj = base._need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            base._warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        sel = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+        res = base._sheet_dialog(proj, self.dialog, selected=sel)
+        if res:
+            op, _rec = res
+            base._info(tr("{name}: {n} moves.", name=op.Label, n=len(op.Path.Commands)))
+
+
+class Moulding(_DecorCommand):
+    dialog = "MouldingDialog"
+    text = "Moulding"
+    tooltip = "Profile (quarter round, cove, chamfer, ogee) swept along a drawing vector with a ball end mill"
+
+
+class Fluting(_DecorCommand):
+    atelier = "engrave"
+    dialog = "FlutingDialog"
+    text = "Fluting"
+    tooltip = "Grooves along drawing vectors with depth ramps at both ends (ball end mill or V-bit)"
+
+
 from . import vectors  # noqa: E402
 
 COMMANDS = [
@@ -183,10 +215,12 @@ COMMANDS = [
     ("CAM2027_TraceBitmap", TraceBitmap),
     ("CAM2027_PhotoVCarve", PhotoVCarve),
     ("CAM2027_SetupSheetPdf", SetupSheetPdf),
+    ("CAM2027_Moulding", Moulding),
+    ("CAM2027_Fluting", Fluting),
 ] + vectors.COMMANDS
 #: menu et barre d'outils Dessin
 DRAWING_MENU = vectors.TOOLBAR + ["Separator", "CAM2027_TraceBitmap"]
 #: entrées du menu Usiner
-MACHINING_MENU = ["Separator", "CAM2027_PhotoVCarve", "Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]
+MACHINING_MENU = ["Separator", "CAM2027_PhotoVCarve", "CAM2027_Moulding", "CAM2027_Fluting", "Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]
 #: entrées du menu Exporter
 EXPORT_MENU = ["CAM2027_SetupSheetPdf"]

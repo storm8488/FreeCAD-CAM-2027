@@ -287,4 +287,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   sur la fiche).
 - **Fiche PDF** : produite depuis l'interface seulement (Qt `QPdfWriter` exige une application graphique) ;
   mise en page simple (texte et tableaux de la fiche Markdown), sans image de la pièce.
+- **Moulure** : sections prédéfinies seulement (pas de section dessinée), fraise boule ; au pied d'une section
+  à flanc vertical (quart-de-rond), un congé du rayon de la boule reste ; la boule déborde d'un rayon du
+  côté du bord (prévoir le bord de la planche ou une chute). Rail courbe : décalage latéral par les
+  normales du rail (une section plus large que le rayon de courbure intérieur se recoupe). Pas de coin
+  d'onglet aux angles d'un rail fermé (les passes tournent avec le rail).
+- **Cannelures** : profondeur seule réglable (la largeur suit la forme de l'outil) ; rampes linéaires.
+- **Texture et prisme** (Aspire) : non faits.
 

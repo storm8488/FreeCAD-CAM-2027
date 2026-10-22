@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **[S5]** **Moulure et cannelures** (Aspire « Moulding » et « Fluting ») : Usiner > Moulure balaie à la fraise
+  boule une section (quart-de-rond, gorge, chanfrein, doucine ; largeur, profondeur, côté) le long d'un vecteur
+  du dessin, en passes parallèles au rail au pas latéral demandé, paliers d'ébauche en option ; la hauteur de
+  chaque passe est calculée en 2D comme une boule posée sur la section (jamais dessous), la boule débordant
+  d'un rayon côté bord pour finir le flanc raide. Usiner > Cannelures suit des vecteurs avec rampes de
+  profondeur au début et à la fin (boule ou V-bit). Opérations `Path.Op.Custom` simulées par le contrôle
+  matière : quart-de-rond R10 à la boule de 6 mm, section à 0,014 mm sur la carte de hauteur (hors congé de
+  pied de R3), aucune entaille.
 - **[S5]** **Temps d'usinage avec l'accélération et fiche de préparation en PDF** : nouveau champ
   « Accélération (mm/s²) » du profil machine ; le temps estimé (fiche, section « Estimated machining time »,
   par opération et total) suit un profil de vitesse trapézoïdal par segment avec la limite de vitesse en

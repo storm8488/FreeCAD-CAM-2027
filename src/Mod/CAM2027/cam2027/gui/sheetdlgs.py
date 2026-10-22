@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication,
-vectorisation d'image et Photo V-Carve."""
+vectorisation d'image et Photo V-Carve, moulure et cannelures."""
 
 from ..i18n import tr, tr_msg
 from .labels import preset_label
@@ -281,3 +281,103 @@ class PhotoVCarveDialog(QtWidgets.QDialog):
                                        self.path, self.width.value(), self.depth.value(), self.spacing.value() or None,
                                        origin=(self.x.value(), self.y.value()), invert=self.invert.isChecked(),
                                        gamma=self.gamma.value())
+
+
+def is_ball(tool):
+    return tool.tool_type == "ballend"
+
+
+def _rail_combo(proj, selected):
+    combo = QtWidgets.QComboBox()
+    names = [o.Name for o in selected]
+    for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+        combo.addItem(obj.Label, obj.Name)
+    return combo
+
+
+class MouldingDialog(QtWidgets.QDialog):
+    """Moulure (Aspire « Moulding Toolpath ») : section prédéfinie extrudée le long d'un vecteur, fraise boule."""
+
+    PROFILES = (("quarter_round", "Quarter round (convex)"), ("cove", "Cove (concave)"), ("chamfer", "Chamfer"),
+                ("ogee", "Ogee"))
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(MouldingDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Moulding"))
+        form = QtWidgets.QFormLayout(self)
+        self.rail = _rail_combo(proj, selected)
+        form.addRow(tr("Rail (drawing vector)"), self.rail)
+        self.profile = QtWidgets.QComboBox()
+        for key, label in self.PROFILES:
+            self.profile.addItem(tr(label), key)
+        form.addRow(tr("Profile"), self.profile)
+        self.width = _spin(0.5, 500, 10.0)
+        self.depth = _spin(0.1, 200, 10.0)
+        form.addRow(tr("Profile width (mm)"), self.width)
+        form.addRow(tr("Profile depth (mm)"), self.depth)
+        self.flip = QtWidgets.QCheckBox(tr("Profile on the right of the vector"))
+        form.addRow("", self.flip)
+        self.asm, self.preset = tool_pickers(proj, is_ball)
+        form.addRow(tr("Ball end mill"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.stepover = _spin(0.02, 20, 0.3, 3)
+        form.addRow(tr("Stepover (mm)"), self.stepover)
+        self.step_down = _spin(0.0, 100, 0.0)
+        self.step_down.setSpecialValueText(tr("No roughing levels"))
+        form.addRow(tr("Roughing step down (mm)"), self.step_down)
+        _hint(form, tr("The profile edge (full depth) is on the vector, the top is kept on the profile side; the ball goes one radius past the edge to finish a steep flank."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.rail.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        rail = self.proj.doc.getObject(self.rail.currentData())
+        return decor.add_moulding(self.proj, tr("Moulding"), self.asm.currentData(), self.preset.currentData(), rail,
+                                  self.profile.currentData(), self.width.value(), self.depth.value(),
+                                  self.stepover.value(), self.step_down.value() or None, self.flip.isChecked())
+
+
+class FlutingDialog(QtWidgets.QDialog):
+    """Cannelures (Aspire « Fluting Toolpath ») : vecteurs suivis avec rampes de profondeur."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(FlutingDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Fluting"))
+        form = QtWidgets.QFormLayout(self)
+        self.vectors = QtWidgets.QListWidget()
+        names = [o.Name for o in selected]
+        for obj in sheetmod.vector_objects(proj.doc):
+            item = QtWidgets.QListWidgetItem(obj.Label)
+            item.setData(QtCore.Qt.UserRole, obj.Name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Checked if obj.Name in names or not names else QtCore.Qt.Unchecked)
+            self.vectors.addItem(item)
+        self.vectors.setMaximumHeight(120)
+        form.addRow(tr("Vectors"), self.vectors)
+        self.asm, self.preset = tool_pickers(proj, lambda t: is_ball(t) or is_vbit(t))
+        form.addRow(tr("Ball end mill or V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.depth = _spin(0.05, 50, 2.0)
+        self.ramp_start = _spin(0.0, 1000, 10.0)
+        self.ramp_end = _spin(0.0, 1000, 10.0)
+        form.addRow(tr("Depth (mm)"), self.depth)
+        form.addRow(tr("Start ramp length (mm)"), self.ramp_start)
+        form.addRow(tr("End ramp length (mm)"), self.ramp_end)
+        _hint(form, tr("Each vector is followed from its start: the depth rises from 0 over the start ramp, stays, then comes back to 0 over the end ramp."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.vectors.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        rails = [self.proj.doc.getObject(self.vectors.item(i).data(QtCore.Qt.UserRole)) for i in range(self.vectors.count())
+                 if self.vectors.item(i).checkState() == QtCore.Qt.Checked]
+        if not rails:
+            raise ValueError(tr("Choose at least one vector"))
+        return decor.add_fluting(self.proj, tr("Fluting"), self.asm.currentData(), self.preset.currentData(), rails,
+                                 self.depth.value(), self.ramp_start.value(), self.ramp_end.value())

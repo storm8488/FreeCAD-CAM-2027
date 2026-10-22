@@ -375,6 +375,102 @@ class TestTiming(unittest.TestCase):
         self.assertIn(timing.format_duration(fast["total"]), res["sheet_text"])
         shutil.rmtree(os.path.dirname(out), ignore_errors=True)
 
+
+class TestDecor(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def _project(self, lib):
+        from cam2027.project import vectors
+
+        proj = frame_project("Decor", lib, 100.0, 40.0)
+        rail = vectors.add_vector(proj, Part.Compound([Part.makePolygon([V(0, 10, 0), V(100, 10, 0)])]), "Rail")
+        return proj, rail
+
+    def test_ball_on_section(self):
+        from cam2027.project import decor
+
+        sec = decor.profile_points("quarter_round", 10.0, 10.0)
+        self.assertAlmostEqual(sec[0][1], -10.0)
+        self.assertAlmostEqual(sec[-1][1], 0.0)
+        # boule de rayon 3 : jamais sous la section, et sur la section là où elle est plus courbée que la boule
+        for u in (0.5, 2.0, 5.0, 8.0, 9.5):
+            tip = decor.ball_tip_z(sec, u, 3.0)
+            for s in [u - 3 + 0.05 * k for k in range(121)]:
+                ball = tip + 3.0 - math.sqrt(max(0.0, 9.0 - (s - u) ** 2))
+                self.assertGreaterEqual(ball, decor._section_z(sec, s) - 1e-6)
+        with self.assertRaises(Exception):
+            decor.profile_points("unknown", 10, 10)
+
+    def test_quarter_round_moulding_section(self):
+        """Critère : moulure quart-de-rond R10 le long d'une ligne, boule 6 mm : section mesurée sur la carte de
+        hauteur simulée à ± 0,05 mm, jamais sous le profil."""
+        from cam2027.project import decor
+
+        lib = starter_library()
+        proj, rail = self._project(lib)
+        ball, basm = tool_ids(lib, "6 mm ball end mill")
+        with self.assertRaises(Exception):  # pas une fraise boule
+            mill, masm = tool_ids(lib, "6 mm flat end mill")
+            decor.add_moulding(proj, "Bad", masm.id, mill.presets[0].id, rail, "quarter_round", 10.0, 10.0)
+        op, rec = decor.add_moulding(proj, "Moulding", basm.id, ball.presets[0].id, rail, "quarter_round", 10.0, 10.0,
+                                     stepover=0.3, step_down=4.0)
+        self.assertGreater(len(op.Path.Commands), 60)
+        proj.material_check(resolution=0.1)
+        zmap = proj.last_zmap
+        section = decor.profile_points("quarter_round", 10.0, 10.0)
+        # enveloppe 2D attendue : la plus basse des boules des passes de finition
+        centres = []
+        u = -3.0
+        while u < 10.0 - 1e-9:
+            centres.append(u)
+            u += 0.3
+        centres.append(10.0)
+        tips = [(c, decor.ball_tip_z(section, c, 3.0)) for c in centres]
+
+        def envelope(u):
+            return min([t + 3.0 - math.sqrt(9.0 - (u - c) ** 2) for c, t in tips if abs(u - c) < 3.0] + [0.0])
+
+        worst_sim, worst_under, worst_reach, n = 0.0, 0.0, 0.0, 0
+        for i, x in enumerate(zmap.xs):
+            if not 10.0 <= x <= 90.0 or i % 5:
+                continue
+            for j, y in enumerate(zmap.ys):
+                u = y - 10.0
+                if not 0.0 <= u <= 10.0:
+                    continue
+                z = float(zmap.top[i, j])
+                worst_sim = max(worst_sim, abs(z - envelope(u)))  # simulation = trajet prévu
+                worst_under = min(worst_under, z - decor._section_z(section, u))
+                if u >= 1.5:  # pied du profil : congé de R3 inévitable à la boule de 6 mm
+                    worst_reach = max(worst_reach, z - decor._section_z(section, u))
+                n += 1
+        self.assertGreater(n, 1000)
+        self.assertLessEqual(worst_sim, 0.05)
+        self.assertLessEqual(worst_reach, 0.05)  # section à 0,05 mm partout où la boule peut aller
+        self.assertGreaterEqual(worst_under, -0.02)  # aucune entaille sous le profil
+        # au-delà du profil, côté pièce : dessus intact
+        j_in = int((25.0 - zmap.y0) / zmap.res)
+        self.assertAlmostEqual(float(zmap.top[:, j_in].min()), 0.0, places=6)
+
+    def test_fluting_ramps(self):
+        from cam2027.project import decor
+
+        lib = starter_library()
+        proj, rail = self._project(lib)
+        ball, basm = tool_ids(lib, "6 mm ball end mill")
+        with self.assertRaises(Exception):  # rampes plus longues que le vecteur
+            decor.add_fluting(proj, "Too long", basm.id, ball.presets[0].id, [rail], 2.0, 60.0, 60.0)
+        op, _rec = decor.add_fluting(proj, "Flute", basm.id, ball.presets[0].id, [rail], 2.0, 20.0, 20.0)
+        proj.material_check(resolution=0.1)
+        zmap = proj.last_zmap
+        j = int(round((10.0 - zmap.y0) / zmap.res - 0.5))
+        for x, expected in ((50.0, -2.0), (30.0, -2.0), (10.0, -1.0), (90.0, -1.0), (5.0, -0.5)):
+            i = int(round((x - zmap.x0) / zmap.res - 0.5))
+            self.assertAlmostEqual(float(zmap.top[i, j - 1:j + 2].min()), expected, delta=0.05, msg=x)
+        self.assertGreaterEqual(float(zmap.top.min()), -2.0 - 0.02)
+
 V = FreeCAD.Vector
 
 
