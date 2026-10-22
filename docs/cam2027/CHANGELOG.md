@@ -26,6 +26,8 @@
   découpe à outils multiples donne la même région (copie gardée par empreinte SHA-1, `patch_combine_faces`).
   Plateau, poche 2D : 13,0 / 14,4 s → 8,4 / 8,6 s, même G-code ; adaptative : 14,3 / 11,0 s → 8,4 / 4,6 s, même
   volume enlevé (607,0 cm³), commandes dans la dispersion habituelle de l'adaptative.
+- **[B1]** Finition 3D et Z constant : le modèle OpenCamLib de tous les corps et le balayage du Z constant ne
+  restent plus en mémoire après le calcul.
 - **[B1]** Attaches ajoutées sur un habillage pas encore recalculé (rampe ou dogbones ajoutés juste avant par
   script ; l'éditeur ajoute les attaches en premier) ou sur une opération sans parcours : FreeCAD lisait un
   parcours vide et l'erreur brute « list index out of range » remontait. L'habillage du dessous est recalculé

@@ -109,6 +109,8 @@ def install(mod):
                 layers = None
             cache = self._cam2027_layers = (scanLines, depths, layers)
         _scan, depths, layers = cache
+        if lyr >= len(depths) - 1:  # dernier niveau : balayage et commandes libérés
+            self._cam2027_layers = None
         if layers is not None and lyr < len(depths) and depths[lyr] == layDep:
             return layers[lyr]
         return original(self, obj, scanLines, layDep, lyr, lenSL, pntsPerLine)

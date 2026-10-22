@@ -702,10 +702,11 @@ def patch_surface_models():
         group = JOB.Model.Group
         if len(group) < 2 or self.modelSTLs[m] is not True:
             return original(self, JOB, obj, m, ocl)
-        cached = getattr(self, "_cam2027_all_models", None)
-        if cached is None or cached[0] is not self.modelSTLs:  # une fois par calcul
-            cached = self._cam2027_all_models = (self.modelSTLs, _all_models_stl(group, self.modelTypes, obj, ocl))
-        self.modelSTLs[m] = cached[1]
+        # un seul modèle pour tous les corps à calculer (FreeCAD libère la liste à la fin du calcul)
+        stl = _all_models_stl(group, self.modelTypes, obj, ocl)
+        for k, flag in enumerate(self.modelSTLs):
+            if flag is True:
+                self.modelSTLs[k] = stl
 
     prepare.cam2027_patched = True
     support._prepareModelSTLs = prepare
