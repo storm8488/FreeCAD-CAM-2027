@@ -766,7 +766,8 @@ class Project(object):
                          if role != "cutter" and (role, "material") not in seen
                          and float(np.minimum(P0[:, 2], P1[:, 2]).min()) + lo < top_max]
                 for lo, r, _role in parts:
-                    if zmap.excess_any(P0, P1, r, lo, tolerance + 0.03, profile.kind == "flat"):
+                    # queue et porte-outil : disques plats quel que soit le profil de la fraise
+                    if zmap.excess_any(P0, P1, r, lo, tolerance + 0.03, True):
                         for q0, q1, idx, rapid in pending:
                             excess_events(q0, q1, idx, min(q0[2], q1[2]))
                             sweep_one(rapid, q0, q1, idx)

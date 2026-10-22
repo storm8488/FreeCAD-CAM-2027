@@ -205,8 +205,9 @@ class ZMap(object):
 
     def excess_any(self, P0, P1, radius, offset, threshold, flat):
         """Vrai si, sur l'état courant, de la matière dépasse ``pointe + offset`` de plus de ``threshold`` dans
-        ``radius`` autour d'un des segments (queue, porte-outil). ``flat`` : fraise plate (les segments
-        horizontaux sont regroupés par hauteur et remplis par colonnes, comme le balayage)."""
+        ``radius`` autour d'un des segments (queue, porte-outil). ``flat`` : segments horizontaux regroupés par
+        hauteur et remplis par colonnes (le disque de la queue ou du porte-outil est plat quel que soit le
+        profil de la fraise)."""
         np = _np()
         if flat and len(P0):
             P0, P1, rest0, rest1 = flat_groups_ready(P0, P1)

@@ -45,6 +45,10 @@
   boule regroupés par hauteur et évalués sur leurs seules capsules (intervalle exact par colonne, comme la fraise
   plate) au lieu de fenêtres communes. Z constant du plateau : balayage 5,5-6,2 s → 4,1-4,7 s, contrôle
   11,5-13,7 s → 10,1-12,2 s, carte identique bit à bit (et cellule pour cellule sur 5 parcours aléatoires).
+- **[B2]** **Pré-contrôle de la queue et du porte-outil plus rapide pour toutes les fraises** : le remplissage par
+  colonnes des segments horizontaux n'était utilisé qu'avec une fraise plate, alors que la queue et le
+  porte-outil sont des disques plats quel que soit le profil. Z constant du plateau (boule) : pré-contrôle
+  2,3-2,9 s → 0,17-0,20 s, contrôle 11,0-12,6 s → 8,1-9,5 s, mêmes événements.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
