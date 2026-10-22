@@ -68,11 +68,16 @@ class RotaryDialog(QtWidgets.QDialog):
         self.sample = self._spin(0.01, 5.0, p.get("sample", 0.25))
         self.leave = self._spin(0.0, 10.0, p.get("leave", 0.0))
         self.safe = self._spin(0.5, 200.0, p.get("safe_margin", 5.0))
+        self.spiral = QtWidgets.QComboBox()
+        self.spiral.addItem(tr("Lines along the axis"), False)
+        self.spiral.addItem(tr("Spiral (A turns continuously)"), True)
+        self.spiral.setCurrentIndex(1 if p.get("spiral") else 0)
         self.rows = {}
         for key, label, widget in (
                 ("depth", "Depth below the surface (mm)", self.depth),
                 ("step_down", "Step down (mm)", self.step_down),
                 ("side", "Side", self.side),
+                ("spiral", "Pattern", self.spiral),
                 ("stepover", "Stepover", self.stepover),
                 ("sample", "Sample interval (mm)", self.sample),
                 ("leave", "Stock to leave (mm)", self.leave),
@@ -106,7 +111,7 @@ class RotaryDialog(QtWidgets.QDialog):
         kind = self.current_kind()
         shown = {"wrap_contour": ("depth", "step_down", "side", "safe"),
                  "wrap_pocket": ("depth", "step_down", "stepover", "safe"),
-                 "rotary3d": ("step_down", "stepover", "sample", "leave", "safe")}[kind]
+                 "rotary3d": ("spiral", "step_down", "stepover", "sample", "leave", "safe")}[kind]
         for key, (lab, widget) in self.rows.items():
             lab.setVisible(key in shown)
             widget.setVisible(key in shown)
@@ -148,7 +153,8 @@ class RotaryDialog(QtWidgets.QDialog):
         kind = self.current_kind()
         p = {"safe_margin": self.safe.value(), "step_down": self.step_down.value()}
         if kind == "rotary3d":
-            p.update(stepover=self.stepover.value(), sample=self.sample.value(), leave=self.leave.value())
+            p.update(stepover=self.stepover.value(), sample=self.sample.value(), leave=self.leave.value(),
+                     spiral=bool(self.spiral.currentData()))
         else:
             p["depth"] = -self.depth.value()
             if kind == "wrap_contour":

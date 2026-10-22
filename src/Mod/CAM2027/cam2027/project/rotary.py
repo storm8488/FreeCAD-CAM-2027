@@ -229,53 +229,95 @@ class RotaryModel(object):
         return z
 
 
+#: pente (dz / déplacement) au-delà de laquelle deux points voisins d'une passe sont reliés par une marche
+STEEP_SLOPE = 2.0
+
+
+def _stairs(run):
+    """Points d'une passe ``[(x, y, z)]`` avec une marche entre deux voisins très écartés en hauteur.
+
+    Au bord d'une paroi (poche, épaulement), un point est sur l'arête (fraise posée sur le bord) et le suivant au
+    pied de la paroi : la droite qui les relie entre dans l'arête. La marche reste à la plus haute des deux
+    hauteurs jusqu'au-dessus de l'autre point, puis descend (ou monte) seule : entre deux points voisins, la
+    surface ne dépasse pas la plus haute des deux de plus que la flèche d'une boule sur l'écart (< 0,003 mm à
+    0,25 mm)."""
+    out = run[:1]
+    for b in run[1:]:
+        a = out[-1]
+        if abs(b[2] - a[2]) > STEEP_SLOPE * math.hypot(b[0] - a[0], b[1] - a[1]) > 0.0:
+            out.append((b[0], b[1], a[2]) if a[2] > b[2] else (a[0], a[1], b[2]))
+        out.append(b)
+    return out
+
+
 def rotary_moves(model, stock_radius, cutter, tool_radius, stepover, sample, safe_z, step_down=0.0, leave=0.0,
-                 x_range=None):
+                 x_range=None, spiral=False):
     """Lignes le long de l'axe (aller-retour), une par angle, en repère déroulé ; niveaux d'ébauche depuis le
-    brut si ``step_down`` > 0 (pointe jamais sous ``max(modèle, niveau)``)."""
+    brut si ``step_down`` > 0 (pointe jamais sous ``max(modèle, niveau)``).
+
+    ``spiral`` : une hélice continue (A tourne sans arrêt, X avance de ``stepover`` par tour ; un tour à X constant
+    à chaque bout) au lieu des lignes : pas de remontée ni de rapide entre deux passes, A sur plusieurs tours."""
     np = _np()
     if stepover <= 0 or sample <= 0:
         raise UserError("rotary finishing: the stepover and the sample interval must be positive")
     x0, x1 = x_range or (model.x_min, model.x_max)
-    n_x = max(2, int(math.ceil((x1 - x0) / sample)) + 1)
-    xs = np.linspace(x0, x1, n_x)
-    n_a = max(4, int(math.ceil(2.0 * math.pi * model.r_max / stepover)))
-    thetas = np.arange(n_a) * (2.0 * math.pi / n_a)
-    # surépaisseur : pointe relevée de ``leave`` (radialement)
-    grid = np.vstack([model.heights(t, xs, cutter, tool_radius + 0.5) for t in thetas]) + leave
-    grid -= stock_radius  # repère déroulé : 0 = surface du brut
+    reach = tool_radius + 0.5
+    if spiral:
+        # point i : u = i / n_a tours, angle 2 pi u, X = x0 + pas (u - 1) borné à [x0, x1]
+        n_a = max(8, int(math.ceil(2.0 * math.pi * model.r_max / sample)))
+        turns = int(math.ceil((x1 - x0) / stepover)) + 2
+        u = np.arange(turns * n_a + 1) / float(n_a)
+        xs = np.clip(x0 + stepover * (u - 1.0), x0, x1)
+        ys = u * (2.0 * math.pi * stock_radius)
+        heights = np.empty(len(u))
+        for j in range(n_a):  # une triangulation tournée par angle, tous les tours à la fois
+            heights[j::n_a] = model.heights(2.0 * math.pi * j / n_a, xs[j::n_a], cutter, reach)
+        rows = [(xs, ys, heights + leave - stock_radius)]
+        info = {"lines": 0, "turns": turns, "samples": len(u)}
+    else:
+        n_x = max(2, int(math.ceil((x1 - x0) / sample)) + 1)
+        xs = np.linspace(x0, x1, n_x)
+        n_a = max(4, int(math.ceil(2.0 * math.pi * model.r_max / stepover)))
+        thetas = np.arange(n_a) * (2.0 * math.pi / n_a)
+        # surépaisseur : pointe relevée de ``leave`` (radialement) ; repère déroulé : 0 = surface du brut
+        rows = []
+        for k, t in enumerate(thetas):
+            z = model.heights(t, xs, cutter, reach) + leave - stock_radius
+            order = slice(None) if k % 2 == 0 else slice(None, None, -1)
+            rows.append((xs[order], np.full(n_x, t * stock_radius), z[order]))
+        info = {"lines": n_a, "samples": n_x}
     floors = []
     if step_down > 0:
         z = 0.0
-        low = float(np.nanmin(grid)) if np.isfinite(grid).any() else -stock_radius
+        finite = [r[2][np.isfinite(r[2])] for r in rows]
+        low = min([float(f.min()) for f in finite if len(f)] or [-stock_radius])
         while z - step_down > low + 1e-9:
             z -= step_down
             floors.append(z)
     floors.append(None)  # finition : la surface
     moves, top = [], 0.0
-    for floor in floors:
-        for k, theta in enumerate(thetas):
-            zz = grid[k] if floor is None else np.maximum(grid[k], floor)
-            if floor is not None:
-                zz = np.where(np.isfinite(grid[k]), zz, floor)
-            y = theta * stock_radius
-            order = range(n_x) if k % 2 == 0 else range(n_x - 1, -1, -1)
+    for level, floor in enumerate(floors):
+        for xr, yr, grid in rows:
+            zz = grid if floor is None else np.where(np.isfinite(grid), np.maximum(grid, floor), floor)
+            if spiral and level % 2:  # hélice parcourue à l'envers un niveau sur deux : A ne revient pas en arrière
+                xr, yr, zz = xr[::-1], yr[::-1], zz[::-1]
             run = []
-            for i in list(order) + [None]:
+            for i in list(range(len(zz))) + [None]:
                 if i is not None and np.isfinite(zz[i]) and zz[i] < top + 1e-9 + (0 if floor is not None else 1e9):
-                    run.append((float(xs[i]), float(zz[i])))
+                    run.append((float(xr[i]), float(yr[i]), float(zz[i])))
                     continue
                 if len(run) >= 2:
-                    xa, za = run[0]
-                    moves.append(("rapid", xa, y, safe_z))
-                    moves.append(("rapid", xa, y, min(safe_z, max(za, top) + 1.0)))
-                    moves.append(("plunge", xa, y, za))
-                    moves.extend(("cut", xv, y, zv) for xv, zv in run[1:])
-                    moves.append(("rapid", run[-1][0], y, safe_z))
+                    xa, ya, za = run[0]
+                    moves.append(("rapid", xa, ya, safe_z))
+                    moves.append(("rapid", xa, ya, min(safe_z, max(za, top) + 1.0)))
+                    moves.append(("plunge", xa, ya, za))
+                    moves.extend(("cut", xv, yv, zv) for xv, yv, zv in _stairs(run)[1:])
+                    moves.append(("rapid", run[-1][0], run[-1][1], safe_z))
                 run = []
         if floor is not None:
             top = floor
-    return moves, {"lines": n_a, "samples": n_x, "levels": len(floors), "r_max": model.r_max}
+    info.update(levels=len(floors), r_max=model.r_max)
+    return moves, info
 
 
 def make_cutter(tool):
@@ -371,7 +413,7 @@ def defaults(kind):
     elif kind == "wrap_pocket":
         base["stepover"] = 0.4  # fraction du diamètre
     elif kind == "rotary3d":
-        base = {"stepover": 0.5, "sample": 0.25, "step_down": 0.0, "leave": 0.0, "safe_margin": 5.0}
+        base = {"stepover": 0.5, "sample": 0.25, "step_down": 0.0, "leave": 0.0, "safe_margin": 5.0, "spiral": False}
     return base
 
 
@@ -411,8 +453,15 @@ def generate(project, op):
             raise UserError("rotary finishing: the part (radius {r:.2f} mm) is larger than the round stock ({s:.2f} mm)",
                             r=model.r_max, s=radius)
         cutter, tool_r = make_cutter(tool)
+        if p.get("spiral"):
+            rot = project.machine.rotary
+            turns = math.ceil((model.x_max - model.x_min) / p["stepover"]) + 2
+            limit = rot.max_deg if sign > 0 else (None if rot.min_deg is None else -rot.min_deg)
+            if limit is not None and 360.0 * turns > limit + 1e-6:  # A va de 0 à ± 360° x tours
+                raise UserError("rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis",  # noqa: E501
+                                t=turns, d=360.0 * turns, a=rot.min_deg, b=rot.max_deg)
         moves, info = rotary_moves(model, radius, cutter, tool_r, p["stepover"], p["sample"], safe,
-                                   step_down=p["step_down"], leave=p["leave"])
+                                   step_down=p["step_down"], leave=p["leave"], spiral=bool(p.get("spiral")))
         rec["info"] = info
     else:
         raise UserError("unknown rotary operation {kind}", kind=kind)

@@ -77,8 +77,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   pour une fraise plate) ; crête calculée à plat (`2 sqrt(h (2R - h))`) et pas mesuré le long de la surface
   décrite par le centre de l'outil : prudent sur les formes convexes, **plus grand que demandé dans les
   creux concaves de rayon proche de celui de la boule** (le pas au contact y est plus grand que celui du
-  centre) ; grille de calcul au plus pas / 4 (au plus 4 millions de points : intervalle à augmenter sur les
-  grandes pièces) ; parois de plus de 75° non contrôlées hors du mode pentu / peu incliné (avertissement) ;
+  centre) ; grille de calcul au plus pas / 4 (au-delà de 4 millions de points, la grille de distance grossit jusqu'à
+  pas / 4 **[B4]** ; les points des passes restent à l'intervalle demandé) ; au-delà de 2,5 millions de points de parcours, refus (plateau 220 × 220 mm à 0,02 mm : 4,3 millions, 8,6 Go) **[B4]** ; parois de plus de 75° non contrôlées hors du mode pentu / peu incliné (avertissement) ;
   coins concaves hors de portée de la boule non repris (pas de « pencil ») ; passes à Z constant du mode
   pentu recalculées point par point (Z exact de la surface à ± 0,01 mm près, pas strictement constant) ;
   liaisons longues par la hauteur de sécurité (pas de liaisons lissées comme Fusion) ; sens des passes non
@@ -304,7 +304,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   angles de la poche au rayon de la fraise. Contour : extérieur / intérieur / sur le trait, pas d'entrée en
   arc ni d'attaches ; poche : anneaux décalés du centre vers les parois, plongée verticale (pas de rampe ni
   d'hélice), liaisons à la profondeur seulement dans la zone déjà vidée. Finition 3D rotative : lignes le long
-  de l'axe (aller-retour) seulement, pas de spirale ni de passes circulaires ; une ligne par angle (pas
+  de l'axe (aller-retour) ou spirale **[B4]** (A sur autant de tours que de pas le long de X : refusée si la course
+  de l'axe A du profil machine est plus courte), pas de passes circulaires ; une ligne par angle (pas
   angulaire = pas / rayon maximal de la pièce), chaque ligne relevée à la hauteur de sécurité ; hauteurs par
   OpenCamLib sur la pièce tournée (exactes pour une fraise pointée vers l'axe) ; surépaisseur appliquée
   radialement (pas normale à la surface) ; niveaux d'ébauche radiaux optionnels depuis le brut rond, sans

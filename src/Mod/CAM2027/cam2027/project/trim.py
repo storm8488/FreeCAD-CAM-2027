@@ -366,6 +366,9 @@ class TrimDressup(object):
         cmds, _stats = trim_commands(obj.Base.Path.Commands, polygon_keep([(v.x, v.y) for v in obj.Polygon], obj.Inside),
                                      clearance, safe, vfeed)
         obj.Path = Path.Path(cmds)
+        from .patterns import _avoid_keepout
+
+        _avoid_keepout(obj)  # liaisons recalculées : à la hauteur de dégagement, peut-être sous une zone
 
 
 class ViewProviderTrim(object):

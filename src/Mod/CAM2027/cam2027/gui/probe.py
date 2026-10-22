@@ -86,7 +86,7 @@ class ProbeDialog(QtWidgets.QDialog):
     def options(self):
         kw = {"wcs": self.wcs.currentText(), "offset_mode": self.offset_mode.currentData()}
         mode = self.mode.currentData()
-        if mode == "corner":
+        if mode in ("corner", "inner_corner"):
             kw["corner"] = self.corner.currentData()
         elif mode == "hole":
             kw["hole_diameter"] = self.hole.value()
@@ -94,7 +94,7 @@ class ProbeDialog(QtWidgets.QDialog):
 
     def _refresh(self, *_args):
         mode = self.mode.currentData()
-        self.corner.setEnabled(mode == "corner")
+        self.corner.setEnabled(mode in ("corner", "inner_corner"))
         self.hole.setEnabled(mode == "hole")
         try:
             mode, kw = self.options()

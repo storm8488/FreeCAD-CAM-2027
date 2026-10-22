@@ -43,7 +43,8 @@ class HoleError(UserError):
 
 
 class Hole(object):
-    def __init__(self, x, y, diameter, top, bottom, through, faces, chamfer_diameter=None, chamfer_angle=None):
+    def __init__(self, x, y, diameter, top, bottom, through, faces, chamfer_diameter=None, chamfer_angle=None, obj=None):
+        self.obj = obj  # clone du modèle qui porte les faces
         self.x, self.y, self.diameter = x, y, diameter
         self.top, self.bottom, self.through = top, bottom, through
         self.faces = faces
@@ -92,9 +93,11 @@ def find_holes(obj, tol=1e-4):
         if e["sweep"] < 2 * math.pi - 1e-3:
             continue  # congé, arrondi d'angle : pas un trou
         top, bottom = e["zmax"], e["zmin"]
-        mid = FreeCAD.Vector(cx, cy, 0.5 * (top + bottom))
-        if shape.isInside(mid, tol, True):
-            continue  # tenon (matière au centre)
+        zm = 0.5 * (top + bottom)
+        inner = [FreeCAD.Vector(cx, cy, zm)] + [FreeCAD.Vector(cx + 0.95 * r * math.cos(a), cy + 0.95 * r * math.sin(a), zm)
+                                                for a in (k * math.pi / 4.0 for k in range(8))]
+        if any(shape.isInside(p, tol, True) for p in inner):
+            continue  # tenon, ou extérieur d'un tube (centre vide mais matière juste à l'intérieur du rayon)
         # chanfrein d'entrée : cône coaxial posé sur le haut du cylindre, plus large en haut
         chamfer_d = chamfer_angle = None
         for i, f in cones:
@@ -119,7 +122,33 @@ def find_holes(obj, tol=1e-4):
                 for a in (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi)]
         through = bottom <= bb.ZMin + 1e-6 or not any(shape.isInside(v, tol, True)
                                                        for v in [FreeCAD.Vector(cx, cy, bottom - 0.05)] + ring)
-        holes.append(Hole(cx, cy, 2.0 * r, top, bottom, through, e["faces"], chamfer_d, chamfer_angle))
+        if not through:
+            # fond en pente (alésage qui débouche sur une surface inclinée) : le fond utilisable est le point le plus
+            # haut du bord du bas, sinon la fraise descend au point le plus bas sur tout le diamètre
+            lows = [ed.BoundBox.ZMax for name in e["faces"] if shape.getElement(name).Surface.__class__.__name__ == "Cylinder"
+                    for ed in shape.getElement(name).Edges
+                    if ed.BoundBox.ZMax < top - 1e-3]  # bords du bas (la couture verticale monte jusqu'en haut)
+            if lows and max(lows) > bottom + 0.01:
+                bottom = max(lows)
+        holes.append(Hole(cx, cy, 2.0 * r, top, bottom, through, e["faces"], chamfer_d, chamfer_angle, obj=obj))
+    holes.sort(key=lambda h: (h.diameter, h.y, h.x))
+    return holes
+
+
+def find_job_holes(proj, covered=None):
+    """Trous de tous les corps du job (une pièce en plusieurs corps : chacun a ses trous). Un trou sous un autre
+    corps (corps posé dessus : chauffage Vz330 de l'utilisateur) n'est pas accessible par le dessus : écarté, et
+    ajouté à la liste ``covered`` si elle est donnée (le foret traversait le corps du dessus)."""
+    bodies = [o for o in proj.job.Model.Group if getattr(o, "Shape", None) is not None]
+    top = max([o.Shape.BoundBox.ZMax for o in bodies] or [0.0]) + 1.0
+    holes = []
+    for obj in bodies:
+        for h in find_holes(obj):
+            if any(o is not obj and not column_free(o.Shape, h, top) for o in bodies):
+                if covered is not None:
+                    covered.append(h)
+                continue
+            holes.append(h)
     holes.sort(key=lambda h: (h.diameter, h.y, h.x))
     return holes
 
@@ -276,7 +305,8 @@ def step_label(step):
 
 
 def apply_plan(proj, clone, steps):
-    """Crée une opération par étape ; retourne la liste des opérations (dans l'ordre d'usinage)."""
+    """Crée une opération par étape ; retourne la liste des opérations (dans l'ordre d'usinage). Chaque trou est
+    pris sur son corps (``Hole.obj``) ; ``clone`` : corps des trous qui n'en portent pas."""
     from ..i18n import tr
 
     stock_top = proj.stock_bounds()["zmax"]
@@ -285,19 +315,27 @@ def apply_plan(proj, clone, steps):
         tool = st["tool"]
         params = dict(st["params"])
         if st["kind"] == "helix" and stock_top > st["model"].top + 0.05 and all(
-                column_free(clone.Shape, h, stock_top) for h in st["holes"]):
+                column_free(o.Shape, h, stock_top) for h in st["holes"] for o in proj.job.Model.Group
+                if getattr(o, "Shape", None) is not None):
             # l'hélice de FreeCAD descend en rapide jusqu'au départ : départ au-dessus du brut (la colonne du trou
             # ne contient que du brut, coupé par l'hélice) plutôt qu'un rapide dans le brut restant
             params["StartDepth"] = stock_top
         asm = _assemblies(proj.library, tool)
         preset = _preset(tool, "drilling" if st["kind"] == "drilling" else "general")
-        faces = [f for h in st["holes"] for f in h.faces
-                 if clone.Shape.Faces[int(f[4:]) - 1].Surface.__class__.__name__ == "Cylinder"]
+        base = []
+        for h in st["holes"]:
+            obj = h.obj or clone
+            faces = [f for f in h.faces if obj.Shape.Faces[int(f[4:]) - 1].Surface.__class__.__name__ == "Cylinder"]
+            entry = next((b for b in base if b[0] is obj), None)
+            if entry is None:
+                base.append((obj, faces))
+            else:
+                entry[1].extend(faces)
         name = tr(STEP_LABELS["bore" if st.get("bore") else st["step"]]) + " Ø%.2f" % st["model"].diameter
         if name in used:  # même diamètre, autre profondeur : FreeCAD renommerait en « Ø4.001 »
             name += " Z%.2f..%.2f" % (st["model"].bottom, st["model"].top)
         used.add(name)
-        op, _rec = proj.add_operation(st["kind"], name, asm.id, preset.id, base=[(clone, faces)], params=params)
+        op, _rec = proj.add_operation(st["kind"], name, asm.id, preset.id, base=base, params=params)
         ops.append(op)
     return ops
 

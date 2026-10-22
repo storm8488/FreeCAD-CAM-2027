@@ -39,6 +39,11 @@ STAY_DOWN_STEPS = 2.0
 #: pente au-delà de laquelle la grille ne représente plus la surface (parois) : non contrôlée en couverture
 WALL_DEG = 75.0
 MAX_GRID_POINTS = 4000000
+#: points du parcours au-delà desquels le calcul est refusé (chauffage Vz330 : 2,2 millions, < 6 Go ; plateau : 4,3 millions, 8,6 Go mesurés)
+MAX_PATH_POINTS = 2500000
+#: coupe remplacée par une marche : plus raide que cette pente (dz / dxy) et sous la surface de plus de REFINE_TOL
+STEEP_SLOPE = 2.0
+REFINE_TOL = 0.002
 _NO_HEIGHT = -1.0e6
 
 
@@ -302,6 +307,11 @@ def compute_passes(surface, bounds, diameter, corner_radius, scallop, sample=DEF
     s = stepover(scallop, corner_radius, diameter)
     g = min(float(sample), s / GRID_PER_STEP)
     xmin, ymin, xmax, ymax = bounds
+    # la grille ne porte que la distance le long de la surface (chaque point final est recalculé par
+    # OpenCamLib) : sur une grande pièce elle peut grossir jusqu'à pas / 4
+    cells = ((xmax - xmin) / g + 1) * ((ymax - ymin) / g + 1)
+    if cells > MAX_GRID_POINTS:
+        g = max(g, min(s / GRID_PER_STEP, math.sqrt((xmax - xmin) * (ymax - ymin) / (0.9 * MAX_GRID_POINTS))))
     grid = Grid(surface, xmin, ymin, xmax, ymax, g, zmin=zmin)
     valid = grid.valid
     if not valid.any():
@@ -349,7 +359,7 @@ def compute_passes(surface, bounds, diameter, corner_radius, scallop, sample=DEF
         warnings.append(Msg("walls steeper than {a:g}° are not checked by the scallop computation: use steep and shallow mode",
                             a=WALL_DEG))
     return {"shallow": shallow_lines + extra, "steep": steep_lines, "stepover": s, "grid": grid,
-            "uncovered": int(todo.sum()), "warnings": warnings, "sample": g}
+            "uncovered": int(todo.sum()), "warnings": warnings, "grid_step": g, "sample": min(float(sample), g)}
 
 
 def _dilate(mask, n):
@@ -361,30 +371,87 @@ def _dilate(mask, n):
 # -- passes en 3D et liaisons -------------------------------------------------------------------------------
 
 
-def order_passes(lines):
-    """Ordre des passes : plus proche voisin (boucles tournées, lignes ouvertes retournées au besoin)."""
+def check_size(lines, sample, scallop):
+    """Refus clair quand le parcours dépasserait ``MAX_PATH_POINTS`` points (un point par intervalle
+    d'échantillonnage) : plateau 220 x 220 mm de l'utilisateur à 0,02 mm de crête, 4,3 millions de points, plus de
+    10 Go de mémoire avant la fin du calcul."""
     np = _np()
+    total = 0
+    for l in lines:  # même compte que ``_resample`` : au moins un point par segment
+        if len(l) >= 2:
+            d = np.hypot(*np.diff(np.asarray(l)[:, :2], axis=0).T)
+            total += 1 + int(np.maximum(np.ceil(d / sample), 1).sum())
+    if total > MAX_PATH_POINTS:
+        raise UserError("constant scallop finishing: about {n} million points for this area at a {h} mm scallop height: increase the scallop height or the sample interval, or limit the area",  # noqa: E501
+                        n="%.1f" % (total / 1e6), h="%g" % scallop)
+    return total
+
+
+def order_passes(lines):
+    """Ordre des passes : plus proche voisin (boucles tournées, lignes ouvertes retournées au besoin).
+
+    Même règle qu'une recherche de toutes les passes restantes à chaque pas (plus courte distance, puis la première
+    passe de la liste ; départ d'une boucle à son sommet le plus proche, ligne ouverte par le bout le plus proche,
+    son début à égalité), avec un arbre des points de départ possibles : 34 000 passes sur le plateau 220 x 220 mm
+    au lieu de plusieurs centaines de millions de comparaisons."""
+    np = _np()
+    from scipy.spatial import cKDTree
+
     todo = [np.asarray(l) for l in lines if len(l) >= 2]
-    out, cur = [], None
-    while todo:
-        best, best_d, best_line = 0, None, None
-        for k, line in enumerate(todo):
-            if cur is None:
-                cand, d = line, 0.0
-            elif np.allclose(line[0], line[-1]):
-                dd = np.hypot(*(line[:-1] - cur).T)
-                m = int(np.argmin(dd))
-                cand, d = np.vstack([line[m:-1], line[:m + 1]]), float(dd[m])
-            else:
-                d0, d1 = float(np.hypot(*(line[0] - cur))), float(np.hypot(*(line[-1] - cur)))
-                cand, d = (line, d0) if d0 <= d1 else (line[::-1], d1)
-            if best_d is None or d < best_d:
-                best, best_d, best_line = k, d, cand
-            if cur is None:
+    if not todo:
+        return []
+    closed = [bool(np.allclose(l[0], l[-1])) for l in todo]
+    pts, owner = [], []
+    for k, (line, c) in enumerate(zip(todo, closed)):
+        p = line[:-1] if c else line[[0, -1]]
+        pts.append(p[:, :2])
+        owner.append(np.full(len(p), k))
+    pts, owner = np.vstack(pts), np.concatenate(owner)
+    tree = cKDTree(pts)
+    used = np.zeros(len(todo), dtype=bool)
+    alive = len(pts)  # points dont la passe reste à faire
+
+    def candidate(k, cur):
+        line = todo[k]
+        if closed[k]:
+            dd = np.hypot(*(line[:-1] - cur).T)
+            m = int(np.argmin(dd))
+            return np.vstack([line[m:-1], line[:m + 1]]), float(dd[m])
+        d0, d1 = float(np.hypot(*(line[0] - cur))), float(np.hypot(*(line[-1] - cur)))
+        return (line, d0) if d0 <= d1 else (line[::-1], d1)
+
+    out = [todo[0]]
+    used[0] = True
+    alive -= int((owner == 0).sum())
+    cur = todo[0][-1]
+    while alive > 0:
+        if alive < len(pts) // 2:  # arbre refait sur les points restants (sinon les k plus proches sont déjà faits)
+            keep = ~used[owner]
+            pts, owner = pts[keep], owner[keep]
+            tree = cKDTree(pts)
+        k_query = 16
+        while True:
+            dist, idx = tree.query(cur[:2], k=min(k_query, len(pts)))
+            dist, idx = np.atleast_1d(dist), np.atleast_1d(idx)
+            ok = ~used[owner[idx]]
+            if ok.any() or k_query >= len(pts):
                 break
-        todo.pop(best)
-        out.append(best_line)
-        cur = best_line[-1]
+            k_query *= 4
+        # toutes les passes à la plus courte distance (à l'arrondi près de l'arbre) : distance exacte, puis la
+        # première de la liste
+        near = dist[ok][0]
+        within = np.asarray(tree.query_ball_point(cur[:2], near + 1e-6), dtype=int)
+        within = within[~used[owner[within]]]
+        best = None
+        for k in sorted(set(owner[within].tolist())):
+            cand, d = candidate(k, cur)
+            if best is None or d < best[1]:
+                best = (k, d, cand)
+        k, _d, cand = best
+        used[k] = True
+        alive -= 2 if not closed[k] else len(todo[k]) - 1
+        out.append(cand)
+        cur = cand[-1]
     return out
 
 
@@ -433,7 +500,40 @@ def moves_for(surface, lines, step, safe_z, stay_down):
     if moves:
         last = moves[-1]
         moves.append(("rapid", last[1], last[2], float(safe_z)))
-    return moves
+    return refine_steep(surface, moves)
+
+
+def refine_steep(surface, moves, tol=REFINE_TOL):
+    """Marches à la place des coupes raides qui passent sous la surface du centre de l'outil.
+
+    Au bord d'une paroi verticale, deux points voisins d'une passe sont l'un sur l'arête (boule posée sur le bord),
+    l'autre au pied de la paroi : la droite qui les relie entre dans l'arête (jusqu'à l'écart entre les points :
+    0,053 mm mesurés sur l'ER16). Chaque coupe plus raide que ``STEEP_SLOPE`` dont le milieu est sous la hauteur
+    OpenCamLib (+ ``tol``, un seul lot pour toutes) devient une marche : palier à la plus haute des deux hauteurs,
+    puis montée ou descente verticale. Entre deux points voisins (au plus l'intervalle d'échantillonnage), la
+    surface ne dépasse pas la plus haute des deux de plus que la flèche de la boule (< 0,001 mm à 0,1 mm). Les
+    pentes douces ne sont pas touchées (flèche de corde < 0,002 mm au pas d'échantillonnage)."""
+    np = _np()
+    if len(moves) < 2:
+        return moves
+    kinds = np.array([m[0] for m in moves])
+    pts = np.array([m[1:] for m in moves], dtype=float)
+    a, b = pts[:-1], pts[1:]
+    dxy = np.hypot(b[:, 0] - a[:, 0], b[:, 1] - a[:, 1])
+    cand = np.nonzero((kinds[1:] == "cut") & (dxy > 1e-9) & (np.abs(b[:, 2] - a[:, 2]) > STEEP_SLOPE * dxy))[0]
+    if not len(cand):
+        return moves
+    mid = 0.5 * (a[cand] + b[cand])
+    z = surface.drop(mid[:, 0], mid[:, 1])
+    bad = cand[np.isfinite(z) & (z > mid[:, 2] + tol)]
+    if not len(bad):
+        return moves
+    a, b = pts[bad], pts[bad + 1]
+    corner = np.where((a[:, 2] >= b[:, 2])[:, None], np.column_stack([b[:, :2], a[:, 2]]),
+                      np.column_stack([a[:, :2], b[:, 2]]))
+    pts = np.insert(pts, bad + 1, corner, axis=0)
+    kinds = np.insert(kinds, bad + 1, "cut")
+    return [(str(k), float(x), float(y), float(z)) for k, (x, y, z) in zip(kinds.tolist(), pts)]
 
 
 def path_commands(moves, horiz_feed, vert_feed):
@@ -535,6 +635,7 @@ class ObjectScallop(PathOp.ObjectOp):
                              zmin=float(obj.FinalDepth.Value))
         opsmod.keep_gui_alive()
         obj.Stepover3D = res["stepover"]
+        check_size(res["steep"] + res["shallow"], res["sample"], float(obj.ScallopHeight.Value))
         lines = order_passes(res["steep"]) + order_passes(res["shallow"])
         moves = moves_for(surface, lines, res["sample"], float(obj.SafeHeight.Value),
                           STAY_DOWN_STEPS * res["stepover"])

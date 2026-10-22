@@ -145,6 +145,95 @@
 - **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
   d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
 
+- **[B4]** Correctif : **temps d'usinage des opérations rotatives** (G93, temps inverse) faux. L'estimation lisait
+  l'avance d'un mouvement G93 (inverse de sa durée) comme une vitesse en mm/s sur la seule longueur X Y Z : rotation
+  pure comptée 0 s, autres mouvements faux (11,0 s estimées au lieu de 4,0 s sur le cas d'essai). Chaque mouvement
+  G93 compte maintenant pour 1 / F (sans modèle d'accélération) ; test `test_jour3_b4.TestTiming`.
+- **[B4]** Correctif : **zones interdites ignorées par les motifs et par « Limiter à une zone »**. Seuls les rapides
+  des opérations étaient relevés ; les copies d'un motif (rapides de l'original déplacés) et les liaisons recalculées
+  d'une découpe (à la hauteur de dégagement) traversaient une zone plus haute (cas d'essai : rapide à Z 16 dans une
+  zone de 30 mm). Les deux habillages relèvent maintenant leurs rapides comme les opérations (rayon de l'outil de
+  l'opération de base). La reprise de matière (`rest.py`, même moteur de découpe) n'est pas encore corrigée.
+- **[B4]** **Palpage d'un coin intérieur** (poche, butée de montage) : Usiner > Palper l'origine, « coin intérieur »,
+  palpeur descendu dans la poche à 10 mm des deux parois ; X puis Y palpés vers les parois (rayon de la bille
+  compté), Z non touché, retour au point de départ. Test : programme exécuté par un GRBL simulé contre les parois
+  d'une poche, origine exacte aux 4 coins en G10 L20 et en G92 (le coin extérieur, vérifié de la même façon, est
+  exact aussi).
+- **[B4]** **Finition 3D rotative en spirale** : choix « Motif » du dialogue Usinage rotatif (lignes le long de l'axe
+  ou spirale). A tourne sans arrêt pendant que X avance d'un pas par tour (un tour à X constant à chaque bout) :
+  une seule passe continue, sans les remontées de fin de ligne ; niveaux d'ébauche parcourus dans un sens puis dans
+  l'autre (A ne revient pas en arrière). Refusée avec un message si la course de l'axe A du profil machine ne
+  contient pas tous les tours. Test : carte radiale = pièce à ± 0,05 mm, aucune entaille, A croissant, vitesse
+  réelle = avance à 2 %, export sans erreur.
+- **[B4]** Correctif : **perçage intelligent limité au premier corps du job**. Le dialogue ne cherchait les trous
+  que dans `Model.Group[0]` : sur une pièce en plusieurs corps (le chauffage Vz330 de l'utilisateur en a deux),
+  les trous des autres corps étaient ignorés sans message. Les trous de tous les corps sont trouvés
+  (`holes.find_job_holes`) et chaque opération prend les faces de chaque trou sur son propre corps ; le départ au-dessus
+  du brut de l'alésage hélicoïdal vérifie la colonne du trou dans tous les corps.
+- **[B4]** Correctif : **entaille de la finition à crête constante (`scallop`) au bord des parois verticales**
+  (0,053 mm sur l'ER16 de l'utilisateur, non analysée cette nuit). Ce n'était pas une fausse alerte du contrôle :
+  deux points voisins d'une passe (0,1 mm en XY) sont l'un sur l'arête de la paroi (boule posée sur le bord),
+  l'autre 16 mm plus bas au pied de la paroi, et la droite qui les relie entre dans l'arête. Une coupe plus raide
+  que 2/1 dont le milieu passe sous la hauteur OpenCamLib devient une marche (palier à la plus haute des deux
+  hauteurs, puis verticale ; un seul lot OpenCamLib pour toutes). Test : marche de 10 mm, pénétration exacte de la
+  boule 0,0125 mm avant, < 0,005 mm après.
+- **[B4]** Correctif : **entaille de la finition 3D rotative au bord des parois plus profondes que le rayon de la
+  boule** (gorge, poche, épaulement). Même défaut que `scallop` : deux points voisins d'une ligne (0,25 mm) sont l'un
+  sur l'arête, l'autre au fond, et la droite qui les relie entre dans l'arête : **0,26 mm** mesurés sur une gorge de
+  6 mm avec la boule de 6 (le test de la nuit ne regardait la carte radiale que loin des parois, sur une poche de
+  2 mm). Deux points voisins plus écartés en hauteur que 2 fois leur distance sont maintenant reliés par une marche
+  (palier à la plus haute des deux hauteurs, puis montée ou descente seule), en lignes comme en spirale.
+- **[B4]** Correctif : **finition à crête constante (`scallop`) refusée sur les grandes pièces** (plateau 220 × 220 mm
+  de l'utilisateur : « 4 840 801 points de surface, augmentez l'intervalle d'échantillonnage »). La grille ne porte
+  que la distance le long de la surface (chaque point des passes est recalculé par OpenCamLib à l'intervalle
+  demandé) : au-delà de 4 millions de points, elle grossit jusqu'à pas / 4 au lieu de refuser (correctif préparé
+  par S4 cette nuit, non vérifié alors).
+- **[B4]** Correctif : **finition des plats à travers un corps posé dessus** (pièce en plusieurs corps). Un plat n'était
+  jugé accessible qu'au regard de son propre corps : le dessus d'un corps sous un autre était fini en entier,
+  à travers l'autre corps (entaille de **5 mm** sur le chauffage Vz330 de l'utilisateur, 10 mm sur le cas d'essai).
+  Les plats de chaque corps sont maintenant privés de l'empreinte, vue de dessus, des autres corps au-dessus d'eux
+  (sections aux hauteurs des sommets), puis réduits du rayon de la fraise comme avant.
+- **[B4]** Correctif : **perçage intelligent sous un autre corps**. Un trou d'un corps couvert par un autre corps posé
+  dessus était proposé : le foret traversait le corps du dessus. Ces trous sont écartés, avec un message dans le
+  dialogue (« N trou(s) sous un autre corps de la pièce laissé(s) de côté »).
+- **[B4]** Optimisation : **ordre des passes de `scallop`** par un arbre des points de départ (même règle et mêmes
+  égalités que la recherche exhaustive d'avant, comparées dans un test). ER16 : 17,0 s → 0,23 s pour l'ordre (calcul
+  complet 42–50 s → 25–29 s, mêmes 536 205 commandes, même volume enlevé), disque : 1,7 s → 0,04 s ; ordre identique sur les deux. Sur le plateau (34 000 passes)
+  l'ancien ordre ne finissait pas en 25 minutes.
+- **[B4]** Garde-fou : **finition à crête constante refusée au-delà de 2,5 millions de points de parcours**, avec un
+  message qui dit quoi changer (crête, intervalle, zone). Mesuré : chauffage Vz330 2,2 millions de commandes, calcul
+  143 s, sous 6 Go ; plateau 220 × 220 mm à 0,02 mm de crête 4,3 millions, **8,6 Go à 86 s** (arrêté) — refusé
+  maintenant après 38 s. Avec la grande grille et l'ordre des passes ci-dessus, le chauffage, qui ne donnait aucun
+  résultat cette nuit (plus de 25 min), est calculé.
+- **[B4]** Correctif : **le cylindre extérieur d'un tube (entretoise) reconnu comme un trou** par le perçage
+  intelligent. Le test « centre vide » tombait dans l'alésage du tube : l'alésage hélicoïdal Ø10 usinait
+  l'entretoise (entaille de 2,3 mm sur les quatre entretoises du chauffage Vz330 de l'utilisateur). La matière est
+  maintenant cherchée aussi juste à l'intérieur du rayon (8 points à 0,95 R) : seul l'alésage du tube reste un trou.
+- **[B4]** Correctif : **trou borgne à fond en pente percé jusqu'à son point le plus bas** (alésage d'entretoise du
+  chauffage Vz330 qui débouche sur une surface inclinée : 1,05 mm d'entaille). Le fond utilisé est maintenant le
+  point le plus haut du bord du bas (un peu de matière reste du côté bas plutôt qu'une entaille). Chauffage, perçage
+  intelligent sur tous les corps : entaille 2,3 → 0 mm, rapides dans la matière 12 → 0 (avec les correctifs
+  précédents).
+- **[B4]** Optimisation (mémoire) : **reprise des angles (`pencil`) à 6,5 Go**. Le profil de la boule de référence
+  (18 mm par défaut) était appliqué à la carte de hauteur en une fois (`grey_dilation` de scipy avec un noyau 2D :
+  6,5 Go de pointe sur le disque WobbleRing comme sur le chauffage Vz330 ; arrêté à 6,5 Go sur 1.0.2) ; il l'est
+  maintenant ligne par ligne du noyau (résultat identique, comparé dans un test), et la hauteur de pointe de la
+  boule de reprise n'est plus calculée deux fois. Disque : 27,5 s → 17,4 s, pointe 6,5 Go → 0,23 Go ; chauffage :
+  74,7 s → 65,6 s, 6,5 Go → 0,41 Go ; mêmes commandes (676 et 19 344).
+- **[B4]** Optimisation : **imbrication par forme réelle sur un grand panneau** (1220 × 2440, 35 pièces en L et
+  rectangles, espacement 5, pas de 15°) : 40,9 s → **6,1 s**, placements identiques. La meilleure position (dessus
+  le plus bas, puis le plus à gauche) est lue directement (première colonne libre, première ligne libre) au lieu de
+  trier toutes les positions libres à chaque rotation (40,9 → 6,1 s) ; transformées de Fourier sur tous les cœurs
+  (`scipy.fft`, 10 % de plus mesurés seuls : 40,9 → 36,5 s).
+- **[B4]** Correctif : **prisme sans passe sur FreeCAD 1.0.2** (« Prisme : rien à usiner » dans le scénario
+  `s5-decor`, jamais lancé sur 1.0 cette nuit). L'import SVG de 1.0 donne des arêtes B-spline et le décalage vers
+  l'extérieur du plat de pointe du V-bit échoue (« Wire is not closed ») ; l'échec était pris pour « plus rien à
+  l'intérieur ». Le décalage est repris sur la copie polygonale de la face (0,01 mm) ; rien ne change quand il réussit.
+- **[B4]** Correctif : **fiche de préparation PDF sur FreeCAD 1.0.2** — « Échec de l'opération : setPageSize called with
+  wrong argument types » (PySide2), et une fois cet appel contourné, une page **blanche** : sous Qt 5 de FreeCAD 1.0,
+  `QTextDocument` ne dessine rien dans `QPdfWriter` (vérifié : texte direct par `QPainter` 6,4 Ko, document 1,2 Ko
+  vide). La commande refuse maintenant clairement sur 1.0 (la fiche Markdown est écrite à côté du G-code à l'export) ;
+  1.1.4 inchangé (PDF de 23 Ko). Scénario `s5-setup-pdf` adapté (refus attendu sur 1.0).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
