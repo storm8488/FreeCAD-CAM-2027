@@ -868,7 +868,8 @@ def main():
                                                                             p, tmp, "adaptive")))
                     for i, p in enumerate(user) if p.lower().endswith(".stl")) \
             + __import__("tests.gui_scenarios_s2", fromlist=["*"]).scenarios(globals(), files, tmp) \
-            + tuple(__import__("tests.scenarios_s5", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)):
+            + tuple(__import__("tests.scenarios_s5", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)) \
+            + __import__("tests.gui_scenarios_b5", fromlist=["*"]).scenarios(globals(), files, tmp):
         if os.environ.get("CAM2027_SCENARIO_ONLY") and not name.startswith(os.environ["CAM2027_SCENARIO_ONLY"]):
             continue
         only = os.environ.get("CAM2027_SCENARIOS")  # liste « a;b » : seulement ces scénarios

@@ -125,6 +125,9 @@ def tool_change_stops(gcode):
     l'opération suivante avec l'outil précédent (fraise plus grosse = entaille). Chaque M6 commenté qui change
     de numéro d'outil devient broche arrêtée (M5) + pause (M0, reprise par Départ cycle ; CNCjs suspend aussi
     l'envoi) ; le premier outil est celui de la fiche. Retourne ``(gcode, nombre de pauses)``."""
+    upper = gcode.upper()
+    if "M6" not in upper and "M06" not in upper:
+        return gcode, 0  # aucun changement d'outil (programme à un seul outil sans M6 écrit)
     out, stops, current = [], 0, None
     for line in gcode.splitlines(True):
         m = _COMMENTED_M6.match(line)
@@ -134,7 +137,7 @@ def tool_change_stops(gcode):
         number = int(m.group(1))
         out.append(line)
         if current is not None and number != current:
-            out.append("M5\n(Tool change: load T%d, then resume)\nM0\n" % number)
+            out.append("M5\n(Tool change: load T%d, set Z zero again, then resume)\nM0\n" % number)
             stops += 1
         current = number
     return "".join(out), stops
@@ -181,7 +184,7 @@ def _arc_error(pos, values, plane):
     ea, eb = values.get(a, sa), values.get(b, sb)
     if "R" in values:
         half = 0.5 * ((ea - sa) ** 2 + (eb - sb) ** 2) ** 0.5
-        return max(0.0, half - abs(values["R"])) if half > abs(values["R"]) + 1e-9 else 0.0
+        return half - abs(values["R"]) if half > abs(values["R"]) + 1e-9 else 0.0
     if ia not in values and ib not in values:
         return float("inf")
     ca, cb = sa + values.get(ia, 0.0), sb + values.get(ib, 0.0)
