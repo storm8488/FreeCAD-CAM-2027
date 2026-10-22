@@ -165,8 +165,9 @@ class TestDressups(unittest.TestCase):
         make_part(cls.step)
         FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
 
-    def _profile(self):
+    def _profile(self, kind="profile", extra=None):
         from cam2027.gui.commands import default_params
+        from cam2027.project import operations
 
         lib = starter_library()
         proj = Project.create("B1d", lib)
@@ -175,9 +176,11 @@ class TestDressups(unittest.TestCase):
         tool = lib.search("6 mm flat end mill 2F")[0]
         asm = lib.assemblies_for_tool(tool.id)[0]
         preset = tool.presets[0]
-        op, _rec = proj.add_operation("profile", "profile", asm.id, preset.id,
-                                      base=[(m, []) for m in proj.job.Model.Group],
-                                      params=default_params("profile", tool, preset.resolve(tool)))
+        models = list(proj.job.Model.Group)
+        base = operations.auto_geometry(kind, models)
+        params = dict(default_params(kind, tool, preset.resolve(tool)), **(extra or {}))
+        op, _rec = proj.add_operation(kind, kind, asm.id, preset.id,
+                                      base=[(m, []) for m in models] if base is None else base, params=params)
         proj.compute()
         return proj, op
 
@@ -190,6 +193,19 @@ class TestDressups(unittest.TestCase):
         proj.compute()
         self.assertEqual(len(tags.Positions), 4)
         self.assertEqual(proj.operation_state(proj.job.Operations.Group[-1]), "computed")
+
+    def test_clearing_pattern_editable(self):
+        """FreeCAD 1.1 a renommé ``OffsetPattern`` des poches et du surfaçage en ``ClearingPattern`` : le motif de
+        vidage n'était plus ni modifiable dans l'éditeur ni appliqué (paramètre ignoré)."""
+        from cam2027.project import operations
+
+        for kind in ("pocket", "pocket2d", "millface"):
+            proj, op = self._profile(kind)
+            names = [n for n in operations.STRATEGIES[kind]["params"] if n in op.PropertiesList]
+            pattern = [n for n in names if n in ("OffsetPattern", "ClearingPattern")]
+            self.assertEqual(len(pattern), 1, kind)
+            self.assertEqual(operations.set_params(op, {pattern[0]: "Offset"}), [], kind)
+            self.assertEqual(getattr(op, pattern[0]), "Offset", kind)
 
 class TestSurfaceSpeed(unittest.TestCase):
     """Accélérations de la finition 3D : mêmes points que FreeCAD."""

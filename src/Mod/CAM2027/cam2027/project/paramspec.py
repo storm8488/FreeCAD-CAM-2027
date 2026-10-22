@@ -55,6 +55,7 @@ PARAM_SPECS = {
     "CutMode": ("Cut mode", "strategy", "Climb or conventional milling."),
     "ZigZagAngle": ("Zigzag angle", "strategy", "Angle of the zigzag passes (deg)."),
     "OffsetPattern": ("Pattern", "strategy", "Offset, zigzag, spiral... pass pattern."),
+    "ClearingPattern": ("Pattern", "strategy", "Offset, zigzag, spiral... pass pattern."),  # nom FreeCAD 1.1
     "StartAt": ("Start at", "strategy", "Start the pocket at the centre or at the edge."),
     "UseOutline": ("Use outline", "strategy", "Use only the outline of the selected faces."),
     "HelixAngle": ("Helix angle", "strategy", "Ramp angle of the helical entry (deg)."),

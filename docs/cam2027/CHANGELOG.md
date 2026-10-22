@@ -26,10 +26,13 @@
   découpe à outils multiples donne la même région (copie gardée par empreinte SHA-1, `patch_combine_faces`).
   Plateau, poche 2D : 13,0 / 14,4 s → 8,4 / 8,6 s, même G-code ; adaptative : 14,3 / 11,0 s → 8,4 / 4,6 s, même
   volume enlevé (607,0 cm³), commandes dans la dispersion habituelle de l'adaptative.
-- **[B1]** Attaches cochées avec un autre habillage (rampe, dogbones) dans la même validation de l'éditeur, ou sur une
-  opération sans parcours : FreeCAD lisait un parcours encore vide et l'erreur brute « list index out of range »
-  s'affichait. L'habillage du dessous est recalculé d'abord ; sans aucun mouvement de coupe, un message clair
-  (`dressups.add_dressup`).
+- **[B1]** Attaches ajoutées sur un habillage pas encore recalculé (rampe ou dogbones ajoutés juste avant par
+  script ; l'éditeur ajoute les attaches en premier) ou sur une opération sans parcours : FreeCAD lisait un
+  parcours vide et l'erreur brute « list index out of range » remontait. L'habillage du dessous est recalculé
+  d'abord ; sans aucun mouvement de coupe, un message clair (`dressups.add_dressup`).
+- **[B1]** Poches et surfaçage sous FreeCAD 1.1 : le motif de vidage (`OffsetPattern`) y est renommé
+  `ClearingPattern` ; il n'était plus ni proposé dans l'éditeur ni appliqué (paramètre ignoré). Les deux noms sont
+  maintenant connus (`operations.STRATEGIES`, `paramspec`).
 
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors

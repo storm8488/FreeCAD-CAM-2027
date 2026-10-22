@@ -30,7 +30,7 @@ STRATEGIES = {
     "pocket": {
         "module": "Path.Op.Pocket",
         "label": "2.5D pocket (offset / zigzag)",
-        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "StartAt", "ExtraOffset",
+        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StartAt", "ExtraOffset",
                    "KeepToolDown", "MinTravel", "UseOutline", "StepDown", "StartDepth", "FinalDepth",
                    "FinishDepth", "ClearanceHeight", "SafeHeight", "HelixAngle", "HelixDiameterLimit"),
         "limits": "Offset/zigzag/spiral patterns are NOT adaptive (no engagement control); use 'adaptive'.",
@@ -38,7 +38,7 @@ STRATEGIES = {
     "pocket2d": {
         "module": "Path.Op.PocketShape",
         "label": "2D pocket (inside a drawing contour)",
-        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "StartAt", "ExtraOffset",
+        "params": ("CutMode", "StepOver", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StartAt", "ExtraOffset",
                    "KeepToolDown", "MinTravel", "UseOutline", "StepDown", "StartDepth", "FinalDepth",
                    "FinishDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Works on flat faces (the faces generated from closed drawing contours); depth set by the "
@@ -63,7 +63,7 @@ STRATEGIES = {
     "millface": {
         "module": "Path.Op.MillFace",
         "label": "Facing",
-        "params": ("BoundaryShape", "StepOver", "CutMode", "ZigZagAngle", "OffsetPattern", "StepDown",
+        "params": ("BoundaryShape", "StepOver", "CutMode", "ZigZagAngle", "OffsetPattern", "ClearingPattern", "StepDown",
                    "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight", "ExcludeRaisedAreas",
                    "ClearEdges"),
         "limits": "Flat faces only; with 'ClearEdges' the tool centre passes just beyond the face edges.",
