@@ -291,7 +291,7 @@ class TestMaterialCheck(unittest.TestCase):
                                                        "BoundBox": "BaseBoundBox", "FinalDepth": 5.0})
         rep = proj.material_check()
         self.assertEqual(rep["simulated"], ["Dome finishing"])
-        self.assertLess(rep["gouge_max"], 0.05, rep)
+        self.assertLess(rep["gouge_max"], 0.02, rep)  # pièce triangulée à 0,01 mm (B2 jour 3 : 0,05 avant)
         self.assertGreater(rep["removed_volume"], 1000.0)
         self.assertLess(rep["leftover_mean"], 0.3, rep)
         proj.close()
