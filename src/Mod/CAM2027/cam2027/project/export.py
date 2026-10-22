@@ -20,6 +20,10 @@ from ..i18n import Msg
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
 _COMMENT = re.compile(r"\(.*?\)")
+#: ligne (commentaires ôtés) faite uniquement de mots « lettre + nombre » ; sinon GRBL : error:1 / error:2
+_WORDS_ONLY = re.compile(r"(?:[A-Za-z]\s*[-+]?\d*\.?\d+\s*)*$")
+#: ligne entière de commentaire du postprocesseur, numéro de ligne éventuel
+_COMMENT_LINE = re.compile(r"^(\s*(?:N\d+\s*)?)\((.*)\)(\s*)$")
 
 # codes acceptés par défaut pour un contrôleur GRBL (v1.1)
 GRBL_ALLOWED = {
@@ -89,8 +93,25 @@ def postprocess(job, post_name=None, post_args=None):
     for name, gcode in sections:
         if not isinstance(gcode, str):
             gcode = str(gcode)
-        out.append((name, tool_change_stops(gcode)[0]))
+        out.append((name, tool_change_stops(flat_comments(gcode))[0]))
     return out
+
+
+def flat_comments(gcode):
+    """Commentaire sans parenthèse intérieure : un libellé « Contour (copy) » donnait « (Begin operation: Contour
+    (copy)) », que GRBL et CNCjs ferment à la première « ) » ; la « ) » restante est lue comme du G-code (error:1,
+    programme arrêté). Les parenthèses intérieures deviennent des crochets."""
+    if gcode.count("(") == gcode.count("\n(") + gcode.startswith("("):
+        return gcode  # cas courant : une parenthèse par ligne de commentaire, en début de ligne
+    out = []
+    for line in gcode.splitlines(True):
+        body = line.rstrip("\r\n")
+        m = _COMMENT_LINE.match(body)
+        if m and ("(" in m.group(2) or ")" in m.group(2)):
+            line = "%s(%s)%s%s" % (m.group(1), m.group(2).replace("(", "[").replace(")", "]"), m.group(3),
+                                   line[len(body):])
+        out.append(line)
+    return "".join(out)
 
 
 #: M6 mis en commentaire par le postprocesseur ``grbl`` (GRBL 1.1 refuse M6 : error:20)
@@ -199,6 +220,7 @@ def analyze_gcode(text):
     spindle_on = False
     program_end = False  # M2 / M30 rencontré
     max_arc_error = 0.0
+    bad_lines = 0  # lignes avec autre chose que des mots G-code hors commentaires
     fs = []  # mots F de la ligne
     for raw in text.splitlines():
         if ";" in raw:
@@ -209,6 +231,8 @@ def analyze_gcode(text):
         if not line:
             continue
         lines += 1
+        if not _WORDS_ONLY.match(line):
+            bad_lines += 1
         words = _WORD.findall(line)
         not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
         was_inverse = inverse_time
@@ -343,6 +367,7 @@ def analyze_gcode(text):
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
         "bad_arcs": bad_arcs,
+        "bad_lines": bad_lines,
         "undefined_feed": undefined_feed,
         "spindle_on_at_end": spindle_on,
         "program_end": program_end,
@@ -385,6 +410,9 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("g93_arcs"):
         issues.append(("error", Msg("{n} arc(s) in inverse-time mode (G93): not checked, not supported",
                                     n=analysis["g93_arcs"])))
+    if analysis.get("bad_lines"):
+        issues.append(("error", Msg("{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)",
+                                    n=analysis["bad_lines"])))
     if analysis.get("bad_arcs"):
         issues.append(("error", Msg("{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small",
                                     n=analysis["bad_arcs"], d=analysis["max_arc_error"])))

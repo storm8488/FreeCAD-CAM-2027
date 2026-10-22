@@ -1449,5 +1449,6 @@
   "{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small": "{n} arc(s) refusé(s) par GRBL (error:33 à 35) : point d'arrivée hors du cercle jusqu'à {d:.3f} mm, ou sans centre, ou rayon trop petit",
   "{n} cutting move(s) without a feed rate (GRBL error:22; after G93 -> G94 the feed must be given again)": "{n} mouvement(s) de coupe sans avance (GRBL error:22 ; après G93 -> G94, l'avance doit être redonnée)",
   "the spindle is still running at the end of the program (no M5)": "la broche tourne encore à la fin du programme (pas de M5)",
-  "no program end (M2 / M30): the controller keeps the last modal state": "pas de fin de programme (M2 / M30) : le contrôleur garde le dernier état modal"
+  "no program end (M2 / M30): the controller keeps the last modal state": "pas de fin de programme (M2 / M30) : le contrôleur garde le dernier état modal",
+  "{n} line(s) with text that is not G-code words outside comments (GRBL error:1 or error:2)": "{n} ligne(s) avec du texte qui n'est pas du G-code hors des commentaires (GRBL error:1 ou error:2)"
 }

@@ -603,7 +603,7 @@ class TestProbeProject(_PlateCase):
         proj.compute()
         text = "\n".join(g for _n, g in exportmod.postprocess(proj.job))
         lines = text.splitlines()
-        start = next(i for i, l in enumerate(lines) if l.startswith("(Begin operation: %s" % pop.Label))
+        start = next(i for i, l in enumerate(lines) if l.startswith("(Begin operation: %s" % pop.Label.replace("(", "[").replace(")", "]")))
         end = next(i for i, l in enumerate(lines) if i > start and l.startswith("(Begin operation:"))
         got = [w for w in (gcode_words(l) for l in lines[start:end]) if w and w[0][0] == "G" and w[0][1] in
                ("0", "10", "38.2", "90", "91")]

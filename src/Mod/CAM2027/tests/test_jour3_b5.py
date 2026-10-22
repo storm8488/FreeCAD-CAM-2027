@@ -400,6 +400,35 @@ class TestSetupSheet(_PlateCase):
         self.assertTrue(exportmod.tool_number_issues(proj), "dressed operation ignored")
 
 
+class TestComments(_PlateCase):
+    def test_labels_with_parentheses(self):
+        """« Dupliquer » nomme la copie « Contour (copy) », le palpage « Probe the origin (corner) » : le
+        postprocesseur écrit « (Begin operation: Contour (copy)) ». GRBL (et CNCjs) ferment le commentaire à la
+        première « ) » et lisent la « ) » restante comme du G-code : error:1, programme arrêté (B5-14)."""
+        from cam2027.project import probe
+
+        proj, lib, clone = self.project("Parens", probe=dict(PROBE))
+        a6, p6 = self.tool(lib, "6 mm flat end mill")
+        op, _ = proj.add_operation("profile", "Contour", a6, p6, base=[(clone, [])],
+                                   params={"FinalDepth": 5.0, "StepDown": 5.0, "Side": "Outside"})
+        copy, _ = proj.duplicate_operation(op)
+        self.assertIn("(", copy.Label)
+        probe.add_probe(proj, "corner")
+        proj.compute()
+        text, analysis, issues = proj.preview_gcode()
+        for line in text.splitlines():
+            stripped = exportmod._COMMENT.sub("", line).strip()
+            self.assertNotIn(")", stripped, line)
+            self.assertNotIn("(", stripped, line)
+        self.assertIn("(Begin operation: %s)" % copy.Label.replace("(", "[").replace(")", "]"), text)
+        self.assertEqual(analysis["bad_lines"], 0)
+        # ce qui reste hors commentaire doit être des mots G-code (GRBL error:1 / error:2 sinon)
+        a = exportmod.analyze_gcode("G21\nG90\n(Begin operation: A (copy))\nG1 X1 F100\nG0 Z5 )\nM2\n")
+        self.assertEqual(a["bad_lines"], 2)
+        errors = [str(m) for lvl, m in exportmod.verify(a, machine()) if lvl == "error"]
+        self.assertTrue(any("not G-code words" in e for e in errors), errors)
+
+
 def dressupmod_base(obj):
     from cam2027.project import dressups
 
