@@ -565,6 +565,19 @@ def install(gs, tmp):
     global G, _real_close, _tmp, _watch
     G = gs
     _watch = _watch or _ModalWatch()
+    # plantage de FreeCAD : le rapport n'est écrit qu'à la fin ; chaque ligne est aussi ajoutée à un journal, et
+    # la pile Python de chaque fil est écrite par faulthandler
+    import faulthandler
+
+    trace = open(os.path.join(G.OUT, "gui_scenarios_trace.txt"), "w", encoding="utf-8")
+    faulthandler.enable(trace, all_threads=True)
+    plain_log = G.log
+
+    def log(msg):
+        plain_log(msg)
+        trace.write(str(msg) + "\n")
+        trace.flush()
+    G.log = log
     _tmp = tmp
     if not os.environ.get("CAM2027_B3_AUDIT"):
         return
