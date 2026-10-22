@@ -181,5 +181,22 @@ class TestHolderOnRamps(unittest.TestCase):
         self.assertAlmostEqual(sim.material_excess(z, p1, p0, 3.0, 18.0)[0], expected, places=6)
 
 
+class TestReport(unittest.TestCase):
+    def test_nothing_simulated_is_not_reported_as_no_gouge(self):
+        """Toutes les opérations sautées (axe A) : le rapport ne dit pas « aucune entaille trouvée »."""
+        from cam2027.gui.commands import material_report_text
+        from cam2027.i18n import Msg
+
+        rep = {"resolution": 0.5, "removed_volume": 0.0, "gouge_max": 0.0, "tolerance": 0.02, "gouge_at": None,
+               "part_cells": 0, "rapid_hits": 0, "simulated": [], "approximations": [],
+               "skipped": [("Wrap", Msg("uses the A axis (wrapped)"))]}
+        text = material_report_text(rep)
+        self.assertNotIn("No gouge found", text)
+        self.assertIn("No operation simulated: gouges not checked", text)
+        self.assertIn("Not simulated: Wrap", text)
+        rep["simulated"] = ["Facing"]
+        self.assertIn("No gouge found", material_report_text(rep))
+
+
 if __name__ == "__main__":
     unittest.main()
