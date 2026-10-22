@@ -25,8 +25,10 @@ GRBL_ALLOWED = {
     "G0", "G1", "G2", "G3", "G4", "G10", "G17", "G18", "G19", "G20", "G21", "G28", "G30", "G38.2", "G38.3",
     "G38.4", "G38.5", "G40", "G43.1", "G49", "G53", "G54", "G55", "G56", "G57", "G58", "G59", "G61", "G80",
     "G90", "G91", "G91.1", "G92", "G92.1", "G93", "G94",
-    "M0", "M1", "M2", "M30", "M3", "M4", "M5", "M7", "M8", "M9", "M56",
+    "M0", "M1", "M2", "M30", "M3", "M4", "M5", "M8", "M9",
 }
+#: M7 (brouillard) et M56 (forçage du parking) : seulement avec ENABLE_M7 / ENABLE_PARKING_OVERRIDE_CONTROL à la
+#: compilation de GRBL (désactivés par défaut, error:20) ; M7 accepté si le profil machine déclare « mist »
 ALLOWED_BY_CONTROLLER = {"grbl": GRBL_ALLOWED}
 
 
@@ -188,6 +190,10 @@ def analyze_gcode(text):
     plane = "17"
     pos = {"X": None, "Y": None, "Z": None}  # position de travail courante (None : inconnue)
     bad_arcs = 0  # arcs refusés par GRBL 1.1 (error:33 / 34 / 35)
+    feed_defined = False  # avance définie en G94 (GRBL : error:22 sinon ; perdue en passant de G93 à G94)
+    undefined_feed = 0
+    spindle_on = False
+    program_end = False  # M2 / M30 rencontré
     max_arc_error = 0.0
     for raw in text.splitlines():
         line = raw.split(";")[0]
@@ -197,6 +203,7 @@ def analyze_gcode(text):
         lines += 1
         words = _WORD.findall(line)
         not_position = False  # mots d'axe qui ne sont pas une position de travail (décalages, repère machine, palpage)
+        was_inverse = inverse_time
         for letter, number in words:
             if letter.upper() == "G":
                 g = str(int(float(number))) if float(number).is_integer() else number
@@ -218,6 +225,12 @@ def analyze_gcode(text):
         values = {}
         for letter, number in words:
             values[letter.upper()] = float(number)
+        if was_inverse and not inverse_time:
+            feed_defined = "F" in values
+        elif "F" in values and not inverse_time:
+            feed_defined = True
+        if motion in ("G1", "G2", "G3") and not inverse_time and not not_position and not feed_defined                 and any(k in values for k in "XYZABC"):
+            undefined_feed += 1
         if motion in ("G2", "G3") and not inverse_time and not relative and not not_position                 and any(k in values for k in "XYZIJKR"):
             err = _arc_error(pos, values, plane)
             if err is not None and err > 0.0:
@@ -259,6 +272,12 @@ def analyze_gcode(text):
                     tool_changes += 1
                 elif code == "M0":
                     pauses += 1
+                elif code in ("M3", "M4"):
+                    spindle_on, program_end = True, False
+                elif code == "M5":
+                    spindle_on = False
+                elif code in ("M2", "M30"):
+                    spindle_on, program_end = False, True
             elif letter in ("X", "Y", "Z", "A", "B", "C"):
                 axes.add(letter)
                 if relative or not_position:
@@ -300,6 +319,9 @@ def analyze_gcode(text):
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
         "bad_arcs": bad_arcs,
+        "undefined_feed": undefined_feed,
+        "spindle_on_at_end": spindle_on,
+        "program_end": program_end,
         "max_arc_error": max_arc_error,
         "ends_in_g93": inverse_time,
         "probe": __import__("cam2027.project.probe", fromlist=["analyze"]).analyze(text),
@@ -320,6 +342,8 @@ def verify(analysis, machine, stock_bounds=None):
         issues.append(("unverifiable", Msg("controller {c!r}: no allowed-code list, commands not checked",
                                            c=machine.controller)))
     else:
+        if machine.controller == "grbl" and "mist" in (machine.coolant_options or []):
+            allowed = allowed | {"M7"}
         bad = [c for c in analysis["codes"] if c not in allowed]
         if bad:
             issues.append(("error", Msg("commands not supported by {c}: {codes}", c=machine.controller,
@@ -340,6 +364,13 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("bad_arcs"):
         issues.append(("error", Msg("{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small",
                                     n=analysis["bad_arcs"], d=analysis["max_arc_error"])))
+    if analysis.get("undefined_feed"):
+        issues.append(("error", Msg("{n} cutting move(s) without a feed rate (GRBL error:22; after G93 -> G94 the feed must be given again)",
+                                    n=analysis["undefined_feed"])))
+    if analysis.get("spindle_on_at_end"):
+        issues.append(("warning", Msg("the spindle is still running at the end of the program (no M5)")))
+    if analysis.get("lines") and not analysis.get("program_end", True):
+        issues.append(("warning", Msg("no program end (M2 / M30): the controller keeps the last modal state")))
     if analysis.get("ends_in_g93"):
         issues.append(("error", Msg("the program ends in inverse-time mode (G93): G94 missing")))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):

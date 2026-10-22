@@ -322,6 +322,45 @@ class TestGrblRules(unittest.TestCase):
         self.assertEqual(exportmod.analyze_gcode("G21\nG90\nG0 X0 Y0\nG2 X20 Y0 R10.001 F100\n")["bad_arcs"], 0)
 
 
+class TestGrblProgramState(unittest.TestCase):
+    def msgs(self, text, level=None, **mkw):
+        return [str(m) for lvl, m in exportmod.verify(exportmod.analyze_gcode(text), machine(**mkw))
+                if level is None or lvl == level]
+
+    def test_undefined_feed(self):
+        """GRBL 1.1 refuse G1/G2/G3 sans avance définie (error:22), y compris juste après G93 -> G94 sans F
+        (l'avance n'est pas reprise de G93). Non contrôlé (B5-10)."""
+        head = "G21\nG90\nG54\n"
+        self.assertEqual(exportmod.analyze_gcode(head + "G0 X0\nG1 X10\n")["undefined_feed"], 1)
+        self.assertEqual(exportmod.analyze_gcode(head + "G0 X0\nG1 X10 F500\nG1 X20\nG2 X30 I5 J0\n")["undefined_feed"], 0)
+        a = exportmod.analyze_gcode(head + "G1 X1 F300\nG93\nG1 X2 A5 F10\nG94\nG1 X3\nG1 X4 F300\nG1 X5\n")
+        self.assertEqual(a["undefined_feed"], 1)
+        self.assertEqual(exportmod.analyze_gcode(head + "G93\nG1 X2 A5 F10\nG94 G1 X3 F300\n")["undefined_feed"], 0)
+        errors = self.msgs(head + "G0 X0\nG1 X10\nM2\n", "error")
+        self.assertTrue(any("without a feed rate" in e and "error:22" in e for e in errors), errors)
+
+    def test_program_end(self):
+        """Fin de programme : broche encore en marche après la dernière ligne, M2 / M30 absent (B5-11)."""
+        good = "G21\nG90\nG54\nM3 S12000\nG1 X1 F100\nM5\nM2\n"
+        self.assertFalse(any("spindle" in m and "end" in m or "M2" in m for m in self.msgs(good)), self.msgs(good))
+        open_end = "G21\nG90\nG54\nM3 S12000\nG1 X1 F100\n"
+        msgs = self.msgs(open_end, "warning")
+        self.assertTrue(any("still running at the end" in m for m in msgs), msgs)
+        self.assertTrue(any("no program end (M2 / M30)" in m for m in msgs), msgs)
+        # M30 arrête aussi la broche (GRBL : fin de programme)
+        self.assertFalse(any("still running" in m for m in self.msgs("G21\nG54\nM3 S1000\nG1 X1 F100\nM30\n")))
+
+    def test_mist_and_parking_codes(self):
+        """M7 (brouillard) et M56 (forçage du parking) n'existent dans GRBL 1.1 qu'avec ENABLE_M7 /
+        ENABLE_PARKING_OVERRIDE_CONTROL (désactivés par défaut) : error:20 sur la machine, alors que le contrôle
+        les acceptait (B5-12). M7 accepté si le profil déclare l'arrosage brouillard."""
+        text = "G21\nG90\nG54\nM3 S12000\nM7\nG1 X1 F100\nM9\nM5\nM2\n"
+        self.assertTrue(any("M7" in m for m in self.msgs(text, "error")), self.msgs(text, "error"))
+        self.assertFalse(any("M7" in m for m in self.msgs(text, "error", coolant_options=["none", "mist"])))
+        self.assertTrue(any("M56" in m for m in self.msgs(text.replace("M7", "M56"), "error")))
+        self.assertFalse(any("M8" in m for m in self.msgs(text.replace("M7", "M8"), "error")))
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
