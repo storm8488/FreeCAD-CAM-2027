@@ -146,11 +146,13 @@ def scenario_keepout(scenario, tmp):
     G.run_command(scenario, "CAM2027_Compute")
 
     def zone(dlg):
-        dlg.xmin.setValue(36.0)
-        dlg.xmax.setValue(44.0)
+        # bride basse entre les poches : au-dessus du dégagement (15) mais sous le porte-outil quand la fraise est
+        # dans une poche (une bride de 40 mm à 9 mm de la poche touche le porte-outil : collision réelle, bloquante)
+        dlg.xmin.setValue(38.0)
+        dlg.xmax.setValue(42.0)
         dlg.ymin.setValue(-10.0)
         dlg.ymax.setValue(70.0)
-        dlg.ztop.setValue(40.0)
+        dlg.ztop.setValue(20.0)
         from cam2027.gui.qt import QtWidgets
 
         for b in dlg.findChildren(QtWidgets.QPushButton):
