@@ -737,6 +737,14 @@ def scenario_ui_commands(scenario):
     check_docks(scenario)
 
 
+def _s1_scenarios(files, tmp):
+    """Scénarios du flux S1 (reprise de matière, zone, finitions des plats et des angles) : ``gui_scenarios_s1``."""
+    import types
+    from tests import gui_scenarios_s1
+
+    return gui_scenarios_s1.scenarios(types.SimpleNamespace(**globals()), files, tmp)
+
+
 def main():
     os.makedirs(os.path.join(OUT, "dialogs"), exist_ok=True)
     driver.install()
@@ -764,7 +772,7 @@ def main():
             ("inlay", lambda: scenario_inlay("inlay", files)),
             ("import-twice", lambda: scenario_import_twice("import-twice", next(
                 (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
-    ) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))
+    ) + _s1_scenarios(files, tmp) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),
                                                                             p, tmp, "adaptive")))

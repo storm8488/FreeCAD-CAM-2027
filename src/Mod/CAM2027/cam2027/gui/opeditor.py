@@ -152,6 +152,9 @@ class OperationEditor(QtWidgets.QDialog):
         self.dressup_boxes = {}
         if self.kind in _DRESSUP_KINDS:
             self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit & tabs"))
+        from . import restlimit
+
+        self.rest_limit = restlimit.add_tab(self)  # reprise de matière, limiter à une zone
         lay.addWidget(self.tabs)
 
         self.status = QtWidgets.QLabel()
@@ -460,6 +463,8 @@ class OperationEditor(QtWidgets.QDialog):
                 self._refresh_base_list()
             ignored = self.proj.update_operation(self.op, self.params())
             self._apply_dressups()
+            if self.rest_limit is not None:
+                self.rest_limit.apply()
             from .commands import busy
 
             with busy(tr("Computing the toolpaths..."), stoppable=self.proj):
@@ -493,7 +498,8 @@ class OperationEditor(QtWidgets.QDialog):
             dressups[key] = (box.isChecked(), tuple(sorted(self._widget_values(widgets).items())))
         return (self.name.text(), self.index.value(), self.asm_combo.currentData(), self.preset_combo.currentData(),
                 tuple((o.Name, tuple(subs)) for o, subs in self._base),
-                tuple(sorted((k, repr(v)) for k, v in self.params().items())), tuple(sorted(dressups.items())))
+                tuple(sorted((k, repr(v)) for k, v in self.params().items())), tuple(sorted(dressups.items())),
+                self.rest_limit.state() if getattr(self, "rest_limit", None) is not None else None)
 
     def has_unsaved_changes(self):
         return self._current_state() != self._snapshot

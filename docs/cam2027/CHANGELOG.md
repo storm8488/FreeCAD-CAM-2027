@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **[S1]** **Reprise de matière depuis les opérations précédentes** (Fusion « Rest machining », source « From
+  previous operation(s) », « Ignore stock less than » 0,1 mm par défaut) sur ébauche 3D, adaptative, poche et
+  poche 2D : onglet « Reprise et zone » de l'éditeur d'opération. Le brut de départ est la carte de hauteur
+  simulée des opérations actives placées avant (`project/rest.py`, `sim.simulate_paths`) ; l'opération est
+  calculée normalement, puis un habillage CAM2027 ne garde que les coupes où la fraise rencontre plus de
+  « Ignorer moins de » de matière, liaisons recalculées (`project/trim.py`). Disque WobbleRing, ébauche 3D
+  Ø6 puis reprise Ø3 : 828 mm³ repris = 7,3 % des 11 327 mm³ de l'ébauche (reprise complète : 828 mm³ aussi),
+  1 314 mm de coupe gardés sur 17 431, aucune entaille, aucun rapide dans la matière, 0,5 s de calcul de la
+  reprise (rapport affiché dans l'onglet). Plaque à rainure étroite : 220 points de coupe gardés sur 3 380,
+  même volume enlevé que la reprise complète.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

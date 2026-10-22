@@ -28,6 +28,7 @@ from . import dressups as dressupmod
 from . import sheet as sheetmod
 from . import indexing
 from . import wrap as wrapmod
+from . import rest as restmod
 #: mouvements de coupe balayés d'un coup par le contrôle matière (paquets vectorisés)
 PENDING_SEGMENTS = 4096
 #: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
@@ -1181,6 +1182,7 @@ class Project(object):
         opsmod.patch_adaptive_slicing()  # projet rouvert : l'adaptative n'est pas encore passée par strategy_module
         opsmod.patch_surface_keepalive()
         opsmod.patch_pocket()
+        restmod.sync(self)  # reprise de matière : opérations précédentes à jour (ordre, activation)
         self.doc.recompute()
         results = []
         for op in self.operations():

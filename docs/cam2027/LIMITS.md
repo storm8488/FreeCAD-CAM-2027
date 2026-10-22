@@ -257,3 +257,18 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   profondeur finale 0,001 mm plus basse.
 - Pas de contrôle de collision avec le mandrin, les mors ou la contre-pointe (champs du profil non
   exploités).
+
+## Reprise de matière, zone, finitions des plats et des angles (nuit 2, flux S1)
+
+- **Reprise de matière** (`project/rest.py`, Fusion « Rest machining » depuis les opérations précédentes) :
+  l'opération est calculée en entier par FreeCAD sur sa géométrie, puis seules les coupes où la fraise
+  rencontre de la matière restante sont gardées (Fusion recalcule seulement les zones restantes : le temps de
+  calcul de l'opération n'est pas réduit, celui d'usinage l'est). Brut restant = carte de hauteur des
+  opérations actives placées avant (mêmes limites que le contrôle matière : grille 0,25 mm par défaut,
+  agrandie au-delà de 1,5 million de cellules, 3 axes, opérations indexées hors A0 et enroulées ignorées,
+  brut rond refusé). Décision par colonne : matière sous le disque de la fraise (rayon moins une demi-cellule)
+  plus haute que la pointe de plus de « Ignorer moins de » ; la fraise est vue comme plate (une boule garde un
+  peu plus de parcours que nécessaire). Entrées dans les morceaux gardés : plongée verticale en avance de
+  plongée depuis la hauteur de sécurité (pas d'hélice ni de rampe) : fraise à coupe au centre nécessaire ; sur
+  une adaptative, beaucoup de petits morceaux = beaucoup de remontées (480 sur le plateau de test).
+

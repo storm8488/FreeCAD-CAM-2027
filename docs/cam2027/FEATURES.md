@@ -45,7 +45,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Fonction cible | Statut | Composant | Travail restant |
 |---|---|---|---|
 | Ébauche volumique | partiel | `Path.Op.Adaptive` autour des faces en relief (clé `rough3d`, faces choisies automatiquement si toute la pièce est sélectionnée) | auto (`test_3d_finishing` : niveaux, surépaisseur respectée) | marches entre niveaux (pas de reprise des marches), ébauche depuis le brut restant |
-| Reprise depuis le brut restant | absent | — | nécessite simulation matière (jalon F) |
+| Reprise depuis le brut restant | partiel | `project/rest.py` : brut = carte de hauteur simulée des opérations précédentes, coupes gardées où la fraise rencontre plus de « Ignorer moins de » (Fusion), liaisons recalculées (`project/trim.py`) ; ébauche 3D, adaptative, poche, poche 2D ; onglet « Reprise et zone » | auto (`test_nuit_s1` : plaque à rainure étroite) + scénario `s1-rest-area` + disque WobbleRing (7,3 % de l'ébauche, aucune entaille) | entrées en hélice dans les zones reprises (plongées verticales), calcul limité aux zones restantes (l'opération complète est calculée puis découpée), sources « depuis un fichier / des corps » |
 | Finition parallèle / Z constant | disponible | `Path.Op.Surface` (clé `surface3d`), `Path.Op.Waterline` (clé `waterline`), OpenCamLib | auto (`test_3d_finishing` : pas de pénétration, sommet suivi, niveaux Z) + visuel | reprise depuis une ébauche, ébauche volumique |
 | Hauteur de crête, reprise des creux, pentu/peu incliné, guidé par courbes, ébavurage | absent | — | jalons C–F |
 
