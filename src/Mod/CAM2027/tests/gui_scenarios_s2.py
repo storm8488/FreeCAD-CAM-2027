@@ -91,7 +91,8 @@ def scenario_pattern(h, scenario, files):
     floor = None
     for i, f in enumerate(clone.Shape.Faces, 1):
         bb = f.BoundBox
-        if f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMax - 4.0) < 1e-6 and abs(bb.XMin - 6.0) < 1e-6                 and abs(bb.YMin - 6.0) < 1e-6:
+        if f.Surface.__class__.__name__ == "Plane" and abs(bb.ZMax - 4.0) < 1e-6 and abs(bb.XMin - 6.0) < 1e-6 \
+                and abs(bb.YMin - 6.0) < 1e-6:
             floor = "Face%d" % i
     gui = h["FreeCADGui"]
     gui.Selection.clearSelection()
@@ -141,9 +142,60 @@ def scenario_pattern(h, scenario, files):
     h["pump"](0.3)
 
 
+def scenario_holes(h, scenario, tmp):
+    """Plaque à 3 tailles de trous : Usiner > Perçage intelligent avec la bibliothèque de démarrage (foret de 3,
+    fraises de 3 et 6, outil en V à 90°) ; une opération par étape et par taille, trous usinés dans la carte de
+    hauteur, aucune entaille."""
+    import FreeCAD
+    from cam2027.gui import holes as holesgui
+    from tests.test_nuit_s2 import HOLES, make_hole_plate
+
+    tr = h["tr"]
+    step = os.path.join(tmp, "holes.step")
+    make_hole_plate(step)
+    proj = h["new_project"](scenario, "Holes")
+    h["driver"].open_files.append(step)
+    h["run_command"](scenario, "CAM2027_ImportModel")
+    h["run_command"](scenario, "CAM2027_StockFixture")
+    proj = h["project"]()
+    seen = {}
+
+    def accept(dlg):
+        if not isinstance(dlg, holesgui.HoleDialog):
+            return False
+        seen["groups"] = dlg.table.rowCount()
+        seen["preview"] = [dlg.preview.item(i).text() for i in range(dlg.preview.count())]
+        return True
+
+    h["driver"].handlers[tr("Hole recognition and drilling")] = accept
+    msgs = h["run_command"](scenario, "CAM2027_Holes")
+    if seen.get("groups") != 3:
+        h["problem"](scenario, "hole groups in the dialog: %s" % seen.get("groups"))
+    ops = proj.operations()
+    labels = [proj.base_operation(o).Label for o in ops]
+    if len(ops) != len(seen.get("preview", [])) or len(ops) < 5:
+        h["problem"](scenario, "operations %s for preview %s" % (labels, seen.get("preview")))
+    states = [proj.operation_state(o) for o in ops]
+    if any(s in ("failed", "todo") for s in states):
+        h["problem"](scenario, "states %s" % states)
+    rep = proj.material_check()
+    z = proj.last_zmap
+    deep = []
+    for d, pts in HOLES.items():
+        for x, y in pts:
+            deep.append(round(float(z.top[int((x - z.x0) / z.res), int((y - z.y0) / z.res)]), 2))
+    if rep["gouge_max"] > 0.0 or max(deep) > 4.3:
+        h["problem"](scenario, "holes: gouge %.3f, centre heights %s" % (rep["gouge_max"], deep))
+    h["log"]("  holes ok: %s, centre heights %s, gouge %.3f, messages %s" % (labels, deep, rep["gouge_max"],
+                                                                             [t[:120] for _k, t in msgs]))
+    FreeCAD.closeDocument(proj.doc.Name)
+    h["pump"](0.3)
+
+
 def scenarios(h, files, tmp):
     """(nom, fonction) des scénarios S2, dans l'ordre."""
     return (
         ("s2-leads", lambda: scenario_leads(h, "s2-leads", files)),
         ("s2-pattern", lambda: scenario_pattern(h, "s2-pattern", files)),
+        ("s2-holes", lambda: scenario_holes(h, "s2-holes", tmp)),
     )

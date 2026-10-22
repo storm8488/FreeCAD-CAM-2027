@@ -768,7 +768,8 @@ def main():
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),
                                                                             p, tmp, "adaptive")))
-                    for i, p in enumerate(user) if p.lower().endswith(".stl"))             + __import__("tests.gui_scenarios_s2", fromlist=["*"]).scenarios(globals(), files, tmp):
+                    for i, p in enumerate(user) if p.lower().endswith(".stl")) \
+            + __import__("tests.gui_scenarios_s2", fromlist=["*"]).scenarios(globals(), files, tmp):
         if os.environ.get("CAM2027_SCENARIO_ONLY") and not name.startswith(os.environ["CAM2027_SCENARIO_ONLY"]):
             continue
         log("== %s" % name)

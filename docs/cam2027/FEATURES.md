@@ -36,6 +36,7 @@ machine). Composant = ce qui est réutilisé dans FreeCAD.
 | Gravure | disponible | `Path.Op.Engrave` | auto (`test_helix_and_engrave`) | — |
 | Chanfreinage | disponible | `Path.Op.Deburr` (clé `chamfer`) | auto (`test_chamfer`) | contrôle de collision avec les parois voisines ; largeur seule dans le dialogue |
 | Perçage (cycles, débourrage) | disponible | `Path.Op.Drilling` ; sans sélection, tous les trous détectés | auto (`test_drilling_all_holes`) | — |
+| Perçage intelligent (reconnaissance des trous, pointage, perçage, chanfrein, filetage) | disponible | `project/holes.py`, Usiner > Perçage intelligent ; cycles simulés au contrôle matière | auto (`test_nuit_s2.TestHoles` : 6 trous de 3 tailles reconnus, 7 opérations, carte de hauteur, chanfrein) + scénario `s2-holes` | taraudage (pas de type taraud), trous inclinés, lamages à la fraise |
 | Alésage hélicoïdal | disponible | `Path.Op.Helix` | auto (`test_helix_and_engrave`) | — |
 | Fraisage de filets | partiel | `Path.Op.ThreadMilling` (clé `threadmill`), tables de filets FreeCAD | auto (`test_thread_milling`) | nombre de dents inutilisé par FreeCAD, crête à 0, filets extérieurs et impériaux non testés |
 | Attaches, rampes, dogbones | disponible | habillages FreeCAD `Path.Dressup.Tags`, `RampEntry`, `DogboneII` via `project/dressups.py`, onglet « Entrée, sortie et attaches » de l'éditeur | auto (`test_dressups`, `test_dogbones`) + visuel | positions d'attaches dans l'éditeur (actuellement panneau FreeCAD) |

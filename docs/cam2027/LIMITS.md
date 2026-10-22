@@ -271,3 +271,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   l'ordre de leur première apparition, sans savoir si une opération d'un autre outil doit passer entre elles
   (perçage avant taraudage : à vérifier dans la liste) ; réglages modifiables ensuite dans les propriétés de
   l'habillage (pas encore dans l'éditeur d'opération).
+
+- Perçage intelligent (`project/holes.py`) : trous d'axe Z ouverts par le dessus seulement (pas de trous
+  inclinés ni par en dessous, pas de trous partiels) ; un lamage ou un trou étagé donne un groupe par diamètre,
+  chacun usiné depuis son propre haut (pas de lamage à la fraise) ; taraudage (`Path.Op.Tapping`) non proposé :
+  la bibliothèque n'a pas de type « taraud » (filetage à la fraise à fileter seulement, désignation choisie à la
+  main : la géométrie STEP ne dit pas qu'un trou est taraudé) ; forets choisis au diamètre exact (± 0,02 mm),
+  pas d'alésoir ; pointage à 0,9 × diamètre (pas de valeur Fusion documentée) ; un trou borgne garde le cône
+  de pointe du foret sous son fond plat (comme une vraie pièce percée). Les cycles de perçage sont simulés sans
+  les remontées de débourrage (même matière enlevée).

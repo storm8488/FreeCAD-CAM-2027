@@ -1329,6 +1329,7 @@ COMMANDS = [
     ("CAM2027_Inlay", Inlay),
     ("CAM2027_Nest", Nest),
     ("CAM2027_Pattern", __import__("cam2027.gui.patterns", fromlist=["PatternCommand"]).PatternCommand),
+    ("CAM2027_Holes", __import__("cam2027.gui.holes", fromlist=["HoleCommand"]).HoleCommand),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -1351,7 +1352,7 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
-                   "CAM2027_Pattern", "Separator", "CAM2027_Compute"]),
+                   "CAM2027_Pattern", "CAM2027_Holes", "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),
 )

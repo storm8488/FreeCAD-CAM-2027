@@ -2,6 +2,18 @@
 
 ## Non publié
 
+- **[S2]** **Perçage intelligent** (Fusion *Hole Recognition*) : Usiner > Perçage intelligent reconnaît les
+  trous verticaux ouverts par le dessus (faces cylindriques regroupées par axe et rayon, tour complet, centre
+  vide : diamètre, haut, fond, débouchant ou borgne, chanfrein d'entrée = cône coaxial) et les regroupe par
+  taille. Séquence proposée, une opération par étape et par taille, dans l'ordre pointage → perçage → chanfrein →
+  filetage : pointage à l'outil en V à 90° (diamètre 0,9 × trou), foret au diamètre à 0,02 mm (G83 au-delà de
+  3 D, pas = D ; débouchant : pointe entière sous le fond + 0,5 mm ; borgne : pointe au fond) ou, sans foret,
+  alésage hélicoïdal à la plus grosse fraise qui passe, chanfrein par plongée d'un outil en V du même angle
+  jusqu'au diamètre du chanfrein, filetage à la fraise à fileter si un filet est choisi pour la taille. Les
+  trous sans outil sont signalés. Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
+  G98/G99) : ils n'enlevaient rien avant. Plaque de test à 3 diamètres (3 débouchant, 5 borgne, 8 débouchant
+  chanfreiné) : 7 opérations, trous au bon diamètre et à la bonne profondeur dans la carte de hauteur, chanfrein
+  à 45° à 0,05 mm, aucune entaille.
 - **[S2]** **Motifs de parcours** (Aspire *Array Copy Toolpath*, Fusion *Pattern*) : Usiner > Motif copie le
   parcours calculé d'une ou plusieurs opérations en grille (colonnes, lignes, distance entre colonnes / lignes,
   ordre en serpentin) ou en cercle (nombre de copies, centre, angle total ; 360° = tour complet sans doublon).

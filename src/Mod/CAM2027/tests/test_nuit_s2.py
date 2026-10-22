@@ -325,5 +325,165 @@ class TestPatterns(unittest.TestCase):
         self.assertEqual(rep["gouge_max"], 0.0, rep)
 
 
+HOLES = {3.0: [(10.0, 10.0), (10.0, 50.0)], 5.0: [(30.0, 10.0), (30.0, 50.0)], 8.0: [(55.0, 15.0), (55.0, 45.0)]}
+
+
+def make_hole_plate(path):
+    """Plaque 80 x 60 x 10 : 2 trous de 3 débouchants, 2 trous de 5 borgnes (6 mm), 2 trous de 8 débouchants
+    avec chanfrein d'entrée de 1 mm à 90°."""
+    import Part
+
+    V = FreeCAD.Vector
+    shape = Part.makeBox(80, 60, 10)
+    for x, y in HOLES[3.0]:
+        shape = shape.cut(Part.makeCylinder(1.5, 10, V(x, y, 0)))
+    for x, y in HOLES[5.0]:
+        shape = shape.cut(Part.makeCylinder(2.5, 6, V(x, y, 4)))
+    for x, y in HOLES[8.0]:
+        shape = shape.cut(Part.makeCylinder(4.0, 10, V(x, y, 0)))
+        shape = shape.cut(Part.makeCone(4.0, 5.0, 1.0, V(x, y, 9)))
+    shape = shape.removeSplitter()
+    shape.exportStep(path)
+    return shape
+
+
+def drill_library():
+    """Bibliothèque de démarrage + forets de 5 et 8 mm."""
+    from cam2027.tools.model import ToolDefinition, ToolAssembly, CuttingPreset
+
+    lib = starter_library()
+    holder = next(iter(lib.holders.values()))
+    for d in (5.0, 8.0):
+        t = lib.add_tool(ToolDefinition("%g mm drill" % d, "drill",
+                                        dict(diameter=d, shank_diameter=d, overall_length=80, flute_length=40,
+                                             tip_included_angle_deg=118), flute_count=2))
+        t.add_preset(CuttingPreset("Wood drilling", usage="drilling", material="wood", spindle_rpm=8000,
+                                   feed_mm_min=300, plunge_feed_mm_min=150, axial_engagement_mm=d,
+                                   radial_engagement_mm=d))
+        lib.add_assembly(ToolAssembly("T%d %s" % (20 + int(d), t.name), t.id, holder.id, stickout=50,
+                                      output={"tool_number": 20 + int(d), "manual_tool_change": True}))
+    return lib
+
+
+class TestHoles(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-s2h-")
+        cls.step = os.path.join(cls.tmp, "holes.step")
+        make_hole_plate(cls.step)
+
+    def project(self, name, lib=None):
+        lib = lib or drill_library()
+        proj = Project.create(name, lib, machine())
+        part = proj.import_model(self.step, label="Holes").objects[0]
+        job = proj.create_job([part], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        self.addCleanup(proj.close)
+        return proj, job.Model.Group[0]
+
+    def test_recognition(self):
+        """6 trous reconnus : diamètres, débouchants / borgnes, profondeur, chanfrein de 10 mm à 90°."""
+        from cam2027.project import holes
+
+        proj, clone = self.project("Holes recognition")
+        found = holes.find_holes(clone)
+        self.assertEqual(len(found), 6, found)
+        by_d = {}
+        for h in found:
+            by_d.setdefault(round(h.diameter, 2), []).append(h)
+        self.assertEqual(sorted(by_d), [3.0, 5.0, 8.0])
+        for d, pts in HOLES.items():
+            got = sorted((round(h.x, 3), round(h.y, 3)) for h in by_d[d])
+            self.assertEqual(got, sorted(pts))
+        self.assertTrue(all(h.through for h in by_d[3.0] + by_d[8.0]))
+        self.assertTrue(all(not h.through and abs(h.depth - 6.0) < 1e-6 for h in by_d[5.0]))
+        for h in by_d[8.0]:
+            self.assertAlmostEqual(h.chamfer_diameter, 10.0, places=3)
+            self.assertAlmostEqual(h.chamfer_angle, 90.0, places=3)
+            self.assertAlmostEqual(h.top, 10.0, places=6)
+        self.assertEqual(len(holes.groups(found)), 3)
+
+    def test_sequence_and_material(self):
+        """Pointage, perçage, chanfrein : une opération par étape et par diamètre, dans cet ordre ; trous au bon
+        diamètre et à la bonne profondeur dans la carte de hauteur, chanfrein à 45°, aucune entaille."""
+        from cam2027.project import holes
+
+        proj, clone = self.project("Holes sequence")
+        steps, notes = holes.plan(proj.library, holes.find_holes(clone))
+        self.assertEqual(notes, [])
+        self.assertEqual([(s["step"], round(s["model"].diameter, 1)) for s in steps],
+                         [("spot", 3.0), ("spot", 5.0), ("spot", 8.0), ("drill", 3.0), ("drill", 5.0), ("drill", 8.0),
+                          ("chamfer", 8.0)])
+        self.assertEqual([round(s["tool"].geometry.diameter, 1) for s in steps if s["step"] == "drill"],
+                         [3.0, 5.0, 8.0])
+        ops = holes.apply_plan(proj, clone, steps)
+        self.assertEqual(len(ops), 7)
+        results = proj.compute()
+        self.assertTrue(all(r["valid"] and r["commands"] > 3 for r in results), results)
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"], 0.0, rep)
+        self.assertEqual(rep["rapid_hits"], 0, rep)
+        z = proj.last_zmap
+        for d, pts in HOLES.items():
+            r = d / 2.0
+            for x, y in pts:
+                centre = zmap_at(z, x, y)
+                if d == 5.0:
+                    # pointe du foret (118°) au fond du trou borgne : cône de pointe au centre de la cellule
+                    i, j = int((x - z.x0) / z.res), int((y - z.y0) / z.res)
+                    dist = math.hypot(float(z.xs[i]) - x, float(z.ys[j]) - y)
+                    self.assertAlmostEqual(centre, 4.0 + dist / math.tan(math.radians(59.0)), delta=0.05)
+                else:
+                    self.assertLessEqual(centre, 0.0)  # débouchant
+                    # pleine largeur jusqu'au fond : à 0,3 mm de la paroi, sous la pièce
+                    self.assertLessEqual(zmap_at(z, x + r - 0.3, y), 0.0)
+                # matière intacte juste hors du trou (et de son chanfrein)
+                outside = r + (1.0 if d == 8.0 else 0.0) + 0.4
+                self.assertAlmostEqual(zmap_at(z, x + outside, y), 10.0, delta=0.02)
+            if d == 8.0:  # chanfrein : 45° entre le rayon 4 et 5 (z = 10 - (5 - r) au centre de la cellule)
+                x, y = pts[0]
+                for px in (x + 4.3, x + 4.6, x - 4.4):
+                    i, j = int((px - z.x0) / z.res), int((y - z.y0) / z.res)
+                    dist = math.hypot(float(z.xs[i]) - x, float(z.ys[j]) - y)
+                    self.assertAlmostEqual(zmap_at(z, px, y), 10.0 - (5.0 - dist), delta=0.05)
+
+    def test_peck_bore_and_notes(self):
+        """Débourrage au-delà de 3 D ; sans foret : alésage hélicoïdal à la plus grosse fraise qui passe ; sans
+        foret ni fraise : trous laissés de côté, signalés."""
+        from cam2027.project import holes
+
+        proj, clone = self.project("Holes peck", lib=starter_library())
+        steps, notes = holes.plan(proj.library, holes.find_holes(clone))
+        drills = {round(s["model"].diameter, 1): s for s in steps if s["step"] == "drill"}
+        self.assertTrue(drills[3.0]["params"].get("PeckEnabled"))  # 10 mm > 3 x 3 mm
+        self.assertEqual(drills[8.0]["kind"], "helix")
+        self.assertAlmostEqual(drills[8.0]["tool"].geometry.diameter, 6.0)
+        self.assertEqual(drills[5.0]["kind"], "helix")  # pas de foret de 5 : fraise de 3
+        self.assertAlmostEqual(drills[5.0]["tool"].geometry.diameter, 3.0)
+        self.assertEqual(notes, [])
+        lib = starter_library()
+        for t in [t for t in lib.tools.values() if t.tool_type in ("drill", "endmill")]:
+            for a in lib.assemblies_for_tool(t.id):
+                lib.remove_assembly(a.id)
+        steps2, notes2 = holes.plan(lib, holes.find_holes(clone))
+        self.assertEqual(steps2, [])
+        self.assertEqual(len(notes2), 3)
+
+    def test_cycles_expanded(self):
+        """Cycles G81 / G83 traduits pour la simulation : plan R, fond, retrait G98 / G99."""
+        import Path
+        from cam2027.project import holes
+
+        cmds = [Path.Command("G0", {"Z": 15.0}), Path.Command("G98"),
+                Path.Command("G81", {"X": 5.0, "Y": 6.0, "Z": -2.0, "R": 12.0, "F": 100.0}),
+                Path.Command("G99"), Path.Command("G83", {"X": 9.0, "Y": 6.0, "Z": -3.0, "R": 12.0, "Q": 1.0}),
+                Path.Command("G80")]
+        out = [(c.Name, dict(c.Parameters)) for c in holes.expand_cycles(cmds)]
+        moves = [m for m in out if m[0] in ("G0", "G1")]
+        self.assertEqual(moves[1:5], [("G0", {"X": 5.0, "Y": 6.0}), ("G0", {"Z": 12.0}), ("G1", {"Z": -2.0}),
+                                      ("G0", {"Z": 15.0})])
+        self.assertEqual(moves[5:9], [("G0", {"X": 9.0, "Y": 6.0}), ("G0", {"Z": 12.0}), ("G1", {"Z": -3.0}),
+                                      ("G0", {"Z": 12.0})])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,7 @@ from ..tools.library import ToolLibrary
 from ..tools import bridge
 from . import docobjects, importers, stock as stockmod, operations as opsmod, export as exportmod
 from . import dressups as dressupmod
+from . import holes as holesmod
 from . import sheet as sheetmod
 from . import indexing
 from . import wrap as wrapmod
@@ -681,7 +682,10 @@ class Project(object):
             seen = set()
             # filetage dans la matière (trou pas encore percé) : un seul message qui dit quoi faire
             threading = rec.get("kind") == "threadmill"
-            segments, pos = sim.path_segments(obj.Path.Commands, pos, with_index=True)
+            commands = obj.Path.Commands
+            if holesmod.has_cycles(commands):  # cycles de perçage : mouvements équivalents
+                commands = holesmod.expand_cycles(commands)
+            segments, pos = sim.path_segments(commands, pos, with_index=True)
             top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
             clamp_top = max([bb.ZMax for _n, bb in boxes] or [-float("inf")])
             def excess_events(p0, p1, index, z_low):
