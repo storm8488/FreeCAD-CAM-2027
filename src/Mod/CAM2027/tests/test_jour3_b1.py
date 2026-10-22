@@ -233,6 +233,64 @@ class TestDressups(unittest.TestCase):
             self.assertEqual(operations.set_params(op, {pattern[0]: "Offset"}), [], kind)
             self.assertEqual(getattr(op, pattern[0]), "Offset", kind)
 
+class TestParallelPocket2d(unittest.TestCase):
+    """Poche 2D sur de nombreux fonds : niveaux découpés dans des processus, même G-code qu'en série."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-b1p-")
+        cls.step = os.path.join(cls.tmp, "tray.step")
+        tray = Part.makeBox(70, 70, 12)
+        for i in range(3):
+            for j in range(3):
+                tray = tray.cut(Part.makeBox(14, 14 + 2 * i, 9, FreeCAD.Vector(5 + 22 * i, 5 + 22 * j, 3)))
+        tray.exportStep(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _gcode(self):
+        from cam2027.gui.commands import default_params
+        from cam2027.project import operations
+
+        lib = starter_library()
+        proj = Project.create("B1p", lib)
+        proj.import_model(self.step)
+        proj.create_job(proj.model_candidates(), stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        tool = lib.search("6 mm flat end mill 2F")[0]
+        asm = lib.assemblies_for_tool(tool.id)[0]
+        preset = tool.presets[0]
+        base = operations.auto_geometry("pocket2d", list(proj.job.Model.Group))
+        self.assertEqual(sum(len(subs) for _o, subs in base), 9)
+        op, _rec = proj.add_operation("pocket2d", "pocket2d", asm.id, preset.id, base=base,
+                                      params=default_params("pocket2d", tool, preset.resolve(tool)))
+        proj.compute()
+        return op.Path.toGCode()
+
+    def test_same_gcode_as_serial(self):
+        from cam2027.project import parallel_pocket
+
+        used = []
+        original = parallel_pocket.precompute_face_sections
+
+        def recording(*args):
+            cache = original(*args)
+            used.append((len(cache), cache))
+            return cache
+
+        parallel_pocket.precompute_face_sections = recording
+        try:
+            parallel = self._gcode()
+        finally:
+            parallel_pocket.precompute_face_sections = original
+        # 9 fonds préparés dans les processus, tous repris par FreeCAD (une entrée retirée par fond)
+        self.assertEqual([(n, len(cache)) for n, cache in used], [(9, 0)])
+        os.environ[parallel_pocket.ENV_SWITCH] = "0"
+        try:
+            serial = self._gcode()
+        finally:
+            del os.environ[parallel_pocket.ENV_SWITCH]
+        self.assertGreater(len(serial), 1000)
+        self.assertEqual(parallel, serial)
+
 class TestSurfaceSpeed(unittest.TestCase):
     """Accélérations de la finition 3D : mêmes points que FreeCAD."""
 

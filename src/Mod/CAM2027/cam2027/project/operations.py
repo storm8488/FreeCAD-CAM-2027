@@ -547,6 +547,8 @@ def strategy_module(kind):
         patch_pocket(mod)
     if kind in ("pocket2d", "adaptive"):
         patch_combine_faces()
+    if kind == "pocket2d":
+        patch_pocket2d(mod)
     return mod
 
 
@@ -1111,6 +1113,40 @@ def patch_pocket(mod=None):
 
     def build_path_area(self, obj, baseobject, isHole, start, getsim):
         return parallel_pocket.build_path_area(area_mod, build, self, obj, baseobject, isHole, start, getsim)
+
+    area_op_shapes.cam2027_patched = True
+    cls.areaOpShapes = area_op_shapes
+    cls._buildPathArea = build_path_area
+
+
+def patch_pocket2d(mod=None):
+    """Poche 2D sur de nombreux fonds (alvéoles d'un plateau) : les niveaux de chaque fond sont découpés dans des
+    processus avant que FreeCAD ne les demande un par un (``parallel_pocket.precompute_face_sections``), repris
+    seulement si la zone est exactement celle préparée. Installé seulement si ``_buildPathArea`` est le code
+    attendu."""
+    if mod is None:
+        mod = importlib.import_module("Path.Op.PocketShape")
+    cls = getattr(mod, "ObjectPocket", None)
+    original = getattr(cls, "areaOpShapes", None)
+    if original is None or getattr(original, "cam2027_patched", False):
+        return
+    import Path.Op.Area as area_mod
+
+    build = area_mod.ObjectOp._buildPathArea
+    if _sha1(build) not in AREA_BUILD_SHA1:
+        return
+    from . import parallel_pocket
+
+    def area_op_shapes(self, obj):
+        shapes = original(self, obj)
+        try:
+            self._cam2027_face_sections = parallel_pocket.precompute_face_sections(self, obj, shapes)
+        except Exception:
+            self._cam2027_face_sections = {}
+        return shapes
+
+    def build_path_area(self, obj, baseobject, isHole, start, getsim):
+        return parallel_pocket.build_face_path_area(area_mod, build, self, obj, baseobject, isHole, start, getsim)
 
     area_op_shapes.cam2027_patched = True
     cls.areaOpShapes = area_op_shapes

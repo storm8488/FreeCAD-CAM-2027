@@ -26,6 +26,11 @@
   découpe à outils multiples donne la même région (copie gardée par empreinte SHA-1, `patch_combine_faces`).
   Plateau, poche 2D : 13,0 / 14,4 s → 8,4 / 8,6 s, même G-code ; adaptative : 14,3 / 11,0 s → 8,4 / 4,6 s, même
   volume enlevé (607,0 cm³), commandes dans la dispersion habituelle de l'adaptative.
+- **[B1]** Poche 2D sur de nombreux fonds : FreeCAD découpe les niveaux de chaque fond l'un après l'autre (un
+  `_buildPathArea` par fond) ; ils sont maintenant découpés pour tous les fonds dans des processus juste avant,
+  avec les mêmes réglages, et repris seulement si la zone est exactement celle préparée
+  (`parallel_pocket.precompute_face_sections`, `CAM2027_PARALLEL_POCKET=0` pour le désactiver). Plateau :
+  6,5 / 6,7 s → 2,5 / 2,5 s, même G-code.
 - **[B1]** Finition 3D et Z constant : le modèle OpenCamLib de tous les corps et le balayage du Z constant ne
   restent plus en mémoire après le calcul.
 - **[B1]** Attaches ajoutées sur un habillage pas encore recalculé (rampe ou dogbones ajoutés juste avant par
