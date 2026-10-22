@@ -105,6 +105,7 @@ class Driver(object):
             os.makedirs(os.path.join(OUT, "dialogs"), exist_ok=True)
             dlg.grab().save(os.path.join(OUT, "dialogs", "%02d_%s.png" % (len(self.grabbed), safe)))
         ok = True if handler is None else handler(dlg)
+        __import__("cam2027.gui.qt", fromlist=["dispose"]).dispose(dlg)  # comme qt.exec_dialog (B3)
         if ok:
             dlg.accept()
             return QtWidgets.QDialog.Accepted
@@ -868,7 +869,7 @@ def main():
                                                                             p, tmp, "adaptive")))
                     for i, p in enumerate(user) if p.lower().endswith(".stl")) \
             + __import__("tests.gui_scenarios_s2", fromlist=["*"]).scenarios(globals(), files, tmp) \
-            + tuple(__import__("tests.scenarios_s5", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)):
+            + tuple(__import__("tests.scenarios_s5", fromlist=["*"]).entries(sys.modules[__name__], files, tmp))             + tuple(__import__("tests.gui_scenarios_b3", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)):
         if os.environ.get("CAM2027_SCENARIO_ONLY") and not name.startswith(os.environ["CAM2027_SCENARIO_ONLY"]):
             continue
         only = os.environ.get("CAM2027_SCENARIOS")  # liste « a;b » : seulement ces scénarios

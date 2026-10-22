@@ -1063,12 +1063,9 @@ class ProjectPanel(QtWidgets.QWidget):
             return
         self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
         self.side_bar.refresh(proj)
-        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES
-        from ..project.wrap import KIND as WRAP_KIND, LABEL as WRAP_LABEL
-        from ..project.inlay import CORNERS_KIND, CORNERS_LABEL
-        extra_labels = {WRAP_KIND: WRAP_LABEL, CORNERS_KIND: CORNERS_LABEL}
-        from ..project.bitmap import KIND_LABELS as S5_LABELS  # S5 : Photo V-Carve, moulure, cannelures
-        extra_labels.update(S5_LABELS)
+        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES, compute_state
+        from ..project import indexing
+        from .opeditor import extra_label  # gravure enroulée, angles vifs, palpage, Photo V-Carve, décors
 
         if proj.has_job:
             models = [m.Label for m in proj.job.Model.Group]
@@ -1103,7 +1100,8 @@ class ProjectPanel(QtWidgets.QWidget):
             if tc is not None:
                 v = bridge.tool_controller_values(tc)
                 tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
-            op_state = proj.operation_state(op)
+            # registre déjà lu : ``operation_state`` le relisait (JSON) pour chaque ligne
+            op_state = proj.operation_state(op) if indexing.is_index_op(op) else compute_state(op, base, rec or None)
             valid = op_state not in ("failed",)
             if not valid:
                 bad += 1
@@ -1115,7 +1113,7 @@ class ProjectPanel(QtWidgets.QWidget):
             if indexing.is_index_op(op):
                 strategy_text = tr("A axis positioning (automatic)")
             else:
-                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", extra_labels.get(kind, kind)))
+                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", extra_label(kind)))
                 if rec.get("index_deg") is not None:
                     strategy_text += "  @A%g" % rec["index_deg"]
             item = QtWidgets.QTreeWidgetItem([op.Label, tr(state_label), tool_text, str(s["cycle_time"] or "")])
@@ -1222,14 +1220,20 @@ class ProjectPanel(QtWidgets.QWidget):
     def on_item_changed(self, item, col):
         if self._updating or col != 0:
             return
+        # traité après le signal : ``refresh`` reconstruit la liste ; pendant le signal, il détruisait l'élément
+        # que Qt était en train de cocher (violation d'accès, plantage de FreeCAD au hasard)
+        name, active = item.data(0, QtCore.Qt.UserRole), item.checkState(0) == QtCore.Qt.Checked
+        QtCore.QTimer.singleShot(0, lambda: self._set_active(name, active))
+
+    def _set_active(self, name, active):
         proj = state.active_project()
         if proj is None:
             return
-        op = proj.doc.getObject(item.data(0, QtCore.Qt.UserRole))
+        op = proj.doc.getObject(name)
         if op is None:
             return
         with undo.transaction(proj.doc, tr("Enable or disable the operation")):
-            proj.set_operation_active(op, item.checkState(0) == QtCore.Qt.Checked)
+            proj.set_operation_active(op, active)
             proj.compute()
         self.refresh()
         self._reselect(op.Name)
@@ -1381,6 +1385,24 @@ class _UndoObserver(object):
                 if "Touched" in obj.State:
                     obj.purgeTouched()
         QtCore.QTimer.singleShot(0, refresh_project_panel)
+
+    # Le panneau montrait encore l'ancien projet après un changement d'onglet, l'ouverture d'un fichier ou la
+    # fermeture du document (différé : à l'ouverture, les fournisseurs de vue sont relus après le document).
+
+    def slotActivateDocument(self, doc):
+        QtCore.QTimer.singleShot(0, _document_activated)
+
+    def slotDeletedDocument(self, doc):
+        QtCore.QTimer.singleShot(0, refresh_project_panel)
+
+
+def _document_activated():
+    proj = state.active_project()
+    if proj is not None and proj.has_job:
+        from ..project.project import attach_job_view
+
+        attach_job_view(proj.job)  # projet enregistré avant que le job ait son fournisseur de vue
+    refresh_project_panel()
 
 
 _undo_observer = None

@@ -13,9 +13,23 @@ except ImportError:  # pragma: no cover
 
 
 def exec_dialog(dialog):
-    """``QDialog.exec()`` sur PySide6, ``exec_()`` sur PySide2 ; retourne le code de résultat."""
+    """``QDialog.exec()`` sur PySide6, ``exec_()`` sur PySide2 ; retourne le code de résultat. Le dialogue est
+    ensuite détruit (``dispose``)."""
     runner = getattr(dialog, "exec", None) or getattr(dialog, "exec_")
-    return runner()
+    try:
+        return runner()
+    finally:
+        dispose(dialog)
 
 
-__all__ = ["QtCore", "QtGui", "QtWidgets", "QT_VERSION", "exec_dialog"]
+def dispose(dialog):
+    """Détruit un dialogue fermé quand la main revient à la boucle d'événements (ses champs restent lisibles
+    jusqu'à la fin de la commande). Créés avec la fenêtre principale pour parent, les dialogues fermés restaient
+    en mémoire : 150 après 50 ajouts d'opérations."""
+    try:
+        dialog.deleteLater()
+    except RuntimeError:
+        pass  # déjà détruit
+
+
+__all__ = ["QtCore", "QtGui", "QtWidgets", "QT_VERSION", "exec_dialog", "dispose"]

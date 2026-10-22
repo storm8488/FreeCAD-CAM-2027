@@ -1209,6 +1209,7 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
         else:
             res = importlib.import_module(module.replace("Path.Op.", "Path.Op.Gui.")).Command.res
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, res)
+        op.ViewObject.Proxy.deleteOnReject = False  # opération déjà créée : Annuler sur sa page ne la supprime pas
         op.ViewObject.Visibility = True
     model_aware_objects = None
     if kind == "rough3d":

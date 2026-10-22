@@ -101,6 +101,50 @@
 - **[B2]** **Mémoire du dessus de pièce bornée** : la rastérisation par colonnes développait toutes les cellules d'un
   paquet de 20 000 triangles d'un coup (grands triangles plans sur une grille fine : 257 Mo pour une boîte sur
   2 M cellules) ; paquets d'au plus 1,5 M cellules comme avant : 154 Mo (199 Mo à `dcb2373`), même carte.
+- **[B3]** Correctif : **double-clic sur une opération dans l'arbre** : la page de tâches FreeCAD s'ouvrait à moitié
+  puis ne se fermait plus (Annuler et OK levaient `'NoneType' object has no attribute 'resetEditVisibility'`,
+  transaction laissée ouverte) : le job créé par CAM2027 n'avait pas le fournisseur de vue de l'atelier CAM. Il
+  l'a maintenant (`project.attach_job_view`, posé aussi à l'activation d'un projet enregistré avant). Une fois la
+  page réparée, **Annuler supprimait l'opération** (fournisseur de vue resté « en cours de création ») : corrigé.
+  Scénario `b3-tree-edit`.
+- **[B3]** Correctif : pages de tâches des finitions CAM2027 (crête constante, plats, angles) : aucune page au
+  double-clic (filtre de sélection inconnu de FreeCAD, `KeyError`), et après réouverture du projet dans une
+  nouvelle session page introuvable (`TaskPanelOpPage` créée seulement à l'ajout d'une opération). Enregistrées au
+  démarrage de l'atelier (`commands.register_task_pages`). Scénario `b3-reopen` (11 stratégies, enregistrement,
+  réouverture, page de chaque opération, parcours identiques après recalcul).
+- **[B3]** Correctif : **Annuler** sur la page de tâches FreeCAD d'une opération (double-clic dans l'arbre) figeait
+  l'interface le temps de recalculer tout le parcours alors que rien n'avait changé (l'ouverture de la page marque
+  l'opération « à recalculer ») : 47,2 s pour une reprise des angles, 5,3 s pour une crête constante ; maintenant
+  immédiat (`commands.patch_task_panel_cancel`). OK recalcule toujours, comme dans FreeCAD.
+- **[B3]** Correctif : **fuite des dialogues** : chaque dialogue fermé restait en mémoire (enfant de la fenêtre
+  principale), 150 après 50 ajouts d'opérations ; détruits à la fermeture (`qt.dispose`, éditeur d'opération).
+  Scénario `b3-long-session` (50 opérations ajoutées, renommées, dupliquées, supprimées, puis 20 Ctrl+Z).
+- **[B3]** Correctif : **« Modifier »** du panneau Projet sur une opération générée par sa commande (angles vifs du
+  V-carving, palpage, Photo V-Carve, moulure, cannelures, texture, prisme) levait une exception (`Base` absente) et
+  rien ne s'ouvrait ; l'éditeur s'ouvre (onglet Géométrie sans choix) et nomme la stratégie en clair au lieu de
+  l'identifiant interne (`vcarve_corners`, `probe`). Trouvé par l'audit `CAM2027_B3_AUDIT=1` des scénarios.
+- **[B3]** Correctif : projet rouvert (dôme, reprise de matière) : le fournisseur de vue du job restait non attaché
+  (erreurs `'ViewProvider' object has no attribute 'obj'`) et la page de tâches d'une opération ne s'ouvrait pas ;
+  attaché à l'activation du projet. Scénarios `b3-reopen-dome`, `b3-reopen-dome-undo`.
+- **[B3]** Correctif : **plantage** en cochant / décochant une opération dans le panneau Projet : la liste était
+  reconstruite pendant le signal de l'élément coché, détruit sous Qt (violation d'accès puis corruption du tas,
+  au hasard ; pile relevée par `faulthandler` pendant les scénarios). Traité après le signal. Scénario
+  `b3-panel-undo` (l'élément coché existe encore au retour du signal).
+- **[B3]** Correctif : **Ctrl+Z pendant que l'éditeur d'opération est ouvert** (juste après Ajouter) : l'éditeur
+  restait ouvert sur l'opération retirée ; OK affichait « Échec de l'opération : Access violation », Annuler une
+  erreur incompréhensible. L'éditeur se ferme quand son opération disparaît. Scénario `b3-undo-while-editing`.
+- **[B3]** Correctif (FreeCAD 1.0) : **Ctrl+Z** après Brut et montage, Ajouter une opération ou Dupliquer :
+  la fabrique de ToolBit de l'interface 1.0 ouvre et valide sa propre transaction (« Create ToolBit ») au milieu de
+  celle de l'action : 2 ou 3 étapes au lieu d'une, et après Brut et montage annulé un objet `Stock` restait dans
+  le document ; l'incrustation débordait sur le projet mâle (question d'annulation sur plusieurs documents).
+  Fabrique de base pendant l'action (`bridge.plain_toolbit_factory`). Scénario `b3-stock-undo`, audit 1.0.2.
+- **[B3]** Rapidité : rafraîchissement du **panneau Projet** à 50 opérations 72 -> 41 ms (médianes de 4 mesures,
+  même machine, mêmes états affichés) : le registre des opérations n'est plus relu (JSON) pour chaque ligne et les
+  icônes d'état sont gardées en mémoire au lieu d'être relues sur le disque. Le panneau est rafraîchi après chaque
+  commande, Ctrl+Z et changement de document.
+- **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
+  d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
+
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
