@@ -1446,5 +1446,6 @@
   "inner corner (probe lowered into the pocket, 10 mm from both walls)": "coin intérieur (palpeur descendu dans la poche, à 10 mm des deux parois)",
   "Lines along the axis": "Lignes le long de l'axe",
   "Spiral (A turns continuously)": "Spirale (A tourne sans arrêt)",
-  "rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis": "finition rotative : la spirale fait tourner l'axe A {t:.0f} fois ({d:.0f}°), plus que sa course ({a:g}° à {b:g}° dans le profil machine) : utilisez les lignes le long de l'axe"
+  "rotary finishing: the spiral turns the A axis {t:.0f} times ({d:.0f}°), more than its travel ({a:g}° to {b:g}° in the machine profile): use lines along the axis": "finition rotative : la spirale fait tourner l'axe A {t:.0f} fois ({d:.0f}°), plus que sa course ({a:g}° à {b:g}° dans le profil machine) : utilisez les lignes le long de l'axe",
+  "{n} hole(s) under another body of the part are left out (not reachable from above).": "{n} trou(s) sous un autre corps de la pièce laissé(s) de côté (inaccessibles par le dessus)."
 }

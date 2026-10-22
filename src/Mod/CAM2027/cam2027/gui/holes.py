@@ -17,7 +17,8 @@ class HoleDialog(QtWidgets.QDialog):
         self.setWindowTitle(tr("Hole recognition and drilling"))
         self.setMinimumWidth(640)
         self.clone = proj.job.Model.Group[0]
-        self.holes = holesmod.find_job_holes(proj)  # tous les corps du job, pas seulement le premier
+        self.covered = []
+        self.holes = holesmod.find_job_holes(proj, self.covered)  # tous les corps du job, pas seulement le premier
         self.groups = holesmod.groups(self.holes)
         lay = QtWidgets.QVBoxLayout(self)
         hint = QtWidgets.QLabel(tr("Vertical holes found on the part, grouped by size. One operation is made per step and per hole size: spot drilling, drilling (peck drilling deeper than 3 diameters, bore milling without a drill of the size), chamfer, thread milling."))
@@ -79,6 +80,9 @@ class HoleDialog(QtWidgets.QDialog):
         text = [tr_msg(n) for n in self.notes]
         if not self.holes:
             text.insert(0, tr("No vertical hole open at the top was found on the part."))
+        if self.covered:
+            text.append(tr("{n} hole(s) under another body of the part are left out (not reachable from above).",
+                           n=len(self.covered)))
         self.status.setText("<br>".join(text))
 
     def _check_and_accept(self):

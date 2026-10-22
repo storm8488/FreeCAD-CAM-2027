@@ -50,6 +50,9 @@
   à travers l'autre corps (entaille de **5 mm** sur le chauffage Vz330 de l'utilisateur, 10 mm sur le cas d'essai).
   Les plats de chaque corps sont maintenant privés de l'empreinte, vue de dessus, des autres corps au-dessus d'eux
   (sections aux hauteurs des sommets), puis réduits du rayon de la fraise comme avant.
+- **[B4]** Correctif : **perçage intelligent sous un autre corps**. Un trou d'un corps couvert par un autre corps posé
+  dessus était proposé : le foret traversait le corps du dessus. Ces trous sont écartés, avec un message dans le
+  dialogue (« N trou(s) sous un autre corps de la pièce laissé(s) de côté »).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

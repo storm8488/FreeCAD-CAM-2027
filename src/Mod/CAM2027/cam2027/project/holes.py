@@ -125,9 +125,20 @@ def find_holes(obj, tol=1e-4):
     return holes
 
 
-def find_job_holes(proj):
-    """Trous de tous les corps du job (une pièce en plusieurs corps : chacun a ses trous)."""
-    holes = [h for obj in proj.job.Model.Group if getattr(obj, "Shape", None) is not None for h in find_holes(obj)]
+def find_job_holes(proj, covered=None):
+    """Trous de tous les corps du job (une pièce en plusieurs corps : chacun a ses trous). Un trou sous un autre
+    corps (corps posé dessus : chauffage Vz330 de l'utilisateur) n'est pas accessible par le dessus : écarté, et
+    ajouté à la liste ``covered`` si elle est donnée (le foret traversait le corps du dessus)."""
+    bodies = [o for o in proj.job.Model.Group if getattr(o, "Shape", None) is not None]
+    top = max([o.Shape.BoundBox.ZMax for o in bodies] or [0.0]) + 1.0
+    holes = []
+    for obj in bodies:
+        for h in find_holes(obj):
+            if any(o is not obj and not column_free(o.Shape, h, top) for o in bodies):
+                if covered is not None:
+                    covered.append(h)
+                continue
+            holes.append(h)
     holes.sort(key=lambda h: (h.diameter, h.y, h.x))
     return holes
 
