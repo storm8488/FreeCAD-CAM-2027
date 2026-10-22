@@ -201,6 +201,125 @@ class TestVectors(unittest.TestCase):
             self.assertGreater(edges.distToShape(v)[0], 1.5 - 0.02, (x, y))
 
 
+
+def write_image(path, w_px, h_px, grey):
+    """PNG en niveaux de gris : ``grey(col, row_from_bottom)`` dans [0, 1]."""
+    from cam2027.project import relief
+
+    _QtCore, QtGui = relief._qt()
+    img = QtGui.QImage(w_px, h_px, QtGui.QImage.Format_RGB32)
+    for row in range(h_px):
+        for col in range(w_px):
+            v = int(round(255 * max(0.0, min(1.0, grey(col, h_px - 1 - row)))))
+            img.setPixel(col, row, QtGui.qRgb(v, v, v))
+    assert img.save(path)
+    return path
+
+
+def frame_project(name, lib, xmax, ymax):
+    """Projet avec un panneau 12 mm sous un cadre (-5, -5) .. (xmax + 5, ymax + 5), dessus à Z 0."""
+    from cam2027.project import vectors
+
+    proj = Project.create(name, lib, machine())
+    frame = vectors.add_vector(proj, Part.Compound([Part.makePolygon(
+        [V(-5, -5, 0), V(xmax + 5, -5, 0), V(xmax + 5, ymax + 5, 0), V(-5, ymax + 5, 0), V(-5, -5, 0)])]), "Frame")
+    proj.create_sheet_job(vectors=[frame], thickness=12.0, margin=0.0)
+    return proj
+
+
+class TestBitmap(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="cam2027-s5b-")
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_trace_bitmap_pocket(self):
+        """Image 100 x 60 px (1 px = 1 mm) : anneau noir R20 / r8 et carré noir de 20 : 3 contours fermés aux bonnes
+        aires, poche 2D sur le tracé (trou de l'anneau respecté)."""
+        from cam2027.project import bitmap, vectors
+
+        def grey(i, j):
+            r = math.hypot(i - 30, j - 30)
+            ring = 8.0 <= r <= 20.0
+            square = 65 <= i <= 85 and 20 <= j <= 40
+            return 0.0 if ring or square else 1.0
+
+        png = write_image(os.path.join(self.tmp, "logo.png"), 100, 60, grey)
+        loops = bitmap.trace(png, 99.0, threshold=0.5, tolerance=0.05)
+        self.assertEqual(len(loops), 3)
+        areas = sorted(abs(bitmap._area(p)) for p in loops)
+        # aires des zones de pixels (1 px = 1 mm²) : le contour passe à mi-chemin entre pixels noirs et blancs
+        hole = sum(1 for i in range(100) for j in range(60) if math.hypot(i - 30, j - 30) < 8.0)
+        disc = sum(1 for i in range(100) for j in range(60) if math.hypot(i - 30, j - 30) <= 20.0)
+        self.assertAlmostEqual(areas[0], hole, delta=0.06 * hole)  # trou de l'anneau
+        self.assertAlmostEqual(areas[1], 21.0 * 21.0, delta=0.06 * 441)
+        self.assertAlmostEqual(areas[2], disc, delta=0.03 * disc)
+        lib = starter_library()
+        proj = frame_project("Trace", lib, 99.0, 59.0)
+        obj, n = bitmap.trace_to_vector(proj, png, 99.0, threshold=0.5)
+        self.assertEqual(n, 3)
+        face = vectors.faces_of(obj.Shape)
+        self.assertEqual(len(face.Faces), 2)  # anneau (avec trou) + carré
+        self.assertAlmostEqual(face.Area, areas[2] - areas[0] + areas[1], delta=1.0)
+        small, sasm = tool_ids(lib, "3 mm flat end mill", lambda t: t.tool_type == "endmill")
+        op, _rec = proj.add_operation("pocket2d", "Pocket logo", sasm.id, small.presets[0].id, base=[(obj, [])],
+                                      params={"StartDepth": 0.0, "FinalDepth": -2.0, "StepDown": 1.0})
+        res = {r["name"]: r for r in proj.compute()}["Pocket logo"]
+        self.assertTrue(res["valid"] and res["commands"] > 20, res)
+        edges = Part.Compound(face.Edges)
+        pts = [p for p in cut_points(op) if p[2] < -1e-6]
+        self.assertGreater(len(pts), 30)
+        for x, y, z in pts:
+            v = Part.Vertex(V(x, y, 0))
+            self.assertLess(face.distToShape(v)[0], 1e-3, (x, y))
+            self.assertGreater(edges.distToShape(v)[0], 1.5 - 0.02, (x, y))
+        self.assertFalse(any(math.hypot(x - 30, y - 30) < 8.0 for x, y, z in pts))  # trou de l'anneau intact
+
+    def test_photo_vcarve_depth_follows_grey(self):
+        """Dégradé blanc -> noir de gauche à droite, 60 x 40 mm, profondeur maximale 2 mm au V-bit 60° : sur la
+        carte de hauteur simulée, profondeur du trait = 2 x sombre (± 0,1), jamais plus de 2 mm, rien dans le blanc."""
+        from cam2027.project import bitmap
+
+        png = write_image(os.path.join(self.tmp, "ramp.png"), 121, 81, lambda i, j: 1.0 - i / 120.0)
+        lib = starter_library()
+        proj = frame_project("Photo", lib, 60.0, 40.0)
+        vbit, vasm = tool_ids(lib, "V-bit", lambda t: t.geometry.tip_included_angle_deg == 60.0)
+        with self.assertRaises(Exception):  # trop profond pour la largeur du V-bit
+            bitmap.add_photo_vcarve(proj, "Too deep", vasm.id, vbit.presets[0].id, png, 60.0, 20.0)
+        op, rec = bitmap.add_photo_vcarve(proj, "Photo", vasm.id, vbit.presets[0].id, png, 60.0, 2.0)
+        spacing = rec["params"]["spacing"]
+        self.assertAlmostEqual(spacing, 0.1 + 2 * 2.0 * math.tan(math.radians(30)), places=6)
+        # dégradé linéaire : chaque ligne réduite à ses extrémités (points alignés retirés), 4 commandes par ligne
+        self.assertGreaterEqual(len(op.Path.Commands), 4 * int(40.0 / spacing))
+        zs = [c.Parameters["Z"] for c in op.Path.Commands if c.Name == "G1" and "Z" in c.Parameters]
+        self.assertGreaterEqual(min(zs), -2.0 - 1e-6)
+        rep = proj.material_check(resolution=0.1)
+        zmap = proj.last_zmap
+        self.assertEqual(rep["rapid_hits"] if "rapid_hits" in rep else zmap.rapid_hits, 0)
+        self.assertGreaterEqual(float(zmap.top.min()), -2.0 - 0.02)  # rien sous la profondeur maximale
+        import numpy as np
+
+        checked = 0
+        for k in range(int(40.0 / spacing)):
+            y = spacing / 2.0 + k * spacing
+            j = int(round((y - zmap.y0) / zmap.res - 0.5))
+            for x in (10.0, 20.0, 30.0, 45.0, 55.0):
+                i = int(round((x - zmap.x0) / zmap.res - 0.5))
+                expected = -2.0 * x / 60.0
+                if expected > -0.05:
+                    continue
+                got = float(zmap.top[i, max(0, j - 1):j + 2].min())  # fond du trait près de la ligne
+                self.assertAlmostEqual(got, expected, delta=0.1, msg=(x, y))
+                checked += 1
+        self.assertGreater(checked, 20)
+        # blanc (X < 1,5 mm : profondeur < 0,05) : matière intacte
+        i_white = int(round((1.0 - zmap.x0) / zmap.res))
+        self.assertAlmostEqual(float(zmap.top[i_white, :].min()), 0.0, places=6)
+        self.assertTrue(np.all(zmap.top <= 0.0 + 1e-9))
+
 V = FreeCAD.Vector
 
 

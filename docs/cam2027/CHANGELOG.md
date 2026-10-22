@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **[S5]** **Vectorisation d'image et Photo V-Carve** (comme Aspire « Trace Bitmap » et « Photo V-Carving ») :
+  Dessin > Vectoriser une image seuille l'image en niveaux de gris (seuil, inversion, tolérance du contour,
+  taches ignorées) par *marching squares* au sous-pixel, chaîne les contours fermés (trous gardés) et les
+  simplifie (Douglas-Peucker) : un vecteur du dessin, usinable en poche, contour ou V-carving. `potrace`
+  n'existe pas dans FreeCAD : contours polygonaux. Usiner > Photo V-Carve grave une photo au V-bit en lignes
+  horizontales aller-retour, profondeur = profondeur maximale × sombre (gamma réglable), écart entre lignes
+  par défaut = largeur du V-bit à la profondeur maximale ; les zones plus claires que 0,05 mm de profondeur
+  sont sautées. Opération `Path.Op.Custom` (avances converties en mm/s comme la gravure enroulée), simulée
+  par le contrôle matière.
 - **[S5]** **Dessin vectoriel dans l'atelier** (menu et barre d'outils Dessin, dialogues CAM2027, comme les
   outils de dessin d'Aspire) : texte (police TrueType, hauteur, espacement) en ligne droite, sur un arc ou le
   long d'un vecteur ; décalage d'un vecteur fermé (angles ronds ou vifs, formes qui se recouvrent soudées) ;

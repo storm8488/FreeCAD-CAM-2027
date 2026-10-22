@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication."""
+"""Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication,
+vectorisation d'image et Photo V-Carve."""
 
 from ..i18n import tr, tr_msg
 from .labels import preset_label
@@ -197,3 +198,86 @@ class NestDialog(QtWidgets.QDialog):
                 copies[obj] = self.table.cellWidget(r, 2).value()
         return self.proj.nest_drawings(chosen, self.width.value(), self.length.value(), self.spacing.value(),
                                        self.margin.value(), self.rotate.isChecked(), copies)
+
+
+class TraceBitmapDialog(QtWidgets.QDialog):
+    """Vectorisation d'une image (Aspire « Trace Bitmap ») : seuil, inversion, taille, simplification."""
+
+    def __init__(self, proj, parent=None, path=""):
+        super(TraceBitmapDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.path = path
+        self.setWindowTitle(tr("Trace bitmap"))
+        form = QtWidgets.QFormLayout(self)
+        form.addRow(tr("Image"), QtWidgets.QLabel(path))
+        self.width = _spin(1, 10000, 100.0, 1)
+        form.addRow(tr("Width (mm)"), self.width)
+        self.threshold = _spin(0.01, 0.99, 0.5)
+        self.threshold.setSingleStep(0.05)
+        self.threshold.setToolTip(tr("Grey level separating the shapes from the background (0 black, 1 white)."))
+        form.addRow(tr("Threshold"), self.threshold)
+        self.invert = QtWidgets.QCheckBox(tr("Trace the light areas (instead of the dark ones)"))
+        form.addRow("", self.invert)
+        self.tolerance = _spin(0.001, 5.0, 0.05, 3)
+        self.tolerance.setToolTip(tr("Largest distance between the traced outline and the pixel edge (smoothing)."))
+        form.addRow(tr("Outline tolerance (mm)"), self.tolerance)
+        self.min_area = _spin(0.0, 10000, 1.0)
+        form.addRow(tr("Ignore spots smaller than (mm²)"), self.min_area)
+        self.x = _spin(-10000, 10000, 0.0)
+        self.y = _spin(-10000, 10000, 0.0)
+        form.addRow(tr("Lower left corner X (mm)"), self.x)
+        form.addRow(tr("Lower left corner Y (mm)"), self.y)
+        _hint(form, tr("The outlines become a drawing vector (holes kept), to be machined with pocket, profile or V-carve."))
+        self.buttons = _buttons(self, form)
+
+    def apply(self):
+        from ..project import bitmap
+
+        return bitmap.trace_to_vector(self.proj, self.path, self.width.value(), threshold=self.threshold.value(),
+                                      invert=self.invert.isChecked(), tolerance=self.tolerance.value(),
+                                      min_area=self.min_area.value(), origin=(self.x.value(), self.y.value()))
+
+
+class PhotoVCarveDialog(QtWidgets.QDialog):
+    """Photo V-Carve (Aspire) : lignes parallèles au V-bit, profondeur selon le gris."""
+
+    def __init__(self, proj, parent=None, path=""):
+        super(PhotoVCarveDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.path = path
+        self.setWindowTitle(tr("Photo V-carve"))
+        form = QtWidgets.QFormLayout(self)
+        form.addRow(tr("Image"), QtWidgets.QLabel(path))
+        self.asm, self.preset = tool_pickers(proj, is_vbit)
+        form.addRow(tr("V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        sb = proj.stock_bounds()
+        self.width = _spin(1, 10000, round(min(200.0, sb["xmax"] - sb["xmin"]), 1), 1)
+        form.addRow(tr("Width (mm)"), self.width)
+        self.x = _spin(-10000, 10000, round(sb["xmin"], 2))
+        self.y = _spin(-10000, 10000, round(sb["ymin"], 2))
+        form.addRow(tr("Lower left corner X (mm)"), self.x)
+        form.addRow(tr("Lower left corner Y (mm)"), self.y)
+        self.depth = _spin(0.05, 20, 1.5)
+        form.addRow(tr("Maximum depth (black) (mm)"), self.depth)
+        self.spacing = _spin(0.0, 50, 0.0, 3)
+        self.spacing.setSpecialValueText(tr("Auto (V-bit width at the maximum depth)"))
+        form.addRow(tr("Line spacing (mm)"), self.spacing)
+        self.gamma = _spin(0.2, 5.0, 1.0)
+        self.gamma.setToolTip(tr("Above 1: light greys carved less deep (more contrast in the light areas)."))
+        form.addRow(tr("Gamma"), self.gamma)
+        self.invert = QtWidgets.QCheckBox(tr("Carve the light areas (negative)"))
+        form.addRow("", self.invert)
+        _hint(form, tr("Dark = deep and wide groove, white = not cut. Horizontal lines, back and forth, from the top of the stock."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import bitmap
+
+        return bitmap.add_photo_vcarve(self.proj, tr("Photo V-carve"), self.asm.currentData(), self.preset.currentData(),
+                                       self.path, self.width.value(), self.depth.value(), self.spacing.value() or None,
+                                       origin=(self.x.value(), self.y.value()), invert=self.invert.isChecked(),
+                                       gamma=self.gamma.value())

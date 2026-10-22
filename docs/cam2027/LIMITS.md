@@ -272,4 +272,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   vecteur (inverser le vecteur pour passer de l'autre côté) ; une courbe à plusieurs arêtes est approchée par
   une B-spline. Les booléens et le décalage travaillent sur les contours **fermés** seulement. Polices
   proposées : celle de FreeCAD (osifont) et les polices Windows courantes présentes.
+- **Vectorisation d'image** : contours polygonaux (pas de courbes de Bézier, pas de `potrace`) ; image
+  rééchantillonnée à 400 pixels au plus sur le grand côté ; un seul seuil (pas de couleurs séparées). Le
+  bord d'une zone touchant le bord de l'image est fermé sur le bord.
+- **Photo V-Carve** : lignes horizontales seulement (pas d'angle de lignes ni de lignes croisées), profondeur
+  proportionnelle au sombre (correction gamma), V-bit seulement. L'opération est générée (`Path.Op.Custom`) :
+  pour changer l'image ou les réglages, la supprimer et la recréer ; elle n'est pas dupliquée ni enregistrée
+  dans un modèle de parcours.
 

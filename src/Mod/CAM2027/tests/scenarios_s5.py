@@ -148,9 +148,74 @@ def scenario_vectors(gs, scenario):
     gs.pump(0.3)
 
 
+def scenario_bitmap(gs, scenario, tmp):
+    """Vectoriser une image (dialogue), panneau, poche 2D sur le tracé, puis Photo V-Carve d'un dégradé."""
+    import math
+
+    from tests.test_nuit_s5 import write_image
+
+    logo = write_image(os.path.join(tmp, "s5_logo.png"), 100, 60, lambda i, j: 0.0 if 8.0 <= math.hypot(i - 30, j - 30) <= 20.0
+                       or (65 <= i <= 85 and 20 <= j <= 40) else 1.0)
+    photo = write_image(os.path.join(tmp, "s5_photo.png"), 121, 81,
+                        lambda i, j: 0.5 + 0.5 * math.cos(math.hypot(i - 60, j - 40) / 8.0))
+    proj = gs.new_project(scenario, "Bitmap")
+    if proj is None:
+        return
+
+    def trace(dlg):
+        dlg.width.setValue(99.0)
+        return True
+
+    gs.driver.open_files.append(logo)
+    gs.driver.handlers[gs.tr("Trace bitmap")] = trace
+    gs.run_command(scenario, "CAM2027_TraceBitmap")
+    proj = gs.project()
+    traced = [o for o in proj.doc.Objects if o.Label == "s5_logo"]
+    if not traced:
+        gs.problem(scenario, "Trace bitmap created no vector")
+        return
+
+    def sheet(dlg):
+        gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet")
+        return True
+
+    gs.driver.handlers[gs.tr("Stock & fixture")] = sheet
+    gs.run_command(scenario, "CAM2027_StockFixture")
+    proj = gs.project()
+    if not proj.has_job:
+        gs.problem(scenario, "sheet job not created under the traced image")
+        return
+    FreeCADGui.Selection.clearSelection()
+    FreeCADGui.Selection.addSelection(traced[0])
+    gs.driver.handlers[gs.tr("Add operation")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "pocket2d"), "pocket2d"), True)[1]
+    gs.run_command(scenario, "CAM2027_AddOperation")
+    gs.accept_open_editors(scenario)
+
+    def photo_dlg(dlg):
+        dlg.width.setValue(60.0)
+        dlg.depth.setValue(1.5)
+        return True
+
+    gs.driver.open_files.append(photo)
+    gs.driver.handlers[gs.tr("Photo V-carve")] = photo_dlg
+    gs.run_command(scenario, "CAM2027_PhotoVCarve")
+    gs.run_command(scenario, "CAM2027_Compute")
+    proj = gs.project()
+    states = [(o.Label, proj.operation_state(o), len(o.Path.Commands)) for o in proj.operations()]
+    gs.log("  traced pocket and photo V-carve: %s" % states)
+    if len(states) != 2:
+        gs.problem(scenario, "2 operations expected (pocket on the trace, photo V-carve), got %s" % states)
+    for label, st, n in states:
+        if st != "computed" or n < 10:
+            gs.problem(scenario, "operation %s is %s (%d moves)" % (label, st, n))
+    FreeCAD.closeDocument(proj.doc.Name)
+    gs.pump(0.3)
+
+
 def entries(gs, files, tmp):
     """(nom, fonction) des scénarios S5 pour la boucle de ``gui_scenarios.main``."""
     return (
         ("s5-templates", lambda: scenario_templates(gs, "s5-templates", tmp)),
         ("s5-vectors", lambda: scenario_vectors(gs, "s5-vectors")),
+        ("s5-bitmap", lambda: scenario_bitmap(gs, "s5-bitmap", tmp)),
     )
