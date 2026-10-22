@@ -144,6 +144,37 @@ class PhotoVCarve(base._Base):
                           s="%.3f" % rec["params"]["spacing"]))
 
 
+class SetupSheetPdf(base._Base):
+    atelier = "open-project"
+    text = "Setup sheet (PDF)"
+    tooltip = "Write the setup sheet (tools, operations, estimated time with acceleration, checks) as a PDF file"
+
+    def Activated(self):
+        from ..project import export as exportmod
+
+        proj = base._need_project()
+        if proj is None:
+            return
+        if not proj.has_job or not proj.operations():
+            base._warn(tr("No operation to export: add an operation first."))
+            return
+        path, _f = QtWidgets.QFileDialog.getSaveFileName(FreeCADGui.getMainWindow(), tr("Setup sheet (PDF)"),
+                                                         proj.doc.Label + "-setup.pdf", "PDF (*.pdf)")
+        if not path:
+            return
+        if not path.lower().endswith(".pdf"):
+            path += ".pdf"
+        try:
+            with base.busy(tr("Computing the toolpaths...")):
+                _text, analysis, issues = proj.preview_gcode()
+                sheet = exportmod.prep_sheet(proj, [], analysis, issues, [path])
+                exportmod.write_pdf(sheet, path, title=proj.doc.Label)
+        except Exception as exc:
+            base._warn(tr("Operation failed: {error}", error=tr_msg(exc)))
+            return
+        base._info(tr("Setup sheet written: {file}", file=path))
+
+
 from . import vectors  # noqa: E402
 
 COMMANDS = [
@@ -151,8 +182,11 @@ COMMANDS = [
     ("CAM2027_ApplyTemplate", ApplyTemplate),
     ("CAM2027_TraceBitmap", TraceBitmap),
     ("CAM2027_PhotoVCarve", PhotoVCarve),
+    ("CAM2027_SetupSheetPdf", SetupSheetPdf),
 ] + vectors.COMMANDS
 #: menu et barre d'outils Dessin
 DRAWING_MENU = vectors.TOOLBAR + ["Separator", "CAM2027_TraceBitmap"]
 #: entrées du menu Usiner
 MACHINING_MENU = ["Separator", "CAM2027_PhotoVCarve", "Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]
+#: entrées du menu Exporter
+EXPORT_MENU = ["CAM2027_SetupSheetPdf"]

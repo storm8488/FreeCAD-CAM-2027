@@ -212,10 +212,43 @@ def scenario_bitmap(gs, scenario, tmp):
     gs.pump(0.3)
 
 
+def scenario_setup_pdf(gs, scenario, files, tmp):
+    """Panneau, contour, fiche de préparation en PDF par la commande ; le PDF est relu (en-tête, pages, temps)."""
+    import re
+
+    proj = _sheet_project(gs, scenario, "Setup PDF", files["svg"])
+    if proj is None:
+        return
+    from cam2027.project import sheet as sheetmod
+
+    rect = [v for v in sheetmod.vector_objects(proj.doc) if len(v.Shape.Edges) == 4]
+    FreeCADGui.Selection.clearSelection()
+    FreeCADGui.Selection.addSelection(rect[0])
+    gs.driver.handlers[gs.tr("Add operation")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "profile"), "profile"), True)[1]
+    gs.run_command(scenario, "CAM2027_AddOperation")
+    gs.accept_open_editors(scenario)
+    gs.run_command(scenario, "CAM2027_Compute")
+    out = os.path.join(tmp, "setup sheet.pdf")
+    gs.driver.save_files.append(out)
+    gs.run_command(scenario, "CAM2027_SetupSheetPdf")
+    if not os.path.isfile(out):
+        gs.problem(scenario, "setup sheet PDF not written")
+        return
+    with open(out, "rb") as fp:
+        data = fp.read()
+    pages = len(re.findall(rb"/Type\s*/Page[^s]", data))
+    gs.log("  setup sheet PDF: %d bytes, %d page(s)" % (len(data), pages))
+    if not data.startswith(b"%PDF") or pages < 1 or len(data) < 2000:
+        gs.problem(scenario, "setup sheet PDF unreadable (%d bytes, %d pages)" % (len(data), pages))
+    FreeCAD.closeDocument(proj.doc.Name)
+    gs.pump(0.3)
+
+
 def entries(gs, files, tmp):
     """(nom, fonction) des scénarios S5 pour la boucle de ``gui_scenarios.main``."""
     return (
         ("s5-templates", lambda: scenario_templates(gs, "s5-templates", tmp)),
         ("s5-vectors", lambda: scenario_vectors(gs, "s5-vectors")),
         ("s5-bitmap", lambda: scenario_bitmap(gs, "s5-bitmap", tmp)),
+        ("s5-setup-pdf", lambda: scenario_setup_pdf(gs, "s5-setup-pdf", files, tmp)),
     )

@@ -1120,5 +1120,10 @@
   "photo V-carve: width, depth, line spacing and sampling must be above 0": "Photo V-Carve : largeur, profondeur, écart entre lignes et pas doivent être supérieurs à 0",
   "photo V-carve needs a V-bit (tool with a tip angle)": "la Photo V-Carve demande un V-bit (outil à angle de pointe)",
   "photo V-carve: {d} mm deep is wider than the V-bit ({w:.2f} > {dia:.2f} mm)": "Photo V-Carve : à {d} mm de profondeur, le trait est plus large que le V-bit ({w:.2f} > {dia:.2f} mm)",
-  "photo V-carve: the image is lighter than the minimum depth everywhere: nothing to cut": "Photo V-Carve : l'image est partout plus claire que la profondeur minimale : rien à graver"
+  "photo V-carve: the image is lighter than the minimum depth everywhere: nothing to cut": "Photo V-Carve : l'image est partout plus claire que la profondeur minimale : rien à graver",
+  "Acceleration (mm/s²)": "Accélération (mm/s²)",
+  "Setup sheet (PDF)": "Fiche de préparation (PDF)",
+  "Write the setup sheet (tools, operations, estimated time with acceleration, checks) as a PDF file": "Écrit la fiche de préparation (outils, opérations, temps estimé avec l'accélération, contrôles) en PDF",
+  "No operation to export: add an operation first.": "Aucune opération à exporter : ajoutez d'abord une opération.",
+  "Setup sheet written: {file}": "Fiche de préparation écrite : {file}"
 }

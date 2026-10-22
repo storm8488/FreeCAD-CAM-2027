@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **[S5]** **Temps d'usinage avec l'accélération et fiche de préparation en PDF** : nouveau champ
+  « Accélération (mm/s²) » du profil machine ; le temps estimé (fiche, section « Estimated machining time »,
+  par opération et total) suit un profil de vitesse trapézoïdal par segment avec la limite de vitesse en
+  virage du planificateur de GRBL (*junction deviation* 0,01 mm) et un passage avant / arrière. Accélération
+  inconnue : 500 mm/s² supposés ; rapides à l'avance maximale XY, sinon 3000 mm/min supposés ; les
+  suppositions sont écrites sur la fiche. Exporter > Fiche de préparation (PDF) écrit la fiche en PDF A4
+  (`QTextDocument` + `QPdfWriter` de Qt, sans dépendance). Coût mesuré : 1 s pour 200 000 commandes.
 - **[S5]** **Vectorisation d'image et Photo V-Carve** (comme Aspire « Trace Bitmap » et « Photo V-Carving ») :
   Dessin > Vectoriser une image seuille l'image en niveaux de gris (seuil, inversion, tolérance du contour,
   taches ignorées) par *marching squares* au sous-pixel, chaîne les contours fermés (trous gardés) et les

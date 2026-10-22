@@ -1188,7 +1188,7 @@ class Machine(_Base):
         from ..project.machine import FIELD_LABELS
 
         for key in ("name", "vendor", "model", "controller", "post_processor", "post_processor_args", "travel_x_mm",
-                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "spindle_min_rpm",
+                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2", "spindle_min_rpm",
                     "spindle_max_rpm", "spindle_power_w", "collet", "notes"):
             label = FIELD_LABELS[key]
             w = QtWidgets.QLineEdit("" if getattr(m, key) is None else str(getattr(m, key)))
@@ -1232,7 +1232,7 @@ class Machine(_Base):
         if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         d = m.to_dict()
-        numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min",
+        numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2",
                    "spindle_min_rpm", "spindle_max_rpm", "spindle_power_w")
         labels = dict(FIELD_LABELS, cy="A axis centre Y (mm)", cz="A axis centre Z (mm)", min="A axis min (deg)",
                       max="A axis max (deg)", feed="A axis max feed (deg/min)")
@@ -1354,7 +1354,7 @@ STAGE_MENUS = (
     ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
                    "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
-    ("Export", ["CAM2027_Export"]),
+    ("Export", ["CAM2027_Export"] + aspirecmds.EXPORT_MENU),
 )
 STAGE_MENUS = STAGE_MENUS[:1] + (("Drawing", aspirecmds.DRAWING_MENU),) + STAGE_MENUS[1:]  # S5 : dessin vectoriel
 

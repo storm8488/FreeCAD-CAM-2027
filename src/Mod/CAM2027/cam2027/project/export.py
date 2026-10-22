@@ -355,6 +355,10 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
             idx, rec.get("label", op_name), rec["kind"], asm.output.tool_number, v["preset_name"],
             v["spindle_rpm"], v["feed_mm_min"], v["plunge_feed_mm_min"]))
     lines.append("")
+    try:
+        lines.extend(timing_lines(project)[0])
+    except Exception as exc:  # l'estimation ne bloque jamais l'export
+        lines.extend(["## Estimated machining time", "", "- not estimated: %s" % exc, ""])
     lines.append("## G-code analysis")
     lines.append("")
     lines.append("- Lines: %d, units: %s, axes: %s" % (analysis["lines"], analysis["units"], " ".join(analysis["axes"])))
@@ -378,6 +382,60 @@ def prep_sheet(project, sections, analysis, issues, out_paths):
         lines.append("Machine data still to fill in: %s" % ", ".join(missing))
     lines.append("")
     return "\n".join(lines)
+
+
+def timing_lines(project):
+    """Section « temps estimé » de la fiche (accélération du profil machine, voir ``timing``)."""
+    from . import timing
+
+    est = timing.estimate(project)
+    lines = ["## Estimated machining time", ""]
+    lines.append("- Total: %s (feed and rapid moves with acceleration %g mm/s², rapids at %g mm/min; tool changes not counted)"
+                 % (timing.format_duration(est["total"]), est["acceleration"], est["rapid"]))
+    lines.append("- Without acceleration (length / feed): %s" % timing.format_duration(est["without_accel"]))
+    if est["assumed"]:
+        lines.append("- Assumed (machine profile to fill in): %s" % ", ".join(est["assumed"]))
+    lines.append("")
+    lines.append("| Operation | Time |")
+    lines.append("|---|---|")
+    for label, t in est["operations"]:
+        lines.append("| %s | %s |" % (label, timing.format_duration(t)))
+    lines.append("")
+    return lines, est
+
+
+def write_pdf(markdown_text, path, title=""):
+    """Fiche de préparation en PDF (A4) depuis le texte Markdown de ``prep_sheet`` : ``QTextDocument`` et
+    ``QPdfWriter`` de Qt, sans dépendance. Exige une application Qt (interface) ; retourne le chemin."""
+    try:
+        from PySide6 import QtCore, QtGui
+    except ImportError:  # pragma: no cover - FreeCAD 1.0 (Qt 5)
+        from PySide2 import QtCore, QtGui
+    if QtCore.QCoreApplication.instance() is None or not isinstance(QtCore.QCoreApplication.instance(), QtGui.QGuiApplication):
+        raise RuntimeError("PDF setup sheet: a Qt GUI application is required")
+    writer = QtGui.QPdfWriter(path)
+    writer.setPageSize(QtGui.QPageSize(QtGui.QPageSize.A4))
+    writer.setResolution(150)
+    writer.setTitle(title or "CAM2027 setup sheet")
+    writer.setCreator("CAM2027")
+    doc = QtGui.QTextDocument()
+    font = doc.defaultFont()
+    font.setPointSizeF(9.0)
+    doc.setDefaultFont(font)
+    doc.setMarkdown(markdown_text)
+    # tableaux Markdown : bordures et marges (setMarkdown ne lit pas la feuille de style)
+    for frame in doc.rootFrame().childFrames():
+        if isinstance(frame, QtGui.QTextTable):
+            tf = frame.format()
+            tf.setBorder(0.5)
+            tf.setCellPadding(3)
+            tf.setCellSpacing(0)
+            frame.setFormat(tf)
+    if hasattr(doc, "print_"):
+        doc.print_(writer)
+    else:  # pragma: no cover
+        doc.print(writer)
+    return path
 
 
 def export_summary(project, analysis, issues):

@@ -279,4 +279,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   proportionnelle au sombre (correction gamma), V-bit seulement. L'opération est générée (`Path.Op.Custom`) :
   pour changer l'image ou les réglages, la supprimer et la recréer ; elle n'est pas dupliquée ni enregistrée
   dans un modèle de parcours.
+- **Temps estimé** : profil trapézoïdal par segment, vitesse en virage selon la *junction deviation* de GRBL
+  (0,01 mm) et planificateur à anticipation complète (GRBL n'anticipe que 16 blocs : sur des milliers de
+  segments très courts, la machine peut être plus lente que l'estimation). Une seule accélération pour tous
+  les axes ; temps de changement d'outil, de mise en route de la broche et de pause non comptés. Accélération
+  inconnue : 500 mm/s² supposés ; rapides : avance maximale XY du profil, sinon 3000 mm/min supposés (écrit
+  sur la fiche).
+- **Fiche PDF** : produite depuis l'interface seulement (Qt `QPdfWriter` exige une application graphique) ;
+  mise en page simple (texte et tableaux de la fiche Markdown), sans image de la pièce.
 

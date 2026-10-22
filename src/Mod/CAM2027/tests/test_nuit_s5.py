@@ -320,6 +320,61 @@ class TestBitmap(unittest.TestCase):
         self.assertAlmostEqual(float(zmap.top[i_white, :].min()), 0.0, places=6)
         self.assertTrue(np.all(zmap.top <= 0.0 + 1e-9))
 
+
+class TestTiming(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_acceleration_makes_moves_longer(self):
+        from cam2027.project import timing
+
+        v = 1000.0 / 60.0  # mm/s
+        t = timing.plan_time([((0, 0, 0), (10, 0, 0), v)], accel=500.0)
+        self.assertGreater(t, 0.6)  # critère du brief : plus long que distance / avance
+        self.assertAlmostEqual(t, 10.0 / v + v / 500.0, places=6)  # trapèze : L/v + v/a
+        # segment trop court pour atteindre l'avance : triangle, 2·sqrt(L/a)
+        self.assertAlmostEqual(timing.plan_time([((0, 0, 0), (0.1, 0, 0), v)], accel=500.0), 2 * math.sqrt(0.1 / 500.0), places=6)
+        # ligne droite coupée en 100 morceaux : aucun arrêt intermédiaire, même temps qu'un seul segment
+        pieces = [((0.1 * k, 0, 0), (0.1 * (k + 1), 0, 0), v) for k in range(100)]
+        self.assertAlmostEqual(timing.plan_time(pieces, 500.0), t, places=6)
+        # aller-retour : arrêt complet au demi-tour
+        back = timing.plan_time([((0, 0, 0), (10, 0, 0), v), ((10, 0, 0), (0, 0, 0), v)], 500.0)
+        self.assertAlmostEqual(back, 2 * t, places=6)
+        # angle droit : ralentissement partiel (entre le tout droit et l'arrêt)
+        corner = timing.plan_time([((0, 0, 0), (10, 0, 0), v), ((10, 0, 0), (10, 10, 0), v)], 500.0)
+        self.assertGreater(corner, 2 * 10.0 / v + v / 500.0)
+        self.assertLess(corner, 2 * t)
+        self.assertAlmostEqual(timing.segment_time(10, 0, 0, v, 0), 10.0 / v)
+
+    def test_project_estimate_and_setup_sheet(self):
+        from cam2027.project import timing, vectors
+
+        lib = starter_library()
+        proj = Project.create("Timing", lib, machine())
+        frame = vectors.add_vector(proj, Part.Compound([Part.makePolygon(
+            [V(0, 0, 0), V(80, 0, 0), V(80, 50, 0), V(0, 50, 0), V(0, 0, 0)])]), "Frame")
+        proj.create_sheet_job(vectors=[frame], thickness=12.0)
+        mill, masm = tool_ids(lib, "6 mm flat end mill")
+        proj.add_operation("profile", "Cut out", masm.id, mill.presets[0].id, base=[(frame, [])],
+                           params={"Side": "Outside", "StartDepth": 0.0, "FinalDepth": -6.0, "StepDown": 3.0})
+        proj.compute()
+        est = timing.estimate(proj)
+        self.assertEqual([r[0] for r in est["operations"]], ["Cut out"])
+        self.assertIn("acceleration 500 mm/s²", est["assumed"])
+        self.assertGreater(est["total"], est["without_accel"])
+        self.assertLess(est["total"], 1.5 * est["without_accel"])
+        proj.set_machine(MachineProfile("fast", controller="grbl", post_processor="grbl", acceleration_mm_s2=5000.0,
+                                        max_feed_xy_mm_min=3000.0, post_processor_args="--no-show-editor --precision=3"))
+        fast = timing.estimate(proj)
+        self.assertEqual(fast["assumed"], [])
+        self.assertLess(fast["total"], est["total"])
+        out = os.path.join(tempfile.mkdtemp(prefix="cam2027-s5t-"), "cut.nc")
+        res = proj.export_gcode(out)
+        self.assertIn("## Estimated machining time", res["sheet_text"])
+        self.assertIn(timing.format_duration(fast["total"]), res["sheet_text"])
+        shutil.rmtree(os.path.dirname(out), ignore_errors=True)
+
 V = FreeCAD.Vector
 
 
