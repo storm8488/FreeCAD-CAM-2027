@@ -53,6 +53,9 @@
   matière de sa fenêtre (moins la tolérance) est écarté sans calcul (le dessous de la fraise n'est jamais sous la
   pointe). Z constant du plateau : 2,9-3,1 s → 1,0 s, contrôle 11,8-12,0 s → 9,7-9,8 s (sous profileur) ; ébauche
   3D du chauffage : 4,4-6,5 s → 2,3-2,6 s. Cartes identiques bit à bit, mêmes événements.
+- **[B2]** **Mémoire du dessus de pièce bornée** : la rastérisation par colonnes développait toutes les cellules d'un
+  paquet de 20 000 triangles d'un coup (grands triangles plans sur une grille fine : 257 Mo pour une boîte sur
+  2 M cellules) ; paquets d'au plus 1,5 M cellules comme avant : 154 Mo (199 Mo à `dcb2373`), même carte.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

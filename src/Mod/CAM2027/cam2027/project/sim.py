@@ -758,15 +758,20 @@ def _raster_max(zmap, a, b, c, det, ox, oy, flat):
     A3, B3 = -A1 - A2, 1.0 - B1 - B2
     Az = A1 * at[:, 2] + A2 * bt[:, 2] + A3 * ct[:, 2]  # hauteur sur la colonne : Az Y + Bz
     Bz = B1 * at[:, 2] + B2 * bt[:, 2] + B3 * ct[:, 2]
-    p, q = _ragged(np.maximum(jh - jl + 1, 0))  # (triangle-colonne, cellule)
-    jj = jl[p] + q
-    Yc = zmap.ys[jj] + oy
-    inside = (A1[p] * Yc + B1[p] >= eps) & (A2[p] * Yc + B2[p] >= eps) & (A3[p] * Yc + B3[p] >= eps)
-    if not inside.any():
-        return
-    p, Yc = p[inside], Yc[inside]
-    z = Az[p] * Yc + Bz[p]
-    np.maximum.at(flat, col[p] * zmap.ny + jj[inside], z)
+    counts = np.maximum(jh - jl + 1, 0)
+    ends = np.cumsum(counts)
+    start = 0
+    while start < len(counts):  # paquets d'au plus CHUNK_CELLS cellules (grands triangles des faces planes)
+        stop = max(int(np.searchsorted(ends, (ends[start - 1] if start else 0) + CHUNK_CELLS, "right")), start + 1)
+        p, q = _ragged(counts[start:stop])  # (triangle-colonne, cellule)
+        p += start
+        jj = jl[p] + q
+        Yc = zmap.ys[jj] + oy
+        inside = (A1[p] * Yc + B1[p] >= eps) & (A2[p] * Yc + B2[p] >= eps) & (A3[p] * Yc + B3[p] >= eps)
+        if inside.any():
+            p, Yc = p[inside], Yc[inside]
+            np.maximum.at(flat, col[p] * zmap.ny + jj[inside], Az[p] * Yc + Bz[p])
+        start = stop
 
 
 def model_heights(zmap, shapes, deflection=MODEL_DEFLECTION, lateral=0.0):
