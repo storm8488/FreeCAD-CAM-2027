@@ -492,6 +492,37 @@ def resolve_params(kind, tool, params):
     return params
 
 
+def _own_strategy_resources(strategy, kind):
+    """Ressources de vue d'une stratégie propre à CAM2027 : les siennes (``gui_resources()``, finition à crête
+    constante) sinon une page FreeCAD vide, comme elle (l'éditeur CAM2027 porte les réglages). Sans cela,
+    les finitions des plats et des angles échouaient à l'ajout (« gui_resources »)."""
+    if hasattr(strategy, "gui_resources"):
+        return strategy.gui_resources()
+    import Path.Op.Gui.Base as PathOpGui
+
+    page = getattr(strategy, "TaskPanelOpPage", None)
+    if page is None:
+        class TaskPanelOpPage(PathOpGui.TaskPanelPage):
+            def getForm(self):
+                from ..gui.qt import QtWidgets
+
+                return QtWidgets.QWidget()
+
+            def getFields(self, obj):
+                pass
+
+            def setFields(self, obj):
+                pass
+
+            def getSignalsForUpdate(self, obj):
+                return []
+
+        TaskPanelOpPage.__module__ = strategy.__name__  # retrouvée à la réouverture du document
+        strategy.TaskPanelOpPage = page = TaskPanelOpPage
+    label = STRATEGIES[kind]["label"]
+    return PathOpGui.CommandResources(kind, strategy.Create, page, "CAM_3DSurface", label, None, label)
+
+
 def strategy_module(kind):
     if kind not in STRATEGIES:
         raise ValueError("stratégie inconnue : %r (disponibles : %s)" % (kind, ", ".join(sorted(STRATEGIES))))
@@ -903,7 +934,7 @@ def create_operation(job, kind, name, tool_controller, base=None, params=None):
 
         module = STRATEGIES[kind]["module"]
         if module.startswith("cam2027."):  # stratégie propre à CAM2027
-            res = importlib.import_module(module).gui_resources()
+            res = _own_strategy_resources(importlib.import_module(module), kind)
         else:
             res = importlib.import_module(module.replace("Path.Op.", "Path.Op.Gui.")).Command.res
         op.ViewObject.Proxy = PathOpGui.ViewProvider(op.ViewObject, res)
