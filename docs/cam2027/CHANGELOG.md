@@ -49,6 +49,10 @@
   colonnes des segments horizontaux n'était utilisé qu'avec une fraise plate, alors que la queue et le
   porte-outil sont des disques plats quel que soit le profil. Z constant du plateau (boule) : pré-contrôle
   2,3-2,9 s → 0,17-0,20 s, contrôle 11,0-12,6 s → 8,1-9,5 s, mêmes événements.
+- **[B2]** **Pré-contrôle des rapides plus rapide** : un rapide dont la pointe reste au-dessus de la plus haute
+  matière de sa fenêtre (moins la tolérance) est écarté sans calcul (le dessous de la fraise n'est jamais sous la
+  pointe). Z constant du plateau : 2,9-3,1 s → 1,0 s, contrôle 11,8-12,0 s → 9,7-9,8 s (sous profileur) ; ébauche
+  3D du chauffage : 4,4-6,5 s → 2,3-2,6 s. Cartes identiques bit à bit, mêmes événements.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

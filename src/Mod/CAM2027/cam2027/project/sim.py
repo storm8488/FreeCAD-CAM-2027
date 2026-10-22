@@ -426,12 +426,27 @@ class ZMap(object):
     def rapid_hits_many(self, P0, P1, tool):
         """Pour chaque rapide, True s'il entrerait dans la matière sur l'état courant (sans la modifier)."""
         np = _np()
-        res = self._bottom(P0, P1, tool)
+        hits = np.zeros(len(P0), dtype=bool)
+        r = tool.radius
+        win = self._window(min(P0[:, 0].min(), P1[:, 0].min()) - r, max(P0[:, 0].max(), P1[:, 0].max()) + r,
+                           min(P0[:, 1].min(), P1[:, 1].min()) - r, max(P0[:, 1].max(), P1[:, 1].max()) + r,
+                           grid=False)
+        if win is None:
+            return hits
+        # le dessous de la fraise n'est jamais sous la pointe : un rapide dont la pointe reste au-dessus de la
+        # plus haute matière de la fenêtre (moins la tolérance) n'entre nulle part (dégagements, liaisons hautes)
+        top_max = float(self.top[win[0]:win[1], win[2]:win[3]].max())
+        cand = np.nonzero(np.minimum(P0[:, 2], P1[:, 2]) < top_max - RAPID_TOLERANCE)[0]
+        if not len(cand):
+            return hits
+        Q0, Q1 = P0[cand], P1[cand]
+        res = self._bottom(Q0, Q1, tool)
         if res is None:
-            return np.zeros(len(P0), dtype=bool)
+            return hits
         i0, i1, j0, j1, z, vertical = res
-        up = vertical & (P1[:, 2] > P0[:, 2])
-        return (z < self.top[i0:i1, j0:j1][None, :, :] - RAPID_TOLERANCE).any(axis=(1, 2)) & ~up
+        up = vertical & (Q1[:, 2] > Q0[:, 2])
+        hits[cand] = (z < self.top[i0:i1, j0:j1][None, :, :] - RAPID_TOLERANCE).any(axis=(1, 2)) & ~up
+        return hits
 
     def removed_volume(self):
         return float((self.initial - self.top).sum() * self.res * self.res)
