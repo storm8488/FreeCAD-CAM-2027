@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
+  lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
+  travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule
+  dans le solide du couvercle). Chaque corps est maintenant calculé contre tous les corps du job, et les corps
+  usinés entiers ne font qu'une zone (le couvercle n'est plus balayé deux fois) : finition 3D 145 378 → 94 333
+  commandes, Z constant 252 165 → 129 291, entaille 0 (`operations.patch_surface_models`).
+
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

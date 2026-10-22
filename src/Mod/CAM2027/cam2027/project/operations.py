@@ -531,6 +531,8 @@ def strategy_module(kind):
         patch_adaptive_slicing(mod)
     if kind == "surface3d":
         patch_surface_keepalive()
+    if kind in ("surface3d", "waterline"):
+        patch_surface_models()
     if kind == "pocket":
         patch_pocket(mod)
     return mod
@@ -551,6 +553,78 @@ def patch_surface_keepalive():
 
     simplify.cam2027_patched = True
     PathUtils.simplify3dLine = simplify
+
+
+def _all_models_stl(group, types, obj, ocl):
+    """Triangles de tous les corps du job dans un seul modèle OpenCamLib (même triangulation que FreeCAD,
+    ``SurfaceSupport._makeSTL``)."""
+    stl = ocl.STLSurf()
+    for model, model_type in zip(group, types):
+        if model_type == "M":
+            facets = model.Mesh.Facets.Points
+        else:
+            vertices, indices = model.Shape.tessellate(obj.LinearDeflection.Value)
+            facets = ((vertices[f[0]], vertices[f[1]], vertices[f[2]]) for f in indices)
+        for v1, v2, v3 in facets:
+            stl.addTriangle(ocl.Triangle(ocl.Point(v1[0], v1[1], v1[2]), ocl.Point(v2[0], v2[1], v2[2]),
+                                         ocl.Point(v3[0], v3[1], v3[2])))
+    return stl
+
+
+def _merge_whole_models(psf, faces, voids):
+    """Zones des corps usinés entiers réunies dans celle du premier (les autres : rien à faire). Avec un seul
+    modèle OpenCamLib pour tous les corps, chaque corps referait sinon la zone commune (couvercle du chauffage
+    usiné deux fois)."""
+    group = psf.JOB.Model.Group
+    with_faces = {base.Name for base, subs in (psf.obj.Base or []) if any(subs)}
+    whole = [m for m, model in enumerate(group)
+             if isinstance(faces[m], list) and faces[m] and voids[m] is False and model.Name not in with_faces]
+    if len(whole) < 2 or psf.profileEdges != "None":
+        return
+    shapes = [s for m in whole for s in faces[m]]
+    try:
+        merged = shapes[0].fuse(shapes[1:]).removeSplitter()
+    except Exception:
+        return
+    if merged.isNull() or not merged.Faces:
+        return
+    faces[whole[0]] = [merged]
+    for m in whole[1:]:
+        faces[m] = False
+
+
+def patch_surface_models():
+    """Finition 3D et Z constant sur une pièce à plusieurs corps : FreeCAD calcule corps par corps avec un modèle
+    OpenCamLib de ce seul corps. Sur le socle du chauffage Vz330, la boule descendait dans la cavité à travers
+    le couvercle posé dessus (entaille de 41 mm). Chaque corps est ici calculé contre tous les corps du job, et
+    les corps usinés entiers ne font qu'une zone."""
+    import Path.Op.SurfaceSupport as support
+
+    original = support._prepareModelSTLs
+    if getattr(original, "cam2027_patched", False):
+        return
+
+    def prepare(self, JOB, obj, m, ocl):
+        group = JOB.Model.Group
+        if len(group) < 2 or self.modelSTLs[m] is not True:
+            return original(self, JOB, obj, m, ocl)
+        cached = getattr(self, "_cam2027_all_models", None)
+        if cached is None or cached[0] is not self.modelSTLs:  # une fois par calcul
+            cached = self._cam2027_all_models = (self.modelSTLs, _all_models_stl(group, self.modelTypes, obj, ocl))
+        self.modelSTLs[m] = cached[1]
+
+    prepare.cam2027_patched = True
+    support._prepareModelSTLs = prepare
+
+    pre_original = support.ProcessSelectedFaces.preProcessModel
+
+    def pre_process(self, module):
+        result = pre_original(self, module)
+        if result:
+            _merge_whole_models(self, result[0], result[1])
+        return result
+
+    support.ProcessSelectedFaces.preProcessModel = pre_process
 
 
 #: écart de la triangulation d'une face dont FreeCAD ne sait pas projeter les fils (mm)
