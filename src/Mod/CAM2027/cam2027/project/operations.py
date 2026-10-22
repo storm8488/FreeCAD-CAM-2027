@@ -139,6 +139,21 @@ STRATEGIES = {
         "limits": "Selected edges or a flat face outline; depth derives from the tool angle (chamfer / V-bit); "
                   "no collision check with adjacent walls.",
     },
+    "flat3d": {
+        "module": "cam2027.project.flatfinish",
+        "label": "3D flat areas finishing (offset passes at each flat height)",
+        "params": ("StepOver", "StockToLeave", "DepthOffset", "ClearanceHeight", "SafeHeight"),
+        "limits": "Horizontal flat faces reachable from above (part top, pocket floors), each at its exact height, "
+                  "tool kept inside the flat area; run it after roughing (plunges straight down at the start of "
+                  "each area).",
+    },
+    "pencil": {
+        "module": "cam2027.project.pencil",
+        "label": "3D corner rest finishing (pencil, ball end mill)",
+        "params": ("ReferenceDiameter", "StepOver", "Threshold", "MaxSlope", "ClearanceHeight", "SafeHeight"),
+        "limits": "Passes along the inner corners left by a larger reference ball (fillets smaller than its "
+                  "radius), heights by OpenCamLib on the triangulated part; every pass starts from the safe height.",
+    },
 }
 
 #: valeurs par défaut de FreeCAD pour un filet sans type explicite
@@ -170,6 +185,8 @@ TOOLS_FOR = {
     "waterline": ("ballend", "bullnose", "endmill"), "drilling": ("drill", "endmill"), "threadmill": ("threadmill",),
     "vcarve": ("vbit", "engrave", "chamfer"), "engrave": ("vbit", "engrave", "chamfer", "ballend", "endmill"),
     "chamfer": ("chamfer", "vbit", "engrave"),
+    "flat3d": ("endmill", "bullnose", "facemill"),
+    "pencil": ("ballend",),
 }
 
 
@@ -260,6 +277,8 @@ def auto_geometry(kind, models):
         finder = pocket_floor_faces
     elif kind == "millface":
         finder = top_faces
+    elif kind == "flat3d":
+        from .flatfinish import flat_faces as finder
     else:
         return None
     out = []

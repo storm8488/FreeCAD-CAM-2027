@@ -109,6 +109,10 @@ PARAM_SPECS = {
     "Pitch": ("Pitch", "thread", "Thread pitch (metric)."),
     "TPI": ("Threads per inch", "thread", "Imperial pitch (0 when metric)."),
     "LeadInOut": ("Lead-in / lead-out arcs", "thread", "Enter and leave the thread on an arc."),
+    # reprise des angles (pencil)
+    "ReferenceDiameter": ("Reference tool diameter", "strategy", "Ball of the previous finishing: corners it cannot reach are taken again (0 = 3 x this tool)."),
+    "Threshold": ("Ignore corners leaving less than", "strategy", "Material left by the reference tool below which a corner is skipped."),
+    "MaxSlope": ("Maximum slope (deg)", "strategy", "Corners on a steeper surface are skipped (90 = all)."),
 }
 
 

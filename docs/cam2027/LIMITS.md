@@ -257,3 +257,35 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   profondeur finale 0,001 mm plus basse.
 - Pas de contrôle de collision avec le mandrin, les mors ou la contre-pointe (champs du profil non
   exploités).
+
+## Reprise de matière, zone, finitions des plats et des angles (nuit 2, flux S1)
+
+- **Reprise de matière** (`project/rest.py`, Fusion « Rest machining » depuis les opérations précédentes) :
+  l'opération est calculée en entier par FreeCAD sur sa géométrie, puis seules les coupes où la fraise
+  rencontre de la matière restante sont gardées (Fusion recalcule seulement les zones restantes : le temps de
+  calcul de l'opération n'est pas réduit, celui d'usinage l'est). Brut restant = carte de hauteur des
+  opérations actives placées avant (mêmes limites que le contrôle matière : grille 0,25 mm par défaut,
+  agrandie au-delà de 1,5 million de cellules, 3 axes, opérations indexées hors A0 et enroulées ignorées,
+  brut rond refusé). Décision par colonne : matière sous le disque de la fraise (rayon moins une demi-cellule)
+  plus haute que la pointe de plus de « Ignorer moins de » ; la fraise est vue comme plate (une boule garde un
+  peu plus de parcours que nécessaire). Entrées dans les morceaux gardés : plongée verticale en avance de
+  plongée depuis la hauteur de sécurité (pas d'hélice ni de rampe) : fraise à coupe au centre nécessaire ; sur
+  une adaptative, beaucoup de petits morceaux = beaucoup de remontées (480 sur le plateau de test).
+- **Finition des zones plates** (`flat3d`, `project/flatfinish.py`) : faces planes horizontales seulement (pas de
+  plat incliné) ; passes décalées (pas de type « Parallel ») ; zone réduite du rayon de la fraise : une zone plus
+  étroite que la fraise est sautée et comptée dans le rapport de l'opération (« zone(s) trop étroite(s) ») ; la
+  bande le long d'un bord ouvert (marche vers le bas) n'est pas finie (fraise contenue, comme Fusion). Entrée
+  dans chaque zone : plongée verticale à la hauteur du plat (à lancer après l'ébauche) ; passage d'une passe à
+  la suivante en restant en bas quand le milieu du trajet reste dans la zone, sinon remontée. Contours
+  discrétisés à 0,01 mm. Le panneau de tâches de FreeCAD (double-clic dans l'arbre) renvoie à l'éditeur CAM2027.
+- **Reprise des angles** (`pencil`, `project/pencil.py`) : fraise boule seulement ; l'outil de référence est vu
+  comme une boule (une finition précédente à la fraise plate ou torique n'est pas modélisée) ; zones calculées sur
+  une carte de hauteur de la pièce (0,1 mm, agrandie au-delà de 2 millions de cellules) : un angle plus fin que la
+  grille peut être manqué, jamais entaillé (hauteurs finales par OpenCamLib). Chaque passe part de la hauteur de
+  sécurité (pas de liaison au contact). Contre-dépouilles non vues (carte de hauteur). Le pas suit la pente ; sur
+  un congé vertical d'angle de poche, une fine bande peut rester contre la paroi (20 mm³ sur l'essai).
+- **Limiter à une zone** (`project/trim.py`) : zone dans le plan XY seulement (pas de limite en Z), un seul
+  contour (le plus grand de la sélection) ; un bord est trouvé à 0,2 mm près puis affiné par dichotomie ; les arcs
+  coupés deviennent des segments ; entrée de chaque morceau par plongée verticale (pas d'hélice ni de rampe) ; les
+  liaisons recalculées passent par la hauteur de dégagement.
+

@@ -852,3 +852,36 @@ def compare(zmap, heights, tolerance=0.02, gouge_heights=None):
     report.update(leftover_max=max(0.0, lmax), leftover_mean=float(np.nanmean(np.maximum(diff, 0.0))),
                   leftover_at=(float(zmap.xs[i]), float(zmap.ys[j]), float(heights[i, j])))
     return report
+
+
+# -- brut restant (reprise de matière, finitions) ------------------------------------------------------------
+
+
+def simulate_paths(zmap, items, start=None):
+    """Enlève de ``zmap`` la matière de parcours ``[(commandes Path, ToolProfile)]`` dans l'ordre, sans contrôle
+    (ni entaille ni collision) ; rapides compris. Retourne la dernière position connue."""
+    np = _np()
+    pos = start
+    for commands, profile in items:
+        segments, pos = path_segments(commands, pos)
+        if not segments:
+            continue
+        P0 = np.array([s[1] for s in segments], dtype=float)
+        P1 = np.array([s[2] for s in segments], dtype=float)
+        zmap.sweep_arrays(P0, P1, profile)
+    return pos
+
+
+def disc_max(grid, radius_cells):
+    """Maximum de ``grid`` sur un disque de ``radius_cells`` cellules autour de chaque cellule (-inf au-delà)."""
+    np = _np()
+    rc = int(math.floor(radius_cells))
+    nx, ny = grid.shape
+    out = grid.copy()
+    pad = np.full((nx + 2 * rc, ny + 2 * rc), -np.inf)
+    pad[rc:rc + nx, rc:rc + ny] = grid
+    for di in range(-rc, rc + 1):
+        for dj in range(-rc, rc + 1):
+            if (di or dj) and di * di + dj * dj <= radius_cells * radius_cells:
+                np.maximum(out, pad[rc + di:rc + di + nx, rc + dj:rc + dj + ny], out=out)
+    return out

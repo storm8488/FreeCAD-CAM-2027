@@ -2,6 +2,41 @@
 
 ## Non publié
 
+- **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
+  « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
+  (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
+  les arcs entièrement gardés restent des arcs, les rapides d'origine sont gardés entre deux morceaux continus ;
+  ailleurs remontée à la hauteur de dégagement, rapide, descente à la hauteur de sécurité, plongée en avance
+  verticale. `Path.Dressup.Boundary` de FreeCAD (booléens avec un solide, différent entre 1.0 et 1.1) n'est pas
+  utilisé. Contour de la plaque coupé par un rectangle : aucune coupe au-delà du bord (coupé pile au bord),
+  aucun rapide en XY sous la hauteur de sécurité, complément exact en « garder dehors », opération non recalculée.
+- **[S1]** **Reprise des angles** (stratégie `pencil`, Fusion « Pencil », fraise boule) : angles intérieurs où une
+  boule de référence (diamètre de la finition précédente, 3 fois l'outil par défaut) ne descend pas et où la
+  boule de reprise descend plus bas (`project/pencil.py` : carte de hauteur fine de la pièce, profils de boule par
+  `scipy.ndimage`, passes = courbes de niveau de la distance au bord de la zone par `contourpy`, hauteurs exactes
+  par OpenCamLib sur la pièce triangulée). Pas mesuré le long de la surface (réduit du cosinus de la pente) : une
+  boule ne touche un congé qu'en un point, et un pas constant en XY laissait 307 mm³ sur la partie raide des
+  congés. Poche à congés R2 finie à la boule Ø8 puis reprise boule Ø2 : matière dans les congés 626 -> 20 mm³
+  (-97 %), aucune entaille, 3,5 s ; plateau de test (angles vifs, boule Ø6) : 72 passes, aucune entaille.
+- **[S1]** **Finition des zones plates** (stratégie `flat3d`, Fusion « Flat », type Offset, plusieurs
+  profondeurs) : faces planes horizontales accessibles par le dessus (dessus de la pièce, fonds de poche dégagés)
+  trouvées seules, regroupées par hauteur, une série de passes décalées par hauteur à la hauteur exacte du plat,
+  fraise contenue dans la zone, surépaisseurs 0 par défaut (`project/flatfinish.py`, opération Python dérivée de
+  `Path.Op.Base`). Les décalages d'OpenCascade étant faux sur les fonds percés à bords B-spline (fond hexagonal
+  du disque WobbleRing : 54,9 mm² « réduit » depuis 26,5), contours discrétisés, chaque contour décalé seul et
+  résultat refusé s'il sort de la face. Disque WobbleRing, fraise Ø1 : dessus, rainures et logements finis à
+  0,00 mm sur la carte de hauteur (grille 0,1 mm, 70 208 / 7 104 / 9 559 colonnes), aucune entaille, calcul
+  2,8 s ; Ø2 : logements (anneau de 1,1 mm) signalés trop étroits. Dôme sans plat : rien à faire, refus clair.
+- **[S1]** **Reprise de matière depuis les opérations précédentes** (Fusion « Rest machining », source « From
+  previous operation(s) », « Ignore stock less than » 0,1 mm par défaut) sur ébauche 3D, adaptative, poche et
+  poche 2D : onglet « Reprise et zone » de l'éditeur d'opération. Le brut de départ est la carte de hauteur
+  simulée des opérations actives placées avant (`project/rest.py`, `sim.simulate_paths`) ; l'opération est
+  calculée normalement, puis un habillage CAM2027 ne garde que les coupes où la fraise rencontre plus de
+  « Ignorer moins de » de matière, liaisons recalculées (`project/trim.py`). Disque WobbleRing, ébauche 3D
+  Ø6 puis reprise Ø3 : 828 mm³ repris = 7,3 % des 11 327 mm³ de l'ébauche (reprise complète : 828 mm³ aussi),
+  1 314 mm de coupe gardés sur 17 431, aucune entaille, aucun rapide dans la matière, 0,5 s de calcul de la
+  reprise (rapport affiché dans l'onglet). Plaque à rainure étroite : 220 points de coupe gardés sur 3 380,
+  même volume enlevé que la reprise complète.
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par
