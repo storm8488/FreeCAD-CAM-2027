@@ -30,6 +30,7 @@ from . import sheet as sheetmod
 from . import indexing
 from . import wrap as wrapmod
 from . import rest as restmod
+from . import keepout  # zones interdites : complète le calcul de chaque opération (rapides relevés)
 #: mouvements de coupe balayés d'un coup par le contrôle matière (paquets vectorisés)
 PENDING_SEGMENTS = 4096
 #: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
@@ -594,12 +595,17 @@ class Project(object):
         return {"female_ops": female, "male_project": male, "male_ops": male_ops, "mirror_x": mirror_x,
                 "notes": notes, **gaps}
 
-    def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None):
+    def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None,
+                      true_shape=True, angle_step=15.0, max_sheets=1):
         """Imbrication des dessins 2D sur un panneau ``sheet_width × sheet_length`` (origine 0, 0), avant
         « Brut et montage > panneau ». ``copies`` : ``{objet: nombre}`` (copies créées). Les dessins placés
         sont déplacés ; ceux qui ne tiennent pas restent où ils sont et sont rapportés.
 
-        Retourne un dict : placés ``[(libellé, x, y, tourné)]``, non placés, taux d'utilisation."""
+        ``true_shape`` : silhouettes réelles (rotations par pas de ``angle_step`` si ``rotate``), sinon rectangles
+        englobants (rotation de 90°). ``max_sheets`` > 1 : les panneaux suivants sont posés à droite du premier,
+        à ``nesting.SHEET_GAP`` mm ; le job reprend le premier.
+
+        Retourne un dict : placés ``[(libellé, x, y, angle)]``, non placés, taux d'utilisation, panneaux."""
         from . import nesting
 
         if self.has_job:
@@ -613,45 +619,68 @@ class Project(object):
                 dup.Label = "%s (%d)" % (obj.Label, k)
                 objs.append(dup)
         self.doc.recompute()
-        items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
-        placed, unplaced = nesting.skyline_pack(items, sheet_width - 2 * margin, sheet_length - 2 * margin,
-                                                spacing, rotate)
-        report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length)}
+        report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length), "sheet_of": {}}
         used = 0.0
+        width, length = sheet_width - 2 * margin, sheet_length - 2 * margin
+        if true_shape:
+            items = [(o.Name, nesting.silhouette(o.Shape)) for o in objs]
+            placed, unplaced, res = nesting.shape_pack(items, width, length, spacing,
+                                                       angle_step if rotate else 0.0, max_sheets)
+            report["resolution"] = res
+        else:
+            items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
+            placed, unplaced = nesting.skyline_pack(items, width, length, spacing, rotate)
+        sheets = 1
         for o in objs:
-            if o.Name in placed:
+            if o.Name not in placed:
+                report["unplaced"].append(o.Label)
+                continue
+            if true_shape:
+                sheet, angle, dx, dy = placed[o.Name]
+                shift = sheet * (sheet_width + nesting.SHEET_GAP)
+                nesting.place_shape(o, angle, margin + dx + shift, margin + dy)
+                sheets = max(sheets, sheet + 1)
+                report["sheet_of"][o.Label] = sheet
+            else:
                 x, y, rot = placed[o.Name]
                 nesting.move_to(o, margin + x, margin + y, rot)
-                report["placed"].append((o.Label, margin + x, margin + y, rot))
-                used += nesting.outline_area(o)
-            else:
-                report["unplaced"].append(o.Label)
+                angle = 90.0 if rot else 0.0
+            bb = o.Shape.BoundBox
+            report["placed"].append((o.Label, bb.XMin, bb.YMin, angle))
+            used += nesting.outline_area(o)
         if "NestedSheet" not in self.info.PropertiesList:
             self.info.addProperty("App::PropertyString", "NestedSheet", "CAM2027", "Sheet chosen when nesting (JSON)")
         self.info.NestedSheet = json.dumps([0.0, 0.0, float(sheet_width), float(sheet_length)])
         self.doc.recompute()
-        report["utilization"] = used / (sheet_width * sheet_length)
+        report["sheets"] = sheets
+        report["utilization"] = used / (sheets * sheet_width * sheet_length)
         report["objects"] = [o for o in objs if o.Name in placed]
         return report
 
-    def material_check(self, resolution=None, tolerance=0.02):
+    def material_check(self, resolution=None, tolerance=0.02, start_zmap=None):
         """Simulation d'enlèvement de matière (Z-map, 3 axes) et comparaison avec la pièce.
 
         Retourne un dict : volume enlevé, entaille maximale (et position), reste maximal / moyen,
         rapides dans la matière, opérations simulées / non simulées (avec la raison), approximations.
-        La carte calculée reste dans ``self.last_zmap`` (affichage).
+        La carte calculée reste dans ``self.last_zmap`` (affichage). ``start_zmap`` : carte de départ (face B
+        d'un recto-verso) ; ``False`` = brut neuf même en recto-verso.
         """
         from . import sim
+        from . import twosided
+
+        if start_zmap is None and twosided.is_two_sided(self):
+            return twosided.material_check(self, resolution, tolerance)
 
         if getattr(self.job.Stock, "Radius", None) is not None:
             raise UserError("material check: round stock (4th axis) is not supported, only box stock")
         resolution = resolution or sim.DEFAULT_RESOLUTION
         self.compute()
-        zmap = sim.ZMap.from_bounds(self.stock_bounds(), resolution)
+        zmap = start_zmap or sim.ZMap.from_bounds(self.stock_bounds(), resolution)
         simulated, skipped, approximations = [], [], []
         from . import stock as stockmod
 
-        boxes = [(c.Label, c.Shape.BoundBox) for c in stockmod.clamps(self.doc) if getattr(c, "Shape", None)]
+        boxes = [(c.Label, c.Shape.BoundBox) for c in stockmod.clamps(self.doc) if getattr(c, "Shape", None)] \
+            + keepout.zone_boxes(self.doc)
         events = []  # (type, opération, n° de commande, position, valeur)
         no_holder = []
         pos = None
@@ -906,8 +935,10 @@ class Project(object):
         """Empreinte des parcours actifs (un contrôle de collisions ne vaut que pour ces parcours-là)."""
         import hashlib
 
+        from . import twosided
+
         h = hashlib.sha1()
-        for obj in self.operations():
+        for obj in twosided.all_operations(self):  # recto-verso : le contrôle enchaîné vaut pour les deux faces
             base = dressupmod.base_operation(obj)
             h.update(obj.Name.encode())
             h.update(b"1" if getattr(base, "Active", True) else b"0")
@@ -1211,7 +1242,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds()) + indexing.order_issues(self) \
-            + self.collision_issues()
+            + self.collision_issues() + keepout.issues(self)
         if any(level == "error" for level, _m in issues):
             raise ExportBlocked(issues, sections, analysis)
         written = exportmod.write_gcode(sections, path)
@@ -1237,7 +1268,7 @@ class Project(object):
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
         issues = exportmod.verify(analysis, self.machine, self.stock_bounds() if self.has_job else None) \
-            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else [])
+            + indexing.order_issues(self) + (self.collision_issues() if self.has_job else []) + keepout.issues(self)
         return text, analysis, issues
 
     # -- sauvegarde -----------------------------------------------------------

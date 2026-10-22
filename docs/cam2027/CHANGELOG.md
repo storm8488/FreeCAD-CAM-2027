@@ -85,6 +85,40 @@
   du parcours avec recouvrement (`OffsetIn/OffsetOut`) tant qu'un arc toucherait la pièce, sinon refus avec la
   position. La poche en zigzag n'en a pas (arcs dans les parois : entaille de 4,2 mm mesurée). Plaque de test,
   contour R3 : premier mouvement de coupe = arc de R3 tangent au contour à chaque passe, aucune entaille.
+- **[S3]** **Comparer et modifier plusieurs opérations** (Usiner > Comparer et modifier des opérations, bouton du
+  panneau Projet) : tableau dont les colonnes sont les opérations cochées et les lignes leurs paramètres communs
+  (libellés de l'éditeur), lignes différentes en gras, filtre « Différences seulement » ; une valeur saisie dans la
+  dernière colonne est écrite sur toutes (registre compris, comme depuis l'éditeur), puis les parcours sont
+  recalculés ; une étape d'annulation. Test et scénario : hauteur de dégagement passée à 33 mm sur un contour, une
+  adaptative et une poche d'un coup.
+
+- **[S3]** **Imbrication par forme réelle** (défaut de Préparer > Imbriquer) : silhouette de chaque dessin (contours
+  extérieurs, trous bouchés) décalée de la moitié de l'espacement (`Part.makeOffset2D`), rotations par pas de 15°
+  (ou 90°), grille prudente (toute cellule touchée par la silhouette est occupée) et positions libres trouvées par
+  corrélation FFT (numpy) ; la pièce va là où son dessus est le plus bas. Plusieurs panneaux (posés à droite du
+  premier, le job prend le premier). Les rectangles englobants restent au choix (« rapide »). Test : 20 pièces en L
+  sur 300 × 300 : 20 posées (utilisation 44,4 %) contre 16 en rectangles (35,6 %), soit +25 %, en 5 s, aucune
+  silhouette à moins de 5 mm d'une autre.
+
+- **[S3]** **Zones interdites** (« keep-out zones » d'Aspire 12) : Préparer > Zones interdites dessine des boîtes
+  (vue de dessus + Z du dessus) ; option « les rapides évitent aussi les brides ». À la fin du calcul de chaque
+  opération, un rapide qui passerait au-dessus d'une zone plus bas que son dessus + marge (2 mm par défaut, outil
+  compris vu de dessus) monte, traverse et redescend ; le premier déplacement d'une opération (départ inconnu)
+  passe au-dessus de toutes les zones. Les coupes ne sont jamais modifiées : une coupe qui entre dans une zone est
+  une erreur bloquante à l'export (opération, n° de commande, position). Les zones comptent comme des brides au
+  contrôle de collision. Test : bride entre deux poches, rapides au travers avant, aucun après, coupes identiques,
+  contrôle des brides « OK ».
+
+- **[S3]** **Usinage recto-verso** (comme le « Double Sided » d'Aspire) : Préparer > Usinage recto-verso crée la
+  face B, pièce retournée de 180° autour de X ou de Y par le centre du brut (même brut, même repère G54), dans un
+  second job du document ; boutons « Face A / Face B » dans le panneau Projet (ajout, recalcul, aperçu et export
+  portent sur la face affichée). Repérage « même coin » ou **goujons** : deux trous percés depuis la face A sur
+  l'axe de retournement, à travers le brut et dans le martyr (opération placée en tête de la face A, positions
+  par défaut dans la marge, refus hors de l'axe, hors du brut ou dans la pièce). Contrôle matière **enchaîné** : la
+  carte de hauteur de la face A retournée sert de brut à la face B. Export : un fichier et une fiche par face
+  (`-A.nc`, `-B.nc`), fiche complétée par le retournement, les goujons et l'ordre. Test : plaque à une poche
+  ronde de chaque côté, aucune entaille, dessus et dessous finals = pièce à 0,05 mm hors du pied des parois.
+
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

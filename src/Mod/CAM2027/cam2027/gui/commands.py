@@ -738,7 +738,7 @@ class Inlay(_Base):
 class Nest(_Base):
     atelier = "measure"
     text = "Nest parts on a sheet"
-    tooltip = "Place the 2D drawings on a sheet of a given size (bounding rectangles, 90° rotation, copies)"
+    tooltip = "Place the 2D drawings on sheets of a given size (true shape or bounding rectangles, rotations, copies)"
 
     @_undoable
     def Activated(self):
@@ -751,6 +751,8 @@ class Nest(_Base):
         rep = _sheet_dialog(proj, "NestDialog")
         if rep:
             lines = [tr("Placed: {n} part(s), sheet use {u} %.", n=len(rep["placed"]), u="%.0f" % (100 * rep["utilization"]))]
+            if rep.get("sheets", 1) > 1:
+                lines.append(tr("Sheets used: {n} (laid to the right of the first one).", n=rep["sheets"]))
             if rep["unplaced"]:
                 lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
             lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
@@ -791,6 +793,99 @@ def default_params(kind, tool, values):
         params["ThreadType"] = DEFAULT_THREAD_TYPE
         params["ThreadName"] = "M6 x 1" if "M6 x 1" in names else names[0]
     return params
+
+
+class TwoSided(_Base):
+    atelier = "stock"
+    text = "Two-sided machining"
+    tooltip = "Machine the part on both sides: side B is the part turned over (flip about X or Y), with dowel pins or the same corner"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from . import twosided as tsgui
+
+        dlg = tsgui.TwoSidedDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            dlg.apply()
+        except Exception as exc:
+            _warn(tsgui.describe_error(exc))
+            return
+        _after_change()
+        _info(tr("Side B created. Switch between side A and side B in the Project panel."))
+
+
+class KeepOut(_Base):
+    atelier = "stop"
+    text = "Keep-out zones"
+    tooltip = "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        if not proj.has_job:
+            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            return
+        from . import keepout as kogui
+
+        dlg = kogui.KeepOutDialog(proj, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        with busy(tr("Computing the toolpaths...")):
+            dlg.apply()
+            proj.compute()
+        _after_change()
+        from ..project import keepout
+
+        errors = keepout.issues(proj)
+        if errors:
+            _warn("\n".join(tr_msg(m) for _lvl, m in errors))
+
+
+class BulkEdit(_Base):
+    atelier = "settings"
+    text = "Compare and edit operations"
+    tooltip = "Table of the parameters shared by several operations: show the differences, change a value on all of them at once"
+
+    @_undoable
+    def Activated(self):
+        proj = _need_project()
+        if proj is None:
+            return
+        from ..project import bulkedit
+        from . import bulkedit as bulkgui
+
+        if len(bulkedit.editable_operations(proj) if proj.has_job else []) < 2:
+            _warn(tr("At least two operations are needed to compare them."))
+            return
+        selected = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
+        dlg = bulkgui.BulkEditDialog(proj, selected if len(selected) > 1 else None, FreeCADGui.getMainWindow())
+        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            changes = dlg.changes()
+            ops = dlg.operations()
+            with busy(tr("Computing the toolpaths...")):
+                ignored = dlg.apply()
+                proj.compute()
+        except ValueError as exc:
+            _warn(tr_msg(exc))
+            return
+        _after_change()
+        if changes:
+            lines = [tr("{n} parameter(s) written to {m} operation(s), toolpaths recomputed.", n=len(changes), m=len(ops))]
+            for label, names in ignored.items():
+                lines.append(tr("{op}: not changed: {names}", op=label, names=", ".join(names)))
+            _info("\n".join(lines))
 
 
 class Compute(_Base):
@@ -890,7 +985,9 @@ class Export(_Base):
 
         def do_export():
             try:
-                result = proj.export_gcode(out.text(), post.currentText(), args.text())
+                from ..project import twosided
+
+                result = twosided.exporter(proj)(out.text(), post.currentText(), args.text())  # recto-verso : un fichier par face
             except ExportBlocked as exc:
                 checks.setHtml(_format_checks(exc.analysis, exc.issues))
                 tabs.setCurrentWidget(checks)
@@ -1141,6 +1238,9 @@ def material_report_text(rep):
             what = kinds[e[0]] + (" %s (%s)" % (e[5], e[6]) if e[0] == "clamp" else "")
             lines.append(tr("COLLISION: {what} - {op}, command {n}, tip at X {x} Y {y} Z {z}",
                             what=what, op=e[1], n=e[2], x="%.2f" % x, y="%.2f" % y, z="%.2f" % z))
+    from . import twosided as tsgui
+
+    lines += tsgui.report_lines(rep)
     lines.append(tr("Not checked: vertical walls and undercuts (height map), A axis operations."))
     return "\n".join(lines)
 
@@ -1335,6 +1435,9 @@ COMMANDS = [
     ("CAM2027_Pattern", __import__("cam2027.gui.patterns", fromlist=["PatternCommand"]).PatternCommand),
     ("CAM2027_Holes", __import__("cam2027.gui.holes", fromlist=["HoleCommand"]).HoleCommand),
     ("CAM2027_Probe", __import__("cam2027.gui.probe", fromlist=["ProbeCommand"]).ProbeCommand),
+    ("CAM2027_TwoSided", TwoSided),
+    ("CAM2027_KeepOut", KeepOut),
+    ("CAM2027_BulkEdit", BulkEdit),
     ("CAM2027_Compute", Compute),
     ("CAM2027_Export", Export),
     ("CAM2027_Simulate", Simulate),
@@ -1354,9 +1457,9 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "Separator", "CAM2027_ToolLibrary",
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
-    ("Machining", ["CAM2027_AddOperation", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
+    ("Machining", ["CAM2027_AddOperation", "CAM2027_BulkEdit", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
                    "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"]),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
     ("Export", ["CAM2027_Export"]),

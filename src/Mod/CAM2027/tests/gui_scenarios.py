@@ -745,6 +745,15 @@ def _s1_scenarios(files, tmp):
     return gui_scenarios_s1.scenarios(types.SimpleNamespace(**globals()), files, tmp)
 
 
+def _s3():
+    """Scénarios du flux S3 (module à part), avec les outils de ce fichier."""
+    import types
+    from tests import gui_scenarios_s3
+
+    gui_scenarios_s3.G = types.SimpleNamespace(**globals())
+    return gui_scenarios_s3
+
+
 def main():
     os.makedirs(os.path.join(OUT, "dialogs"), exist_ok=True)
     driver.install()
@@ -772,6 +781,10 @@ def main():
             ("inlay", lambda: scenario_inlay("inlay", files)),
             ("import-twice", lambda: scenario_import_twice("import-twice", next(
                 (p for p in user if p.lower().endswith((".step", ".stp"))), files["step"]))),
+            ("two-sided", lambda: _s3().scenario_two_sided("two-sided", tmp)),
+            ("keep-out", lambda: _s3().scenario_keepout("keep-out", tmp)),
+            ("nest-shapes", lambda: _s3().scenario_nest_shapes("nest-shapes", tmp)),
+            ("bulk-edit", lambda: _s3().scenario_bulk_edit("bulk-edit", tmp)),
     ) + _s1_scenarios(files, tmp) + tuple(("user-%d" % i, (lambda p=p, i=i: scenario_solid("user-%d %s" % (i, os.path.basename(p)), p, tmp)))
               for i, p in enumerate(user)) \
             + tuple(("user-pocket-%d" % i, (lambda p=p, i=i: scenario_solid("user-pocket-%d %s" % (i, os.path.basename(p)),
@@ -779,6 +792,9 @@ def main():
                     for i, p in enumerate(user) if p.lower().endswith(".stl")) \
             + __import__("tests.gui_scenarios_s2", fromlist=["*"]).scenarios(globals(), files, tmp):
         if os.environ.get("CAM2027_SCENARIO_ONLY") and not name.startswith(os.environ["CAM2027_SCENARIO_ONLY"]):
+            continue
+        only = os.environ.get("CAM2027_SCENARIOS")  # liste « a;b » : seulement ces scénarios
+        if only and name not in only.split(";"):
             continue
         log("== %s" % name)
         try:

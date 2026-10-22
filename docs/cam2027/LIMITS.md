@@ -40,6 +40,23 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Montage : repère G54–G59 + brides **visuelles** (boîtes). Les brides ne sont **pas**
   prises en compte par une détection de collision (il n'y en a pas).
 - Un seul job par projet, un seul repère actif par job dans l'interface.
+- **Recto-verso** (S3) : la face B est un second job ; le lien « Job » du projet désigne la face affichée.
+  Retournement de 180° autour d'une droite parallèle à X ou à Y passant par le **centre du brut** (le brut doit
+  être une boîte) : le brut garde ses cotes, le repère G54 se règle au même coin du brut. La copie retournée de la
+  pièce est figée (`twosided.resync` après une modification de la pièce). Contrôle enchaîné : une colonne de la
+  carte de hauteur ne connaît que son dessus ; après retournement, la matière laissée par la face A est
+  `[zmin + zmax − hA, zmax]`, mais si la face B descend sous ce fond (débouche dans une poche de la face A),
+  ce vide n'est pas vu (rapides et volume comptés comme dans la matière) — signalé ici, pas détecté.
+  Les brides sont communes aux deux faces. Goujons : trous par plongées avec débourrage (opération « Custom »,
+  pas de G81 sous GRBL), outil de même diamètre que le goujon ; jeu non géré.
+
+- **Zones interdites** (S3) : boîtes rectangulaires vues de dessus seulement. La correction est faite à la fin
+  du calcul de chaque opération FreeCAD (`ObjectOp.execute` complété) : les habillages (attaches, rampes, entrées
+  et sorties) recalculés ensuite gardent leurs propres rapides tels quels (le contrôle de collision les voit). Le
+  rapide relevé passe au-dessus de la zone (Z du dessus + marge) avec l'outil seul en compte vu de dessus : un
+  porte-outil plus large que la fraise qui redescend contre le bord d'une zone n'est vu que par le contrôle de
+  collision. Le premier déplacement de chaque opération passe au-dessus de toutes les zones (sa position de départ
+  dépend de l'opération précédente). Les brides sont évitées seulement si l'option est cochée.
 
 ## Opérations
 
@@ -183,6 +200,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 
 ## Interface
 
+- **Comparer et modifier des opérations** (S3) : seulement les paramètres de stratégie présents sur toutes les
+  opérations cochées (contour + adaptative + poche : 5 lignes communes) ; outil, préréglage, avances, géométrie et
+  habillages restent dans l'éditeur de chaque opération. Une saisie illisible est refusée sans rien écrire. Les
+  opérations sans stratégie FreeCAD (positionnements A, gravure enroulée, angles vifs, trous de goujons) ne sont
+  pas proposées.
 - Thème sombre = pack « FreeCAD Dark » de FreeCAD, appliqué au profil du lanceur seulement
   (vérifié visuellement sur 1.1.4 ; 1.0.2 non vérifié). HiDPI : hérité de FreeCAD/Qt (non
   testé). Les barres d'outils FreeCAD standard (fichier, macro, structure) restent visibles.
@@ -226,6 +248,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   non contrôlé automatiquement. Le mâle est un projet séparé, à enregistrer.
 - **Imbrication** : par rectangles englobants seulement (une pièce en L ne reçoit rien dans son
   creux) ; un seul panneau ; pièces non placées rapportées. À faire avant « Brut et montage ».
+  Mise à jour S3 : **forme réelle** par défaut. Grille d'environ 250 000 cellules par panneau (0,5 à 2 mm) :
+  chaque bord de pièce peut perdre jusqu'à `res·√2/2` mm (0,4 mm sur 300 × 300) ; grand panneau
+  (1220 × 2440, grille de 2 mm) : calcul plus long (une FFT par rotation et par pièce, non mesuré sur
+  50 pièces). Placement glouton (dessus le plus bas), pas d'optimisation globale de l'ordre ; les trous des
+  pièces ne reçoivent pas d'autres pièces ; sens du fil non géré. Plusieurs panneaux : posés côte à côte
+  dans le document ; le job « panneau » est créé sur le premier : les dessins des panneaux suivants sont
+  alors hors du brut (à déplacer dans un autre projet avant « Brut et montage » ; pas de job par panneau).
 
 ## 4e axe
 
