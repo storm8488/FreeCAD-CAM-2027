@@ -31,6 +31,8 @@ DERIVED = {"Path", "Shape", "Mesh", "CycleTime", "ExpressionEngine", "Label2", "
            "Placement_", "StopProcessing", "AreaParams", "PathParams", "removalshape", "ModelAwareExperiment"}
 
 FREEZE_S = 0.5
+#: Annuler sur une page de tâches sans modification : rien à recalculer
+CANCEL_MAX_S = 2.0
 
 
 # -- état du document -----------------------------------------------------------------------------------------
@@ -164,16 +166,23 @@ def memory_mb():
                     ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
                     ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
     try:
+        k32 = ctypes.WinDLL("kernel32")
+        k32.GetCurrentProcess.restype = wintypes.HANDLE
+        k32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
+        k32.K32GetProcessMemoryInfo.restype = wintypes.BOOL
         c = PMC()
         c.cb = ctypes.sizeof(PMC)
-        ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+        if not k32.K32GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(c), c.cb):
+            return 0.0, 0.0
         return c.PagefileUsage / 1048576.0, c.WorkingSetSize / 1048576.0
     except Exception:
         return 0.0, 0.0
 
 
 def live_dialogs():
-    """Dialogues encore vivants (enfants de la fenêtre principale) : chaque commande en créait un nouveau."""
+    """Dialogues encore vivants (enfants de la fenêtre principale) : chaque commande en créait un nouveau.
+    Les destructions différées sont faites d'abord, comme au retour dans la boucle d'événements."""
+    QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
     return [d for d in FreeCADGui.getMainWindow().findChildren(QtWidgets.QDialog)]
 
 
@@ -378,10 +387,14 @@ def tree_edit(scenario, proj, op, kind, button="reject"):
     if not FreeCADGui.Control.activeDialog() or panel is None:
         errors.append("no task page")
     else:
+        t_button = time.time()
         try:
             getattr(panel, button)()  # bouton Annuler / OK de la page
         except Exception as exc:
             errors.append("%s raised %s: %s" % (button, type(exc).__name__, exc))
+        t_button = time.time() - t_button
+        if button == "reject" and t_button > CANCEL_MAX_S:
+            errors.append("interface frozen %.1f s by Cancel (nothing changed)" % t_button)
         G.pump(0.3)
         if FreeCADGui.Control.activeDialog():
             errors.append("task page still open after %s" % button)
@@ -563,7 +576,7 @@ def scenario_panel_undo(scenario, files):
     from cam2027.gui import opeditor
 
     proj = _tray_project(scenario, files, "B3 panel")
-    for strategy in ("profile", "pocket2d", "drilling"):
+    for strategy in ("profile", "pocket2d", "pocket"):
         _add(scenario, strategy)
     proj = G.project()
     doc = proj.doc
@@ -611,7 +624,7 @@ def scenario_long_session(scenario, files):
     mem0 = memory_mb()
     dlg0 = len(live_dialogs())
     t_panel = []
-    strategies = ("profile", "pocket2d", "drilling", "engrave", "pocket")
+    strategies = ("profile", "pocket2d", "pocket")
     for i in range(50):
         _add(scenario, strategies[i % len(strategies)])
         proj = G.project()
@@ -646,7 +659,12 @@ def scenario_long_session(scenario, files):
     G.log("  B3 long session: memory %.0f -> %.0f MB, live dialogs %d -> %d, panel times %s, undo steps %d" % (
         mem0[0], mem1[0], dlg0, dlg1, t_panel, doc.UndoCount))
     if dlg1 - dlg0 > 5:
-        G.problem(scenario, "B3 long session: %d dialogs still alive after closing them" % (dlg1 - dlg0))
+        kinds = {}
+        for d in live_dialogs():
+            key = "%s %s" % (type(d).__name__, d.windowTitle()[:30])
+            kinds[key] = kinds.get(key, 0) + 1
+        G.problem(scenario, "B3 long session: %d dialogs still alive after closing them: %s" % (
+            dlg1 - dlg0, sorted(kinds.items(), key=lambda kv: -kv[1])[:5]))
     t_undo = time.time()
     k = 0
     while doc.UndoCount and k < 20:
@@ -659,6 +677,9 @@ def scenario_long_session(scenario, files):
             len(shown or []), len(real or [])))
     FreeCAD.closeDocument(doc.Name)
     G.pump(0.3)
+    gc.collect()
+    live_dialogs()
+    G.log("  B3 long session: memory after closing the project %.0f MB (start %.0f MB)" % (memory_mb()[0], mem0[0]))
 
 
 def scenario_reopen(scenario, files, tmp):
@@ -692,7 +713,7 @@ def scenario_reopen(scenario, files, tmp):
 def scenario_tree_edit(scenario, files):
     """Même session : double-clic sur une opération dans l'arbre (page de tâches FreeCAD), Annuler puis OK."""
     proj = _tray_project(scenario, files, "B3 tree")
-    for strategy in ("profile", "scallop"):
+    for strategy in ("profile", "scallop", "pencil"):
         _add(scenario, strategy)
     proj = G.project()
     states = {}

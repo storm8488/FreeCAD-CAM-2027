@@ -540,6 +540,7 @@ class OperationEditor(QtWidgets.QDialog):
         cb, self.on_close = self.on_close, None
         if cb:
             cb(accepted)
+        self.deleteLater()  # non modal, enfant de la fenêtre principale : sinon gardé jusqu'à la fin de la session
 
 
 _open_editors = []

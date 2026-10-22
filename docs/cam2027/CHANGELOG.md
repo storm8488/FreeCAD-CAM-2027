@@ -13,6 +13,13 @@
   nouvelle session page introuvable (`TaskPanelOpPage` créée seulement à l'ajout d'une opération). Enregistrées au
   démarrage de l'atelier (`commands.register_task_pages`). Scénario `b3-reopen` (11 stratégies, enregistrement,
   réouverture, page de chaque opération, parcours identiques après recalcul).
+- **[B3]** Correctif : **Annuler** sur la page de tâches FreeCAD d'une opération (double-clic dans l'arbre) figeait
+  l'interface le temps de recalculer tout le parcours alors que rien n'avait changé (l'ouverture de la page marque
+  l'opération « à recalculer ») : 47,2 s pour une reprise des angles, 5,3 s pour une crête constante ; maintenant
+  immédiat (`commands.patch_task_panel_cancel`). OK recalcule toujours, comme dans FreeCAD.
+- **[B3]** Correctif : **fuite des dialogues** : chaque dialogue fermé restait en mémoire (enfant de la fenêtre
+  principale), 150 après 50 ajouts d'opérations ; détruits à la fermeture (`qt.dispose`, éditeur d'opération).
+  Scénario `b3-long-session` (50 opérations ajoutées, renommées, dupliquées, supprimées, puis 20 Ctrl+Z).
 - **[B3]** Correctif : le **panneau Projet** restait sur l'ancien projet après un changement d'onglet, l'ouverture
   d'un fichier ou la fermeture du document. Scénario `b3-doc-switch`.
 

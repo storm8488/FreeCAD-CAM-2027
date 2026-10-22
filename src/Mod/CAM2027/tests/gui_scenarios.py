@@ -105,6 +105,7 @@ class Driver(object):
             os.makedirs(os.path.join(OUT, "dialogs"), exist_ok=True)
             dlg.grab().save(os.path.join(OUT, "dialogs", "%02d_%s.png" % (len(self.grabbed), safe)))
         ok = True if handler is None else handler(dlg)
+        __import__("cam2027.gui.qt", fromlist=["dispose"]).dispose(dlg)  # comme qt.exec_dialog (B3)
         if ok:
             dlg.accept()
             return QtWidgets.QDialog.Accepted
