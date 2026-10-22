@@ -156,6 +156,59 @@ def is_index_op(obj):
     return obj.Name.startswith(INDEX_PREFIX)
 
 
+def stock_swept_radius(job, cy, cz):
+    """Plus grande distance du brut à l'axe A (arêtes échantillonnées) : rayon balayé pendant une rotation."""
+    import math
+
+    shape = job.Stock.Shape if job.Stock is not None else None
+    if shape is None or shape.isNull():
+        return 0.0
+    radius = 0.0
+    for edge in shape.Edges:
+        for p in edge.discretize(Number=24):
+            radius = max(radius, math.hypot(p.y - cy, p.z - cz))
+    return radius
+
+
+def rotation_height(project, base):
+    """Z sûr avant de tourner A : au-dessus du brut balayé (rayon maximal autour de l'axe + marge de dégagement du
+    job) et au moins le dégagement de l'opération qui suit. Le dégagement seul ne suffit pas : il vaut 5 mm
+    tant que FreeCAD ne l'a pas calculé (l'outil descendait alors dans le brut) et un barreau carré balaie sa
+    demi-diagonale, au-delà de « dessus du brut + marge »."""
+    cy, cz, _sign = check_machine(project.machine)
+    job = project.job
+    offset = 5.0
+    sheet = getattr(job, "SetupSheet", None)
+    if sheet is not None and hasattr(sheet, "ClearanceHeightOffset"):
+        offset = float(sheet.ClearanceHeightOffset.getValueAs("mm"))
+    clearance = float(base.ClearanceHeight.getValueAs("mm")) if hasattr(base, "ClearanceHeight") else 0.0
+    return max(clearance, cz + stock_swept_radius(job, cy, cz) + offset)
+
+
+def refresh(project):
+    """Hauteurs des positionnements A recalculées (brut ou dégagements changés depuis leur création) ; retourne
+    True si un positionnement a changé (le document doit être recalculé)."""
+    from .dressups import base_operation
+
+    if not project.has_job:
+        return False
+    ops = project.operations()
+    sign = None
+    changed = False
+    for k, obj in enumerate(ops):
+        if not is_index_op(obj):
+            continue
+        if sign is None:
+            sign = check_machine(project.machine)[2]
+        following = next((o for o in ops[k + 1:] if not is_index_op(o)), None)
+        base = base_operation(following) if following is not None else obj
+        gcode = ["G0 Z%.3f" % rotation_height(project, base), "G0 A%.4f" % (sign * getattr(obj, ANGLE_PROPERTY))]
+        if list(obj.Gcode) != gcode:
+            obj.Gcode = gcode
+            changed = True
+    return changed
+
+
 def sync(project):
     """Recrée les positionnements A devant chaque groupe d'opérations au même angle.
 
@@ -201,7 +254,7 @@ def sync(project):
                 from .dressups import base_operation
 
                 base = base_operation(obj)
-                clearance = float(base.ClearanceHeight.getValueAs("mm")) if hasattr(base, "ClearanceHeight") else 50.0
+                clearance = rotation_height(project, base)
                 idx = Custom.Create("%s_A%s" % (INDEX_PREFIX, angle_tag(angle)), parentJob=job)
                 idx.Label = "Index A%g" % angle
                 idx.addProperty("App::PropertyFloat", ANGLE_PROPERTY, "CAM2027", "Index angle A (deg)")

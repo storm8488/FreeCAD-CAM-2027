@@ -1230,6 +1230,8 @@ class Project(object):
         opsmod.patch_pocket()
         restmod.sync(self)  # reprise de matière : opérations précédentes à jour (ordre, activation)
         self.doc.recompute()
+        if indexing.refresh(self):  # positionnements A : dégagements maintenant calculés, brut à jour
+            self.doc.recompute()
         results = []
         for op in self.operations():
             summary = opsmod.toolpath_summary(op)
@@ -1245,6 +1247,8 @@ class Project(object):
         if not self.operations():
             raise ValueError("aucune opération à exporter")
         self.doc.recompute()
+        if indexing.refresh(self):
+            self.doc.recompute()
         sections = exportmod.postprocess(job, post_processor, post_args)
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)
@@ -1271,6 +1275,8 @@ class Project(object):
 
     def preview_gcode(self, post_processor=None, post_args=None):
         self.doc.recompute()  # jamais d'aperçu construit sur des parcours périmés
+        if indexing.refresh(self):
+            self.doc.recompute()
         sections = exportmod.postprocess(self.job, post_processor, post_args)
         text = "\n".join(g for _n, g in sections)
         analysis = exportmod.analyze_gcode(text)

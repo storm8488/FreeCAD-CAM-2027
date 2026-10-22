@@ -429,6 +429,57 @@ class TestComments(_PlateCase):
         self.assertTrue(any("not G-code words" in e for e in errors), errors)
 
 
+class TestIndexClearance(unittest.TestCase):
+    def test_rotation_clears_the_square_stock(self):
+        """3+1 sur un barreau carré 30 x 30 centré sur l'axe A : avant ``G0 A90``, l'outil ne remontait qu'à la
+        hauteur de dégagement de l'opération (dessus du brut + marge, Z 20) alors que les arêtes du brut
+        balaient un rayon de 21,2 mm : collision outil / brut pendant la rotation (B5-15)."""
+        import math
+        import Part
+        from cam2027.project.machine import RotaryAxis
+
+        tmp = tempfile.mkdtemp(prefix="cam2027-b5-")
+        step = os.path.join(tmp, "bar.step")
+        bar = Part.makeBox(80, 30, 30, FreeCAD.Vector(0, -15, -15))
+        bar = bar.cut(Part.makeBox(30, 10, 5, FreeCAD.Vector(25, -5, 10)))
+        bar = bar.cut(Part.makeBox(30, 5, 10, FreeCAD.Vector(25, 10, -5)))
+        bar.exportStep(step)
+        m = machine()
+        m.rotary = RotaryAxis(present=True, about="X", center_offset_mm=(0.0, 0.0), positive_direction="right_hand",
+                              min_deg=-360.0, max_deg=360.0)
+        proj = Project.create("Square bar", starter_library(), m)
+        self.addCleanup(proj.close)
+        part = proj.import_model(step, label="Bar").objects[0]
+        proj.create_job([part], stock={"kind": "box", "length": 84.0, "width": 30.0, "height": 30.0,
+                                       "origin": [-2.0, -15.0, -15.0]})
+        clone = proj.job.Model.Group[0]
+
+        def floor(axis, value):
+            for i, f in enumerate(clone.Shape.Faces, 1):
+                bb = f.BoundBox
+                lo, hi = {"y": (bb.YMin, bb.YMax), "z": (bb.ZMin, bb.ZMax)}[axis]
+                if f.Surface.__class__.__name__ == "Plane" and abs(lo - value) < 1e-6 and abs(hi - value) < 1e-6 \
+                        and abs(f.Area - 300.0) < 1e-3:
+                    return "Face%d" % i
+        lib = proj.library
+        t = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+        asm, pre = lib.assemblies_for_tool(t.id)[0].id, t.presets[0].id
+        proj.add_operation("pocket2d", "Top", asm, pre, base=[(clone, [floor("z", 10.0)])],
+                           params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=0)
+        proj.add_operation("pocket2d", "Side", asm, pre, base=[(clone, [floor("y", 10.0)])],
+                           params={"StepDown": 2.0, "StartDepth": 15.0, "FinalDepth": 10.0}, index_deg=90)
+        proj.compute()
+        text, _analysis, _issues = proj.preview_gcode()
+        lines = code_lines(text)
+        swept = 15.0 * math.sqrt(2.0)
+        rotations = [i for i, l in enumerate(lines) if l.startswith("G0") and " A" in l]
+        self.assertEqual(len(rotations), 2, text)
+        for i in rotations:
+            z = float(lines[i - 1].split("Z")[1].split()[0])
+            self.assertTrue(lines[i - 1].startswith("G0") and "X" not in lines[i - 1], lines[i - 1])
+            self.assertGreater(z, swept, "%s then %s: stock corners sweep R%.2f" % (lines[i - 1], lines[i], swept))
+
+
 def dressupmod_base(obj):
     from cam2027.project import dressups
 
