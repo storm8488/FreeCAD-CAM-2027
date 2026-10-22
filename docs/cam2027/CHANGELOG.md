@@ -77,6 +77,11 @@
   maintenant ligne par ligne du noyau (résultat identique, comparé dans un test), et la hauteur de pointe de la
   boule de reprise n'est plus calculée deux fois. Disque : 27,5 s → 17,4 s, pointe 6,5 Go → 0,23 Go ; chauffage :
   74,7 s → 65,6 s, 6,5 Go → 0,41 Go ; mêmes commandes (676 et 19 344).
+- **[B4]** Optimisation : **imbrication par forme réelle sur un grand panneau** (1220 × 2440, 35 pièces en L et
+  rectangles, espacement 5, pas de 15°) : 40,9 s → **6,1 s**, placements identiques. La meilleure position (dessus
+  le plus bas, puis le plus à gauche) est lue directement (première colonne libre, première ligne libre) au lieu de
+  trier toutes les positions libres à chaque rotation (40,9 → 6,1 s) ; transformées de Fourier sur tous les cœurs
+  (`scipy.fft`, 10 % de plus mesurés seuls : 40,9 → 36,5 s).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

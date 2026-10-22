@@ -191,6 +191,24 @@ def _fast_len(n):
         n += 1
 
 
+_WORKERS = {}
+
+
+def _fft_module():
+    """``scipy.fft`` sur tous les cœurs (grand panneau : une transformée inverse par rotation et par pièce), sinon
+    ``numpy.fft``."""
+    try:
+        import scipy.fft as fft
+
+        _WORKERS["workers"] = -1
+        return fft
+    except ImportError:
+        import numpy as np
+
+        _WORKERS.clear()
+        return np.fft
+
+
 class _Sheet(object):
     def __init__(self, nx, ny, fft_shape):
         import numpy as np
@@ -207,9 +225,10 @@ class _Sheet(object):
         mx, my = mask.shape
         if mx > nx or my > ny:
             return None
+        fft = _fft_module()
         if self._fft is None:  # une transformée du panneau par pièce posée, pour toutes les rotations
-            self._fft = np.fft.rfft2(self.occ, s=self.fft_shape)
-        corr = np.fft.irfft2(self._fft * mask_fft, s=self.fft_shape)
+            self._fft = fft.rfft2(self.occ, s=self.fft_shape, **_WORKERS)
+        corr = fft.irfft2(self._fft * mask_fft, s=self.fft_shape, **_WORKERS)
         # convolution avec le masque retourné : le recouvrement en (i, j) se lit en (i + mx - 1, j + my - 1)
         return corr[mx - 1:nx, my - 1:ny] < 0.5
 
@@ -265,16 +284,20 @@ def shape_pack(items, width, height, spacing=0.0, angle_step=15.0, max_sheets=1,
                     continue
                 mf = mask_ffts.get((g, angle))
                 if mf is None:
-                    mf = mask_ffts[(g, angle)] = np.fft.rfft2(mask[::-1, ::-1].astype(float), s=fft_shape)
+                    mf = mask_ffts[(g, angle)] = _fft_module().rfft2(mask[::-1, ::-1].astype(float), s=fft_shape, **_WORKERS)
                 free = target.free_positions(mask, mf)
-                if free is None or not free.any():
+                if free is None:
                     continue
-                ii, jj = np.nonzero(free)
-                top = jj + mask.shape[1]
-                k = np.lexsort((ii, top))[0]  # dessus le plus bas, puis le plus à gauche
-                cand = (int(top[k]), int(ii[k]))
+                cols = free.any(axis=0)
+                if not cols.any():
+                    continue
+                # dessus le plus bas (première colonne j libre, le dessus vaut j + hauteur du masque), puis le plus à
+                # gauche (première ligne i libre de cette colonne) : le minimum de (j, i), sans trier les positions
+                j = int(np.argmax(cols))
+                i = int(np.argmax(free[:, j]))
+                cand = (j + mask.shape[1], i)
                 if best is None or cand < best[0]:
-                    best = (cand, s_index, target, angle, int(ii[k]), int(jj[k]), mask, x0, y0)
+                    best = (cand, s_index, target, angle, i, j, mask, x0, y0)
             if best is not None:
                 break  # premier panneau où la pièce tient
         if best is None:
