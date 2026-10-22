@@ -11,6 +11,11 @@
   d'une découpe (à la hauteur de dégagement) traversaient une zone plus haute (cas d'essai : rapide à Z 16 dans une
   zone de 30 mm). Les deux habillages relèvent maintenant leurs rapides comme les opérations (rayon de l'outil de
   l'opération de base). La reprise de matière (`rest.py`, même moteur de découpe) n'est pas encore corrigée.
+- **[B4]** **Palpage d'un coin intérieur** (poche, butée de montage) : Usiner > Palper l'origine, « coin intérieur »,
+  palpeur descendu dans la poche à 10 mm des deux parois ; X puis Y palpés vers les parois (rayon de la bille
+  compté), Z non touché, retour au point de départ. Test : programme exécuté par un GRBL simulé contre les parois
+  d'une poche, origine exacte aux 4 coins en G10 L20 et en G92 (le coin extérieur, vérifié de la même façon, est
+  exact aussi).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

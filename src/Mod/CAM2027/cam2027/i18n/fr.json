@@ -1442,5 +1442,6 @@
   "projection on the part: only engraving, contour, V-carving, 2D pocket, slot and chamfer can be projected": "projection sur la pièce : seuls la gravure, le contour, le V-carving, la poche 2D, la rainure et le chanfrein peuvent être projetés",
   "projection on the part: not available on an indexed operation": "projection sur la pièce : impossible sur une opération indexée",
   "{op} is already projected on the part": "{op} est déjà projetée sur la pièce",
-  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce"
+  "{op} is not projected on the part": "{op} n'est pas projetée sur la pièce",
+  "inner corner (probe lowered into the pocket, 10 mm from both walls)": "coin intérieur (palpeur descendu dans la poche, à 10 mm des deux parois)"
 }

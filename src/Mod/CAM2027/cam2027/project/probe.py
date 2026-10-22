@@ -19,8 +19,9 @@ import re
 
 from ..i18n import Msg, UserError
 
-MODES = ("z", "corner", "hole")
-#: coin -> (sens X vers l'extérieur, sens Y vers l'extérieur) ; « front » = Y min, « left » = X min
+MODES = ("z", "corner", "hole", "inner_corner")
+#: coin -> (sens X vers l'extérieur, sens Y vers l'extérieur) ; « front » = Y min, « left » = X min. Coin
+#: intérieur (poche, butée d'un montage) : « front-left » = coin X min / Y min de la poche, palpé de l'intérieur
 CORNERS = {"front-left": (-1, -1), "front-right": (1, -1), "back-left": (-1, 1), "back-right": (1, 1)}
 WCS = ("G54", "G55", "G56", "G57", "G58", "G59")
 DEFAULTS = {"feed_mm_min": 100.0, "travel_mm": 25.0, "plate_thickness_mm": 0.0, "tool_number": 99}
@@ -71,7 +72,7 @@ def probe_gcode(machine, mode, corner="front-left", hole_diameter=None, inset=10
             return "G92 %s%s" % (axis, _f(value))
         return "G10 L20 P%d %s%s" % (index, axis, _f(value))
 
-    out = ["(CAM2027 probe origin: %s%s)" % (mode, " " + corner if mode == "corner" else ""),
+    out = ["(CAM2027 probe origin: %s%s)" % (mode, " " + corner if mode in ("corner", "inner_corner") else ""),
            "M5", "G21", "G90", wcs]
     if mode == "z":
         out += ["G91", "G38.2 Z-%s F%s" % (_f(travel), _f(feed)), setaxis("Z", plate), "G0 Z%s" % _f(retract),
@@ -89,6 +90,19 @@ def probe_gcode(machine, mode, corner="front-left", hole_diameter=None, inset=10
     if corner not in CORNERS:
         raise ProbeError("Unknown corner: {c}", c=corner)
     sx, sy = CORNERS[corner]
+    if mode == "inner_corner":
+        # palpeur déjà descendu dans la poche à ``inset`` des deux parois : X puis Y vers les parois, Z non touché ;
+        # retour au départ (le centre du palpeur ne peut pas aller au coin : il toucherait les deux parois)
+        reach = inset + clearance
+        out += ["G91",
+                "G38.2 X%s F%s" % (_f(sx * reach), _f(feed)), setaxis("X", -sx * r),
+                "G0 X%s" % _f(-sx * clearance),
+                "G90", "G0 X%s" % _f(-sx * inset),
+                "G91",
+                "G38.2 Y%s F%s" % (_f(sy * reach), _f(feed)), setaxis("Y", -sy * r),
+                "G0 Y%s" % _f(-sy * clearance),
+                "G90", "G0 X%s Y%s" % (_f(-sx * inset), _f(-sy * inset))]
+        return out
     down = retract + depth
     out += ["G91",
             "G38.2 Z-%s F%s" % (_f(travel), _f(feed)), setaxis("Z", plate), "G0 Z%s" % _f(retract),
@@ -259,4 +273,4 @@ def add_probe(proj, mode, label=None, **kw):
     return op
 
 
-MODE_LABELS = {"z": "Z surface", "corner": "corner", "hole": "hole centre"}
+MODE_LABELS = {"z": "Z surface", "corner": "corner", "hole": "hole centre", "inner_corner": "inner corner (probe lowered into the pocket, 10 mm from both walls)"}
