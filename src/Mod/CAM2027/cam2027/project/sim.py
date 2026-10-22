@@ -204,31 +204,33 @@ class ZMap(object):
         xA, yA, xB, yB = P0[:, 0], P0[:, 1], P1[:, 0], P1[:, 1]
         cmin = np.clip(np.floor((np.minimum(xA, xB) - rr - self.x0) / res).astype(int), i0, i1 - 1)
         cmax = np.clip(np.ceil((np.maximum(xA, xB) + rr - self.x0) / res).astype(int), i0, i1 - 1)
-        K = int((cmax - cmin).max()) + 1
-        cols = cmin[:, None] + np.arange(K)[None, :]  # (n, K)
-        valid = cols <= cmax[:, None]
-        xc = self.xs[np.clip(cols, 0, self.nx - 1)]
+        # paires (segment, colonne) à plat : un long segment ne fait plus calculer sa largeur à tous les autres
+        seg, rank = _ragged(cmax - cmin + 1)
+        cols = cmin[seg] + rank
+        valid = True
+        xc = self.xs[cols]
+        xA, yA, xB, yB = xA[seg], yA[seg], xB[seg], yB[seg]
         inf = np.inf
         # disques aux extrémités
-        hA = rr * rr - (xc - xA[:, None]) ** 2
-        hB = rr * rr - (xc - xB[:, None]) ** 2
+        hA = rr * rr - (xc - xA) ** 2
+        hB = rr * rr - (xc - xB) ** 2
         sA = np.sqrt(np.maximum(hA, 0.0))
         sB = np.sqrt(np.maximum(hB, 0.0))
-        loA = np.where(hA >= 0, yA[:, None] - sA, inf)
-        hiA = np.where(hA >= 0, yA[:, None] + sA, -inf)
-        loB = np.where(hB >= 0, yB[:, None] - sB, inf)
-        hiB = np.where(hB >= 0, yB[:, None] + sB, -inf)
+        loA = np.where(hA >= 0, yA - sA, inf)
+        hiA = np.where(hA >= 0, yA + sA, -inf)
+        loB = np.where(hB >= 0, yB - sB, inf)
+        hiB = np.where(hB >= 0, yB + sB, -inf)
         # bande entre les perpendiculaires : 0 <= t <= 1 et |perp| <= r, deux contraintes linéaires en y
-        dx, dy = (xB - xA)[:, None], (yB - yA)[:, None]
+        dx, dy = xB - xA, yB - yA
         L2 = dx * dx + dy * dy
         L = np.sqrt(L2)
-        u = xc - xA[:, None]
+        u = xc - xA
         eps = 1e-12
         with np.errstate(divide="ignore", invalid="ignore"):
-            t_a = yA[:, None] + (0.0 - u * dx) / dy
-            t_b = yA[:, None] + (L2 - u * dx) / dy
-            p_a = yA[:, None] + (u * dy - rr * L) / dx
-            p_b = yA[:, None] + (u * dy + rr * L) / dx
+            t_a = yA + (0.0 - u * dx) / dy
+            t_b = yA + (L2 - u * dx) / dy
+            p_a = yA + (u * dy - rr * L) / dx
+            p_b = yA + (u * dy + rr * L) / dx
         dy_ok = np.abs(dy) > eps
         dx_ok = np.abs(dx) > eps
         t_lo = np.where(dy_ok, np.minimum(t_a, t_b), np.where((u * dx >= 0) & (u * dx <= L2), -inf, inf))

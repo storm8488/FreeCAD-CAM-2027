@@ -28,6 +28,10 @@
   colonne aussi plus bas sur la rampe (sous-estimation jusqu'à rayon × pente, ≈ 0,7 mm pour un porte-outil Ø28
   sur une rampe à 3°) : collisions manquées. Hauteur prise au plus bas de la plage couverte (dessous d'un
   cylindre balayé, exact). Queue Ø6 à côté d'une rampe à 26,6° : dépassement 0,224 mm vu (avant : -0,375).
+- **[B2]** **Contrôle matière plus rapide sur les ébauches à la fraise plate** : le remplissage par colonnes d'un
+  niveau calculait des tableaux (segments × largeur du plus long segment du niveau) ; un seul long segment faisait
+  calculer sa largeur aux 20 000 autres. Paires (segment, colonne) à plat, mêmes formules : carte identique bit à
+  bit. Ébauche 3D du chauffage (344 573 commandes) : remplissage 8,5-8,7 s → 0,6-0,8 s, contrôle 16,6 s → 7,7-9,5 s.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
