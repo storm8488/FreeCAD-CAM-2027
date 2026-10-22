@@ -86,6 +86,11 @@
   `s5-decor`, jamais lancé sur 1.0 cette nuit). L'import SVG de 1.0 donne des arêtes B-spline et le décalage vers
   l'extérieur du plat de pointe du V-bit échoue (« Wire is not closed ») ; l'échec était pris pour « plus rien à
   l'intérieur ». Le décalage est repris sur la copie polygonale de la face (0,01 mm) ; rien ne change quand il réussit.
+- **[B4]** Correctif : **fiche de préparation PDF sur FreeCAD 1.0.2** — « Échec de l'opération : setPageSize called with
+  wrong argument types » (PySide2), et une fois cet appel contourné, une page **blanche** : sous Qt 5 de FreeCAD 1.0,
+  `QTextDocument` ne dessine rien dans `QPdfWriter` (vérifié : texte direct par `QPainter` 6,4 Ko, document 1,2 Ko
+  vide). La commande refuse maintenant clairement sur 1.0 (la fiche Markdown est écrite à côté du G-code à l'export) ;
+  1.1.4 inchangé (PDF de 23 Ko). Scénario `s5-setup-pdf` adapté (refus attendu sur 1.0).
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

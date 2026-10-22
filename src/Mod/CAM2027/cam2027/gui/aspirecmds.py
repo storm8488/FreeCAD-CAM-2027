@@ -158,6 +158,11 @@ class SetupSheetPdf(base._Base):
         if not proj.has_job or not proj.operations():
             base._warn(tr("No operation to export: add an operation first."))
             return
+        try:
+            import PySide6  # noqa: F401
+        except ImportError:  # FreeCAD 1.0 (Qt 5) : QTextDocument ne dessine rien dans QPdfWriter (page blanche)
+            base._warn(tr("The PDF setup sheet needs FreeCAD 1.1: on FreeCAD 1.0, the setup sheet is written next to the G-code when exporting."))
+            return
         path, _f = QtWidgets.QFileDialog.getSaveFileName(FreeCADGui.getMainWindow(), tr("Setup sheet (PDF)"),
                                                          proj.doc.Label + "-setup.pdf", "PDF (*.pdf)")
         if not path:

@@ -230,7 +230,16 @@ def scenario_setup_pdf(gs, scenario, files, tmp):
     gs.run_command(scenario, "CAM2027_Compute")
     out = os.path.join(tmp, "setup sheet.pdf")
     gs.driver.save_files.append(out)
-    gs.run_command(scenario, "CAM2027_SetupSheetPdf")
+    msgs = gs.run_command(scenario, "CAM2027_SetupSheetPdf")
+    try:
+        import PySide6  # noqa: F401
+    except ImportError:  # FreeCAD 1.0 : refus clair (page blanche sous Qt 5), pas de fichier
+        if os.path.isfile(out) or not any("1.1" in text for _k, text in msgs):
+            gs.problem(scenario, "FreeCAD 1.0: clear refusal expected, got %s" % [t[:100] for _k, t in msgs])
+        gs.log("  setup sheet PDF on FreeCAD 1.0: %s" % [t[:100] for _k, t in msgs])
+        FreeCAD.closeDocument(proj.doc.Name)
+        gs.pump(0.3)
+        return
     if not os.path.isfile(out):
         gs.problem(scenario, "setup sheet PDF not written")
         return
