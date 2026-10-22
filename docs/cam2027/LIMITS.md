@@ -266,4 +266,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   (identifiant SVG). L'outil est cherché par nom, sinon par type et diamètre, dans la bibliothèque du
   projet ; les habillages (attaches, rampes) ne sont pas enregistrés. Calques DXF : seulement quand l'import
   de l'interface les crée (groupes / calques Draft) ; en console, le lecteur DXF ne les garde pas.
+- **Dessin vectoriel** : pas d'édition de nœuds ni de dessin à main levée (rectangles, cercles, polylignes :
+  importer un SVG / DXF) ; le texte est figé à la création (changer le texte = le redessiner). Contours de
+  police approchés par des polygones à 0,01 mm (sortie en G1). Le texte sur courbe suit le côté gauche du
+  vecteur (inverser le vecteur pour passer de l'autre côté) ; une courbe à plusieurs arêtes est approchée par
+  une B-spline. Les booléens et le décalage travaillent sur les contours **fermés** seulement. Polices
+  proposées : celle de FreeCAD (osifont) et les polices Windows courantes présentes.
 

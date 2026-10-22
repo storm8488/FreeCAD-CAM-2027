@@ -93,9 +93,13 @@ class ApplyTemplate(base._Base):
         (base._warn if rep["missing"] or failed else base._info)("\n".join(lines))
 
 
+from . import vectors  # noqa: E402
+
 COMMANDS = [
     ("CAM2027_SaveTemplate", SaveTemplate),
     ("CAM2027_ApplyTemplate", ApplyTemplate),
-]
+] + vectors.COMMANDS
+#: menu et barre d'outils Dessin
+DRAWING_MENU = vectors.TOOLBAR
 #: entrées du menu Usiner
 MACHINING_MENU = ["Separator", "CAM2027_SaveTemplate", "CAM2027_ApplyTemplate"]

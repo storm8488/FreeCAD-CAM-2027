@@ -97,7 +97,7 @@ def expand_drawing_base(doc, kind, base):
             face = source if is_face_obj else doc.getObject(source.Name + FACE_SUFFIX)
             if face is None:
                 raise ValueError("%s n'est pas un contour fermé : pas de face pour cette stratégie" % source.Label)
-            out.append((face, ["Face1"]))
+            out.append((face, ["Face%d" % (i + 1) for i in range(len(face.Shape.Faces))]))  # texte : une face par lettre
         elif is_face_obj:
             vector = doc.getObject(source.Name[: -len(FACE_SUFFIX)])
             out.append((vector or source, ["Edge%d" % (i + 1) for i in range(len((vector or source).Shape.Edges))]))

@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **[S5]** **Dessin vectoriel dans l'atelier** (menu et barre d'outils Dessin, dialogues CAM2027, comme les
+  outils de dessin d'Aspire) : texte (police TrueType, hauteur, espacement) en ligne droite, sur un arc ou le
+  long d'un vecteur ; décalage d'un vecteur fermé (angles ronds ou vifs, formes qui se recouvrent soudées) ;
+  union, soustraction, intersection de deux vecteurs ; miroir ; copies circulaires. Géométrie Part de FreeCAD
+  (`makeWireString`, moteur de `Draft.ShapeString` ; `makeOffset2D`, moteur de `Draft.make_offset` ;
+  booléens Part sur des prismes de 1 mm, ceux des faces planes découpant sans réunir). Les contours de police
+  sont des polygones à 0,01 mm (les B-splines des glyphes faisaient échouer le décalage OCC). Un vecteur
+  dessiné après le panneau reçoit sa face et ses clones dans le modèle du job. La poche 2D, le V-carving et
+  les autres stratégies à faces prennent maintenant **toutes** les faces d'un vecteur (un texte importé ou
+  dessiné n'était usiné que sur sa première lettre).
 - **[S5]** **Modèles de parcours** (Aspire « Toolpath Templates ») : Usiner > Enregistrer un modèle de parcours
   écrit les opérations du projet 2D (stratégie, outil par nom, préréglage par nom, réglages, calque et nom du
   vecteur ciblé) dans un fichier `.cam2027template` ; Usiner > Appliquer un modèle de parcours les recrée sur
