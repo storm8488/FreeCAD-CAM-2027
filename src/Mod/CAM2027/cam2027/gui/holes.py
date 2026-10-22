@@ -17,7 +17,7 @@ class HoleDialog(QtWidgets.QDialog):
         self.setWindowTitle(tr("Hole recognition and drilling"))
         self.setMinimumWidth(640)
         self.clone = proj.job.Model.Group[0]
-        self.holes = holesmod.find_holes(self.clone)
+        self.holes = holesmod.find_job_holes(proj)  # tous les corps du job, pas seulement le premier
         self.groups = holesmod.groups(self.holes)
         lay = QtWidgets.QVBoxLayout(self)
         hint = QtWidgets.QLabel(tr("Vertical holes found on the part, grouped by size. One operation is made per step and per hole size: spot drilling, drilling (peck drilling deeper than 3 diameters, bore milling without a drill of the size), chamfer, thread milling."))

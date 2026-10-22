@@ -22,6 +22,11 @@
   l'autre (A ne revient pas en arrière). Refusée avec un message si la course de l'axe A du profil machine ne
   contient pas tous les tours. Test : carte radiale = pièce à ± 0,05 mm, aucune entaille, A croissant, vitesse
   réelle = avance à 2 %, export sans erreur.
+- **[B4]** Correctif : **perçage intelligent limité au premier corps du job**. Le dialogue ne cherchait les trous
+  que dans `Model.Group[0]` : sur une pièce en plusieurs corps (le chauffage Vz330 de l'utilisateur en a deux),
+  les trous des autres corps étaient ignorés sans message. Les trous de tous les corps sont trouvés
+  (`holes.find_job_holes`) et chaque opération prend les faces de chaque trou sur son propre corps ; le départ au-dessus
+  du brut de l'alésage hélicoïdal vérifie la colonne du trou dans tous les corps.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
