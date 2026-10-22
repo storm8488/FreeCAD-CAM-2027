@@ -224,6 +224,33 @@ class TestStackedBodies(unittest.TestCase):
         # rapides du perçage traversent le brut au-dessus de la plaque, sans rapport avec ce correctif)
 
 
+class TestHoleRecognition(unittest.TestCase):
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_tube_is_not_a_hole(self):
+        """Entretoise (tube Ø10 percé Ø4,15) sur une plaque : seul l'alésage Ø4,15 est un trou. Avant : le centre du
+        tube est vide (l'alésage), le cylindre extérieur Ø10 était pris pour un trou et l'alésage hélicoïdal Ø10
+        usinait le tube (2,3 mm d'entaille sur les entretoises du chauffage Vz330 de l'utilisateur)."""
+        from cam2027.project import holes
+
+        lib = starter_library()
+        proj = Project.create("B4 tube", lib, machine())
+        o = proj.doc.addObject("Part::Feature", "Plate")
+        tube = Part.makeCylinder(5.0, 10.0, V(30, 20, 10)).cut(Part.makeCylinder(2.075, 15.0, V(30, 20, 5)))
+        o.Shape = Part.makeBox(60, 40, 10).fuse(tube).removeSplitter()
+        proj.doc.recompute()
+        proj.create_job([o], stock={"kind": "box_margins", "xy": 2.0, "z_top": 0.0, "z_bottom": 0.0})
+        found = holes.find_job_holes(proj)
+        self.assertEqual([round(h.diameter, 2) for h in found], [4.15])
+        steps, _notes = holes.plan(lib, found)
+        holes.apply_plan(proj, proj.job.Model.Group[0], steps)
+        proj.compute()
+        rep = proj.material_check(resolution=0.25)
+        self.assertLess(rep["gouge_max"], 0.05, rep)
+
+
 def ball_penetration(commands, boxes, radius, step=0.01):
     """Pénétration maximale (mm, distance normale) d'une boule de rayon ``radius`` (pointe = point du parcours) dans
     une union de boîtes ``(xmin, ymin, zmin, xmax, ymax, zmax)`` le long des mouvements de coupe (calcul exact)."""

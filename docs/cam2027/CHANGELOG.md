@@ -62,6 +62,10 @@
   143 s, sous 6 Go ; plateau 220 × 220 mm à 0,02 mm de crête 4,3 millions, **8,6 Go à 86 s** (arrêté) — refusé
   maintenant après 38 s. Avec la grande grille et l'ordre des passes ci-dessus, le chauffage, qui ne donnait aucun
   résultat cette nuit (plus de 25 min), est calculé.
+- **[B4]** Correctif : **le cylindre extérieur d'un tube (entretoise) reconnu comme un trou** par le perçage
+  intelligent. Le test « centre vide » tombait dans l'alésage du tube : l'alésage hélicoïdal Ø10 usinait
+  l'entretoise (entaille de 2,3 mm sur les quatre entretoises du chauffage Vz330 de l'utilisateur). La matière est
+  maintenant cherchée aussi juste à l'intérieur du rayon (8 points à 0,95 R) : seul l'alésage du tube reste un trou.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),

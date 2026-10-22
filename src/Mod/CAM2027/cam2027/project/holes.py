@@ -93,9 +93,11 @@ def find_holes(obj, tol=1e-4):
         if e["sweep"] < 2 * math.pi - 1e-3:
             continue  # congé, arrondi d'angle : pas un trou
         top, bottom = e["zmax"], e["zmin"]
-        mid = FreeCAD.Vector(cx, cy, 0.5 * (top + bottom))
-        if shape.isInside(mid, tol, True):
-            continue  # tenon (matière au centre)
+        zm = 0.5 * (top + bottom)
+        inner = [FreeCAD.Vector(cx, cy, zm)] + [FreeCAD.Vector(cx + 0.95 * r * math.cos(a), cy + 0.95 * r * math.sin(a), zm)
+                                                for a in (k * math.pi / 4.0 for k in range(8))]
+        if any(shape.isInside(p, tol, True) for p in inner):
+            continue  # tenon, ou extérieur d'un tube (centre vide mais matière juste à l'intérieur du rayon)
         # chanfrein d'entrée : cône coaxial posé sur le haut du cylindre, plus large en haut
         chamfer_d = chamfer_angle = None
         for i, f in cones:
