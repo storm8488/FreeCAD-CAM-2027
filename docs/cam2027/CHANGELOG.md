@@ -21,9 +21,10 @@
   3 D, pas = D ; débouchant : pointe entière sous le fond + 0,5 mm ; borgne : pointe au fond) ou, sans foret,
   alésage hélicoïdal à la plus grosse fraise qui passe, chanfrein par plongée d'un outil en V du même angle
   jusqu'au diamètre du chanfrein, filetage à la fraise à fileter si un filet est choisi pour la taille. Les
-  trous sans outil sont signalés, comme les trous qui commencent sous le dessus du brut (le perçage, comme
-  dans Fusion, ne tient pas compte du brut : il faut usiner la matière au-dessus avant). Un lamage posé sur un
-  trou plus petit a un fond (pas « débouchant », vu sur le chauffage). Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
+  trous sans outil sont signalés. Un alésage hélicoïdal sous le dessus du brut commence au-dessus du brut
+  quand la colonne du trou ne contient que du brut (l'hélice de FreeCAD descend sinon en rapide dans le brut
+  restant : 10 rapides dans la matière sur le disque WobbleRing, 36 sur le chauffage, 0 maintenant). Un lamage
+  posé sur un trou plus petit a un fond (pas « débouchant », vu sur le chauffage). Le contrôle matière simule maintenant les cycles de perçage (G73/G81/G82/G83,
   G98/G99) : ils n'enlevaient rien avant. Plaque de test à 3 diamètres (3 débouchant, 5 borgne, 8 débouchant
   chanfreiné) : 7 opérations, trous au bon diamètre et à la bonne profondeur dans la carte de hauteur, chanfrein
   à 45° à 0,05 mm, aucune entaille.

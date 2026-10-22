@@ -187,18 +187,15 @@ def _drill_tip(tool):
 # -- séquence ----------------------------------------------------------------------------------------------
 
 
-def plan(lib, holes, threads=None, spot=True, stock_top=None):
+def plan(lib, holes, threads=None, spot=True):
     """Séquence proposée : liste d'étapes ``{"step", "group", "holes", "tool", "preset", "kind", "params"}`` et
-    notes (trous laissés de côté, trous sous le dessus du brut). ``threads`` : diamètre arrondi à 0,01 ->
-    désignation (« M8 »)."""
+    notes (trous laissés de côté). ``threads`` : diamètre arrondi à 0,01 -> désignation (« M8 »)."""
     from . import operations as opsmod
 
     threads = {round(float(k), 2): v for k, v in (threads or {}).items()}
-    steps, notes, low = [], [], []
+    steps, notes = [], []
     for model, members in groups(holes):
         d = model.diameter
-        if stock_top is not None and model.top < stock_top - 0.05:
-            low.append("Ø%.2f (Z %.2f)" % (d, model.top))
         drill = pick_drill(lib, d)
         mill = None if drill else pick_bore_mill(lib, d)
         if drill is None and mill is None:
@@ -249,10 +246,6 @@ def plan(lib, holes, threads=None, spot=True, stock_top=None):
                 full = name if name in opsmod.thread_names(opsmod.DEFAULT_THREAD_TYPE) else _thread_name(name)
                 steps.append({"step": "thread", "kind": "threadmill", "tool": tm[0], "holes": members, "model": model,
                               "params": {"ThreadName": full}})
-    if low:
-        # perçage pas « stock-aware » (comme Fusion) : la matière au-dessus des trous doit être enlevée avant
-        notes.append(Msg("Holes below the stock top: {holes}; machine the material above them first (the drilling moves would hit it)",
-                         holes=", ".join(low)))
     order = {"spot": 0, "drill": 1, "chamfer": 2, "thread": 3}
     steps.sort(key=lambda s: (order[s["step"]], s["tool"].name, s["model"].diameter))
     return steps, notes
@@ -268,6 +261,16 @@ def _thread_name(short):
     return short
 
 
+def column_free(shape, hole, z_top):
+    """Aucune matière de la pièce dans le cylindre du trou entre son haut et ``z_top`` ?"""
+    import Part
+
+    if z_top <= hole.top + 1e-6:
+        return True
+    cyl = Part.makeCylinder(0.5 * hole.diameter, z_top - hole.top, FreeCAD.Vector(hole.x, hole.y, hole.top))
+    return shape.common(cyl).Volume < 1e-3
+
+
 def step_label(step):
     return "%s Ø%.2f" % (STEP_LABELS["bore" if step.get("bore") else step["step"]], step["model"].diameter)
 
@@ -276,16 +279,25 @@ def apply_plan(proj, clone, steps):
     """Crée une opération par étape ; retourne la liste des opérations (dans l'ordre d'usinage)."""
     from ..i18n import tr
 
-    ops = []
+    stock_top = proj.stock_bounds()["zmax"]
+    ops, used = [], set()
     for st in steps:
         tool = st["tool"]
+        params = dict(st["params"])
+        if st["kind"] == "helix" and stock_top > st["model"].top + 0.05 and all(
+                column_free(clone.Shape, h, stock_top) for h in st["holes"]):
+            # l'hélice de FreeCAD descend en rapide jusqu'au départ : départ au-dessus du brut (la colonne du trou
+            # ne contient que du brut, coupé par l'hélice) plutôt qu'un rapide dans le brut restant
+            params["StartDepth"] = stock_top
         asm = _assemblies(proj.library, tool)
         preset = _preset(tool, "drilling" if st["kind"] == "drilling" else "general")
         faces = [f for h in st["holes"] for f in h.faces
                  if clone.Shape.Faces[int(f[4:]) - 1].Surface.__class__.__name__ == "Cylinder"]
         name = tr(STEP_LABELS["bore" if st.get("bore") else st["step"]]) + " Ø%.2f" % st["model"].diameter
-        op, _rec = proj.add_operation(st["kind"], name, asm.id, preset.id, base=[(clone, faces)],
-                                      params=dict(st["params"]))
+        if name in used:  # même diamètre, autre profondeur : FreeCAD renommerait en « Ø4.001 »
+            name += " Z%.2f..%.2f" % (st["model"].bottom, st["model"].top)
+        used.add(name)
+        op, _rec = proj.add_operation(st["kind"], name, asm.id, preset.id, base=[(clone, faces)], params=params)
         ops.append(op)
     return ops
 

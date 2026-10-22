@@ -487,7 +487,7 @@ class TestHoles(unittest.TestCase):
 
     def test_counterbore_and_stock_note(self):
         """Lamage Ø9 sur un trou Ø4,5 débouchant : le lamage a un fond (pas débouchant), le trou débouche (cas du
-        chauffage Vz330) ; un trou qui commence sous le dessus du brut est signalé."""
+        chauffage Vz330) ; alésages sous le dessus du brut commencés au-dessus du brut (aucun rapide dans le brut)."""
         import Part
         from cam2027.project import holes
 
@@ -507,16 +507,15 @@ class TestHoles(unittest.TestCase):
         self.assertAlmostEqual(found[9.0].bottom, 8.0, places=6)
         self.assertTrue(found[4.5].through)
         self.assertAlmostEqual(found[4.5].top, 8.0, places=6)
-        _steps, notes = holes.plan(lib, list(found.values()), stock_top=proj.stock_bounds()["zmax"])
-        below = [n for n in notes if "below the stock top" in n]
-        self.assertEqual(len(below), 1, notes)  # dessus du brut à 11 : les deux tailles, un seul message
-        self.assertIn("Ø4.50 (Z 8.00)", below[0])
-        self.assertIn("Ø9.00 (Z 10.00)", below[0])
-        _steps, notes = holes.plan(lib, list(found.values()), stock_top=10.0)
-        below = [n for n in notes if "below the stock top" in n]
-        self.assertEqual(len(below), 1, notes)  # dessus du brut au ras de la pièce : seul le trou sous le lamage
-        self.assertIn("Ø4.50", below[0])
-        self.assertNotIn("Ø9.00", below[0])
+        # alésage hélicoïdal (pas de foret de 4,5 ni de 9) : départ au-dessus du brut, aucun rapide dans le brut
+        # au-dessus des trous (1 mm), aucune entaille, lamage au fond à Z 8
+        steps, _notes = holes.plan(lib, list(found.values()), spot=False)
+        self.assertEqual([s["kind"] for s in steps], ["helix", "helix"])
+        ops = holes.apply_plan(proj, job.Model.Group[0], steps)
+        self.assertTrue(all(abs(float(o.StartDepth.Value) - 11.0) < 1e-6 for o in ops))
+        rep = proj.material_check()
+        self.assertEqual((rep["gouge_max"], rep["rapid_hits"]), (0.0, 0), rep)
+        self.assertAlmostEqual(zmap_at(proj.last_zmap, 20.0 + 3.6, 20.0), 8.0, delta=0.05)
 
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
