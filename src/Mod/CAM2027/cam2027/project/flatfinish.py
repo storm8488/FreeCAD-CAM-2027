@@ -35,9 +35,9 @@ def flat_faces(obj):
     return names
 
 
-def flat_regions(base):
+def flat_regions(base, owners=None):
     """``[(z, [faces])]`` du plus haut au plus bas depuis ``[(objet, sous-éléments)]`` (sans sous-élément : toutes
-    les zones plates accessibles de l'objet)."""
+    les zones plates accessibles de l'objet). ``owners`` (dict) reçoit ``id(face) -> objet``."""
     import Part
 
     groups = {}
@@ -53,7 +53,51 @@ def flat_regions(base):
             z = face.BoundBox.ZMin
             key = next((k for k in groups if abs(k - z) <= Z_TOL), z)
             groups.setdefault(key, []).append(face)
+            if owners is not None:
+                owners[id(face)] = obj
     return [(z, groups[z]) for z in sorted(groups, reverse=True)]
+
+
+def footprint_above(shape, z, bbox=None):
+    """Faces planes à la hauteur ``z`` : ce que ``shape`` couvre, vu de dessus, au-dessus de ``z`` (sections juste
+    au-dessus de ``z`` et de chaque hauteur de sommet du corps : exact pour les corps prismatiques, au niveau des
+    sommets pour les autres). ``bbox`` : zone utile (XY), le reste est ignoré."""
+    import Part
+
+    bb = shape.BoundBox
+    if bb.ZMax <= z + 1e-3 or (bbox is not None and (bb.XMin > bbox.XMax or bb.XMax < bbox.XMin
+                                                      or bb.YMin > bbox.YMax or bb.YMax < bbox.YMin)):
+        return []
+    levels = sorted({round(v.Point.z, 4) for v in shape.Vertexes if z + 1e-3 < v.Point.z < bb.ZMax - 1e-6}
+                    | {z}, reverse=False)
+    out = []
+    for h in levels:
+        for zz in (h + 0.01, h - 0.01):
+            if not (z + 1e-3 < zz < bb.ZMax):
+                continue
+            wires = [w for w in shape.slice(FreeCAD.Vector(0, 0, 1), zz) if w.isClosed()]
+            if not wires:
+                continue
+            try:
+                face = Part.makeFace(wires, "Part::FaceMakerBullseye")
+            except Exception:
+                face = Part.makeCompound([Part.Face(w) for w in wires])
+            face.translate(FreeCAD.Vector(0, 0, z - zz))
+            out.extend(face.Faces)
+    return out
+
+
+def unblocked(region, z, obstacles):
+    """``region`` (faces planes à ``z``) privée de l'empreinte des ``obstacles`` (autres corps) au-dessus de ``z`` ;
+    ``None`` si rien ne reste. Un corps posé sur le dessus d'un autre (chauffage Vz330 de l'utilisateur) couvre une
+    partie de ce plat : la finition y passait au travers du corps du dessus."""
+    bb = region.BoundBox
+    for shape in obstacles:
+        for face in footprint_above(shape, z, bb):
+            region = region.cut(face)
+            if not region.Faces:
+                return None
+    return region
 
 
 def _polygon_wire(wire, z, ccw=True):
@@ -213,19 +257,31 @@ def _inside(region, points):
     return True
 
 
-def flat_moves(regions, radius, stepover, leave=0.0, axial=0.0):
+def flat_moves(regions, radius, stepover, leave=0.0, axial=0.0, owners=None, bodies=()):
     """Mouvements ``(genre, x, y, z)`` (``plunge`` / ``cut`` / ``link``, ``link`` = remontée + rapide) pour des zones
-    ``[(z, [faces])]`` ; retourne aussi le nombre de zones trop étroites pour la fraise."""
+    ``[(z, [faces])]`` ; retourne aussi le nombre de zones trop étroites pour la fraise. ``owners`` (``id(face) ->
+    objet``, de ``flat_regions``) et ``bodies`` (objets du modèle) : les plats d'un corps sont privés de l'empreinte
+    des autres corps posés au-dessus."""
     moves = []
     too_narrow = 0
     step = max(0.01, stepover)
     for z, faces in regions:
         zc = z + axial
-        region = _merged(faces)
-        if region is None:
-            too_narrow += len(faces)
-            continue
-        for part in region.Faces:
+        groups = {}
+        for f in faces:
+            groups.setdefault(id((owners or {}).get(id(f))), []).append(f)
+        parts = []
+        for group in groups.values():
+            region = _merged(group)
+            owner = (owners or {}).get(id(group[0]))
+            others = [b.Shape for b in bodies if b is not owner and getattr(b, "Shape", None) is not None]
+            if region is not None and others:
+                region = unblocked(region, z, others)
+            if region is None:
+                too_narrow += len(group)
+                continue
+            parts.extend(region.Faces)
+        for part in parts:
             # zone permise pour le centre de la fraise : la face réduite du rayon (+ surépaisseur)
             loops = offset_loops(part, radius + leave, step, zc)
             if not loops:
@@ -300,14 +356,15 @@ class ObjectFlat(PathOp.ObjectOp):
         import Path
 
         base = list(obj.Base or []) or [(m, []) for m in self.model]
-        regions = flat_regions(base)
+        owners = {}
+        regions = flat_regions(base, owners)
         if not regions:
             obj.Report = "no flat horizontal area reachable from above"
             FreeCAD.Console.PrintWarning("CAM2027 %s: no flat horizontal area reachable from above\n" % obj.Label)
             return
         step = 2.0 * self.radius * max(1, min(100, int(obj.StepOver))) / 100.0
         moves, narrow = flat_moves(regions, self.radius, step, float(obj.StockToLeave.Value),
-                                   float(obj.DepthOffset.Value))
+                                   float(obj.DepthOffset.Value), owners, list(self.model))
         cmds = moves_to_commands(moves, obj.ClearanceHeight.Value, obj.SafeHeight.Value, self.horizFeed, self.vertFeed)
         if cmds:
             self.commandlist.append(Path.Command("G0", {"Z": obj.ClearanceHeight.Value}))

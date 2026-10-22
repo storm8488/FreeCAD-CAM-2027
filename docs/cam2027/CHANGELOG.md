@@ -45,6 +45,11 @@
   que la distance le long de la surface (chaque point des passes est recalculé par OpenCamLib à l'intervalle
   demandé) : au-delà de 4 millions de points, elle grossit jusqu'à pas / 4 au lieu de refuser (correctif préparé
   par S4 cette nuit, non vérifié alors).
+- **[B4]** Correctif : **finition des plats à travers un corps posé dessus** (pièce en plusieurs corps). Un plat n'était
+  jugé accessible qu'au regard de son propre corps : le dessus d'un corps sous un autre était fini en entier,
+  à travers l'autre corps (entaille de **5 mm** sur le chauffage Vz330 de l'utilisateur, 10 mm sur le cas d'essai).
+  Les plats de chaque corps sont maintenant privés de l'empreinte, vue de dessus, des autres corps au-dessus d'eux
+  (sections aux hauteurs des sommets), puis réduits du rayon de la fraise comme avant.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
