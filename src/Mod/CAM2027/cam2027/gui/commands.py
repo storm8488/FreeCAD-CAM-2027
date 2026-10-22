@@ -1292,7 +1292,7 @@ class Machine(_Base):
         from ..project.machine import FIELD_LABELS
 
         for key in ("name", "vendor", "model", "controller", "post_processor", "post_processor_args", "travel_x_mm",
-                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "spindle_min_rpm",
+                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2", "spindle_min_rpm",
                     "spindle_max_rpm", "spindle_power_w", "collet", "notes"):
             label = FIELD_LABELS[key]
             w = QtWidgets.QLineEdit("" if getattr(m, key) is None else str(getattr(m, key)))
@@ -1336,7 +1336,7 @@ class Machine(_Base):
         if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
         d = m.to_dict()
-        numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min",
+        numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2",
                    "spindle_min_rpm", "spindle_max_rpm", "spindle_power_w")
         labels = dict(FIELD_LABELS, cy="A axis centre Y (mm)", cz="A axis centre Z (mm)", min="A axis min (deg)",
                       max="A axis max (deg)", feed="A axis max feed (deg/min)")
@@ -1448,6 +1448,8 @@ COMMANDS = [
     ("CAM2027_ResetLayout", ResetLayout),
     ("CAM2027_About", About),
 ]
+from . import aspirecmds  # noqa: E402  (S5 : modèles de parcours, dessin, images, décors)
+COMMANDS += aspirecmds.COMMANDS
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
 TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
            "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator", "CAM2027_Export",
@@ -1460,10 +1462,11 @@ STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
                  "CAM2027_Machine"]),
     ("Machining", ["CAM2027_AddOperation", "CAM2027_BulkEdit", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
-                   "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"]),
+                   "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
     ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
-    ("Export", ["CAM2027_Export"]),
+    ("Export", ["CAM2027_Export"] + aspirecmds.EXPORT_MENU),
 )
+STAGE_MENUS = STAGE_MENUS[:1] + (("Drawing", aspirecmds.DRAWING_MENU),) + STAGE_MENUS[1:]  # S5 : dessin vectoriel
 
 _registered = False
 

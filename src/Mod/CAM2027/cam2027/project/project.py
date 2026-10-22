@@ -174,6 +174,10 @@ class Project(object):
         key = os.path.normcase(os.path.abspath(path))
         done = json.loads(getattr(self.info, "ImportedFiles", "") or "[]")
         res = importers.import_file(self.doc, path, label)
+        if res.kind == "vector":
+            from . import templates
+
+            templates.tag_layers(path, res.objects)  # calques : correspondance des modèles de parcours
         if key in done:
             res.warnings.insert(0, Msg("{file} was already imported: the project now contains it twice",
                                        file=os.path.basename(path)))

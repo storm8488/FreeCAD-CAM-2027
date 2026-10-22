@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication."""
+"""Dialogues du flux 2D « à la Aspire » : fond plat d'un V-carving, incrustation en V, imbrication,
+vectorisation d'image et Photo V-Carve, moulure, cannelures, texture et prisme."""
 
 from ..i18n import tr, tr_msg
 from .labels import preset_label
@@ -207,3 +208,261 @@ class NestDialog(QtWidgets.QDialog):
         return self.proj.nest_drawings(chosen, self.width.value(), self.length.value(), self.spacing.value(),
                                        self.margin.value(), self.rotate.isChecked(), copies,
                                        true_shape=bool(step), angle_step=step or 90.0, max_sheets=self.sheets.value())
+
+
+class TraceBitmapDialog(QtWidgets.QDialog):
+    """Vectorisation d'une image (Aspire « Trace Bitmap ») : seuil, inversion, taille, simplification."""
+
+    def __init__(self, proj, parent=None, path=""):
+        super(TraceBitmapDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.path = path
+        self.setWindowTitle(tr("Trace bitmap"))
+        form = QtWidgets.QFormLayout(self)
+        form.addRow(tr("Image"), QtWidgets.QLabel(path))
+        self.width = _spin(1, 10000, 100.0, 1)
+        form.addRow(tr("Width (mm)"), self.width)
+        self.threshold = _spin(0.01, 0.99, 0.5)
+        self.threshold.setSingleStep(0.05)
+        self.threshold.setToolTip(tr("Grey level separating the shapes from the background (0 black, 1 white)."))
+        form.addRow(tr("Threshold"), self.threshold)
+        self.invert = QtWidgets.QCheckBox(tr("Trace the light areas (instead of the dark ones)"))
+        form.addRow("", self.invert)
+        self.tolerance = _spin(0.001, 5.0, 0.05, 3)
+        self.tolerance.setToolTip(tr("Largest distance between the traced outline and the pixel edge (smoothing)."))
+        form.addRow(tr("Outline tolerance (mm)"), self.tolerance)
+        self.min_area = _spin(0.0, 10000, 1.0)
+        form.addRow(tr("Ignore spots smaller than (mm²)"), self.min_area)
+        self.x = _spin(-10000, 10000, 0.0)
+        self.y = _spin(-10000, 10000, 0.0)
+        form.addRow(tr("Lower left corner X (mm)"), self.x)
+        form.addRow(tr("Lower left corner Y (mm)"), self.y)
+        _hint(form, tr("The outlines become a drawing vector (holes kept), to be machined with pocket, profile or V-carve."))
+        self.buttons = _buttons(self, form)
+
+    def apply(self):
+        from ..project import bitmap
+
+        return bitmap.trace_to_vector(self.proj, self.path, self.width.value(), threshold=self.threshold.value(),
+                                      invert=self.invert.isChecked(), tolerance=self.tolerance.value(),
+                                      min_area=self.min_area.value(), origin=(self.x.value(), self.y.value()))
+
+
+class PhotoVCarveDialog(QtWidgets.QDialog):
+    """Photo V-Carve (Aspire) : lignes parallèles au V-bit, profondeur selon le gris."""
+
+    def __init__(self, proj, parent=None, path=""):
+        super(PhotoVCarveDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.path = path
+        self.setWindowTitle(tr("Photo V-carve"))
+        form = QtWidgets.QFormLayout(self)
+        form.addRow(tr("Image"), QtWidgets.QLabel(path))
+        self.asm, self.preset = tool_pickers(proj, is_vbit)
+        form.addRow(tr("V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        sb = proj.stock_bounds()
+        self.width = _spin(1, 10000, round(min(200.0, sb["xmax"] - sb["xmin"]), 1), 1)
+        form.addRow(tr("Width (mm)"), self.width)
+        self.x = _spin(-10000, 10000, round(sb["xmin"], 2))
+        self.y = _spin(-10000, 10000, round(sb["ymin"], 2))
+        form.addRow(tr("Lower left corner X (mm)"), self.x)
+        form.addRow(tr("Lower left corner Y (mm)"), self.y)
+        self.depth = _spin(0.05, 20, 1.5)
+        form.addRow(tr("Maximum depth (black) (mm)"), self.depth)
+        self.spacing = _spin(0.0, 50, 0.0, 3)
+        self.spacing.setSpecialValueText(tr("Auto (V-bit width at the maximum depth)"))
+        form.addRow(tr("Line spacing (mm)"), self.spacing)
+        self.gamma = _spin(0.2, 5.0, 1.0)
+        self.gamma.setToolTip(tr("Above 1: light greys carved less deep (more contrast in the light areas)."))
+        form.addRow(tr("Gamma"), self.gamma)
+        self.invert = QtWidgets.QCheckBox(tr("Carve the light areas (negative)"))
+        form.addRow("", self.invert)
+        _hint(form, tr("Dark = deep and wide groove, white = not cut. Horizontal lines, back and forth, from the top of the stock."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import bitmap
+
+        return bitmap.add_photo_vcarve(self.proj, tr("Photo V-carve"), self.asm.currentData(), self.preset.currentData(),
+                                       self.path, self.width.value(), self.depth.value(), self.spacing.value() or None,
+                                       origin=(self.x.value(), self.y.value()), invert=self.invert.isChecked(),
+                                       gamma=self.gamma.value())
+
+
+def is_ball(tool):
+    return tool.tool_type == "ballend"
+
+
+def _rail_combo(proj, selected):
+    combo = QtWidgets.QComboBox()
+    names = [o.Name for o in selected]
+    for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+        combo.addItem(obj.Label, obj.Name)
+    return combo
+
+
+class MouldingDialog(QtWidgets.QDialog):
+    """Moulure (Aspire « Moulding Toolpath ») : section prédéfinie extrudée le long d'un vecteur, fraise boule."""
+
+    PROFILES = (("quarter_round", "Quarter round (convex)"), ("cove", "Cove (concave)"), ("chamfer", "Chamfer"),
+                ("ogee", "Ogee"))
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(MouldingDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Moulding"))
+        form = QtWidgets.QFormLayout(self)
+        self.rail = _rail_combo(proj, selected)
+        form.addRow(tr("Rail (drawing vector)"), self.rail)
+        self.profile = QtWidgets.QComboBox()
+        for key, label in self.PROFILES:
+            self.profile.addItem(tr(label), key)
+        form.addRow(tr("Profile"), self.profile)
+        self.width = _spin(0.5, 500, 10.0)
+        self.depth = _spin(0.1, 200, 10.0)
+        form.addRow(tr("Profile width (mm)"), self.width)
+        form.addRow(tr("Profile depth (mm)"), self.depth)
+        self.flip = QtWidgets.QCheckBox(tr("Profile on the right of the vector"))
+        form.addRow("", self.flip)
+        self.asm, self.preset = tool_pickers(proj, is_ball)
+        form.addRow(tr("Ball end mill"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.stepover = _spin(0.02, 20, 0.3, 3)
+        form.addRow(tr("Stepover (mm)"), self.stepover)
+        self.step_down = _spin(0.0, 100, 0.0)
+        self.step_down.setSpecialValueText(tr("No roughing levels"))
+        form.addRow(tr("Roughing step down (mm)"), self.step_down)
+        _hint(form, tr("The profile edge (full depth) is on the vector, the top is kept on the profile side; the ball goes one radius past the edge to finish a steep flank."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.rail.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        rail = self.proj.doc.getObject(self.rail.currentData())
+        return decor.add_moulding(self.proj, tr("Moulding"), self.asm.currentData(), self.preset.currentData(), rail,
+                                  self.profile.currentData(), self.width.value(), self.depth.value(),
+                                  self.stepover.value(), self.step_down.value() or None, self.flip.isChecked())
+
+
+class FlutingDialog(QtWidgets.QDialog):
+    """Cannelures (Aspire « Fluting Toolpath ») : vecteurs suivis avec rampes de profondeur."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(FlutingDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Fluting"))
+        form = QtWidgets.QFormLayout(self)
+        self.vectors = QtWidgets.QListWidget()
+        names = [o.Name for o in selected]
+        for obj in sheetmod.vector_objects(proj.doc):
+            item = QtWidgets.QListWidgetItem(obj.Label)
+            item.setData(QtCore.Qt.UserRole, obj.Name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Checked if obj.Name in names or not names else QtCore.Qt.Unchecked)
+            self.vectors.addItem(item)
+        self.vectors.setMaximumHeight(120)
+        form.addRow(tr("Vectors"), self.vectors)
+        self.asm, self.preset = tool_pickers(proj, lambda t: is_ball(t) or is_vbit(t))
+        form.addRow(tr("Ball end mill or V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.depth = _spin(0.05, 50, 2.0)
+        self.ramp_start = _spin(0.0, 1000, 10.0)
+        self.ramp_end = _spin(0.0, 1000, 10.0)
+        form.addRow(tr("Depth (mm)"), self.depth)
+        form.addRow(tr("Start ramp length (mm)"), self.ramp_start)
+        form.addRow(tr("End ramp length (mm)"), self.ramp_end)
+        _hint(form, tr("Each vector is followed from its start: the depth rises from 0 over the start ramp, stays, then comes back to 0 over the end ramp."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.vectors.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        rails = [self.proj.doc.getObject(self.vectors.item(i).data(QtCore.Qt.UserRole)) for i in range(self.vectors.count())
+                 if self.vectors.item(i).checkState() == QtCore.Qt.Checked]
+        if not rails:
+            raise ValueError(tr("Choose at least one vector"))
+        return decor.add_fluting(self.proj, tr("Fluting"), self.asm.currentData(), self.preset.currentData(), rails,
+                                 self.depth.value(), self.ramp_start.value(), self.ramp_end.value())
+
+
+class TextureDialog(QtWidgets.QDialog):
+    """Texture (Aspire « Texture Toolpath ») : coups de gouge aléatoires dans un vecteur fermé."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(TextureDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Texture"))
+        form = QtWidgets.QFormLayout(self)
+        self.region = QtWidgets.QComboBox()
+        names = [o.Name for o in selected]
+        for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+            if sheetmod.closed_wires(obj):
+                self.region.addItem(obj.Label, obj.Name)
+        form.addRow(tr("Area (closed vector)"), self.region)
+        self.asm, self.preset = tool_pickers(proj, lambda t: is_ball(t) or is_vbit(t))
+        form.addRow(tr("Ball end mill or V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.spacing = _spin(0.2, 100, 3.0)
+        self.length = _spin(0.5, 500, 12.0)
+        self.depth = _spin(0.05, 20, 1.0)
+        self.variation = _spin(0, 90, 30, 0)
+        self.seed = QtWidgets.QSpinBox()
+        self.seed.setRange(1, 999999)
+        form.addRow(tr("Row spacing (mm)"), self.spacing)
+        form.addRow(tr("Stroke length (mm)"), self.length)
+        form.addRow(tr("Stroke depth (mm)"), self.depth)
+        form.addRow(tr("Random variation (%)"), self.variation)
+        form.addRow(tr("Pattern number"), self.seed)
+        _hint(form, tr("Short strokes in staggered rows; length and depth vary at random around the values (same pattern number = same texture). Strokes stop where the tool would leave the area."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.region.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        region = self.proj.doc.getObject(self.region.currentData())
+        return decor.add_texture(self.proj, tr("Texture"), self.asm.currentData(), self.preset.currentData(), region,
+                                 self.spacing.value(), self.length.value(), self.depth.value(),
+                                 self.variation.value() / 100.0, self.seed.value())
+
+
+class PrismDialog(QtWidgets.QDialog):
+    """Prisme (Aspire « Prism ») : biseau au V-bit depuis le contour d'un vecteur fermé."""
+
+    def __init__(self, proj, parent=None, selected=()):
+        super(PrismDialog, self).__init__(parent)
+        theme.apply(self)
+        self.proj = proj
+        self.setWindowTitle(tr("Prism"))
+        form = QtWidgets.QFormLayout(self)
+        self.region = QtWidgets.QComboBox()
+        names = [o.Name for o in selected]
+        for obj in sorted(sheetmod.vector_objects(proj.doc), key=lambda o: (o.Name not in names, o.Label)):
+            if sheetmod.closed_wires(obj):
+                self.region.addItem(obj.Label, obj.Name)
+        form.addRow(tr("Closed vector"), self.region)
+        self.asm, self.preset = tool_pickers(proj, is_vbit)
+        form.addRow(tr("V-bit"), self.asm)
+        form.addRow(tr("Cutting preset"), self.preset)
+        self.depth = _spin(0.1, 50, 3.0)
+        form.addRow(tr("Depth at the outline (mm)"), self.depth)
+        _hint(form, tr("Bevel from the outline at the V-bit angle: a ridge where the bevels meet, a flat top if the shape is wider. The V-bit flank also cuts outside the outline (pocket the surroundings to the same depth)."))
+        self.buttons = _buttons(self, form)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self.region.count() > 0 and self.asm.currentData() is not None)
+
+    def apply(self):
+        from ..project import decor
+
+        region = self.proj.doc.getObject(self.region.currentData())
+        return decor.add_prism(self.proj, tr("Prism"), self.asm.currentData(), self.preset.currentData(), region,
+                               self.depth.value())
+

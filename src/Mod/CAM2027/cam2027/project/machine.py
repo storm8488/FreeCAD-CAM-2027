@@ -62,6 +62,7 @@ FIELD_LABELS = {
     "post_processor": "Post processor", "post_processor_args": "Post arguments",
     "travel_x_mm": "Travel X (mm)", "travel_y_mm": "Travel Y (mm)", "travel_z_mm": "Travel Z (mm)",
     "max_feed_xy_mm_min": "Max feed XY (mm/min)", "max_feed_z_mm_min": "Max feed Z (mm/min)",
+    "acceleration_mm_s2": "Acceleration (mm/s²)",
     "spindle_min_rpm": "Spindle min (rpm)", "spindle_max_rpm": "Spindle max (rpm)",
     "spindle_power_w": "Spindle power (W)", "collet": "Collet", "notes": "Notes",
     "tool_change": "Tool change", "coolant_options": "Coolant options", "feed_mode_rotary": "Rotary feed mode (G93/G94)",
@@ -86,6 +87,7 @@ class MachineProfile(object):
         "travel_z_mm",
         "max_feed_xy_mm_min",
         "max_feed_z_mm_min",
+        "acceleration_mm_s2",
         "spindle_min_rpm",
         "spindle_max_rpm",
         "spindle_power_w",
@@ -109,6 +111,7 @@ class MachineProfile(object):
         self.travel_z_mm = kwargs.pop("travel_z_mm", None)
         self.max_feed_xy_mm_min = kwargs.pop("max_feed_xy_mm_min", None)
         self.max_feed_z_mm_min = kwargs.pop("max_feed_z_mm_min", None)
+        self.acceleration_mm_s2 = kwargs.pop("acceleration_mm_s2", None)  # estimation du temps (S5) ; inconnue = 500 supposé
         self.spindle_min_rpm = kwargs.pop("spindle_min_rpm", None)
         self.spindle_max_rpm = kwargs.pop("spindle_max_rpm", None)
         self.spindle_power_w = kwargs.pop("spindle_power_w", None)

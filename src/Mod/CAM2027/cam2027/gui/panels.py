@@ -1067,6 +1067,8 @@ class ProjectPanel(QtWidgets.QWidget):
         from ..project.wrap import KIND as WRAP_KIND, LABEL as WRAP_LABEL
         from ..project.inlay import CORNERS_KIND, CORNERS_LABEL
         extra_labels = {WRAP_KIND: WRAP_LABEL, CORNERS_KIND: CORNERS_LABEL}
+        from ..project.bitmap import KIND_LABELS as S5_LABELS  # S5 : Photo V-Carve, moulure, cannelures
+        extra_labels.update(S5_LABELS)
 
         if proj.has_job:
             models = [m.Label for m in proj.job.Model.Group]

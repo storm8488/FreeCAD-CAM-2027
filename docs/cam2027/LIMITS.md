@@ -347,3 +347,43 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   palpeur ; un contact absent déclenche l'alarme GRBL) ; pas d'inspection de surface ni d'alignement (Fusion
   *Part Alignment*) ; les réglages du palpeur se saisissent dans le dialogue de palpage, pas encore dans le
   dialogue Profil machine.
+## Flux Aspire : modèles, dessin, images (nuit 2, S5)
+
+- **Modèles de parcours** : seules les opérations posées sur des vecteurs du dessin 2D sont enregistrées
+  (pas celles sur « toute la pièce », ni le fond plat, l'incrustation ou la gravure enroulée, générés). Une
+  opération recréée prend **tous** les vecteurs du calque ciblé ; sans calque, les vecteurs du même nom
+  (identifiant SVG). L'outil est cherché par nom, sinon par type et diamètre, dans la bibliothèque du
+  projet ; les habillages (attaches, rampes) ne sont pas enregistrés. Calques DXF : seulement quand l'import
+  de l'interface les crée (groupes / calques Draft) ; en console, le lecteur DXF ne les garde pas.
+- **Dessin vectoriel** : pas d'édition de nœuds ni de dessin à main levée (rectangles, cercles, polylignes :
+  importer un SVG / DXF) ; le texte est figé à la création (changer le texte = le redessiner). Contours de
+  police approchés par des polygones à 0,01 mm (sortie en G1). Le texte sur courbe suit le côté gauche du
+  vecteur (inverser le vecteur pour passer de l'autre côté) ; une courbe à plusieurs arêtes est approchée par
+  une B-spline. Les booléens et le décalage travaillent sur les contours **fermés** seulement. Polices
+  proposées : celle de FreeCAD (osifont) et les polices Windows courantes présentes.
+- **Vectorisation d'image** : contours polygonaux (pas de courbes de Bézier, pas de `potrace`) ; image
+  rééchantillonnée à 400 pixels au plus sur le grand côté ; un seul seuil (pas de couleurs séparées). Le
+  bord d'une zone touchant le bord de l'image est fermé sur le bord.
+- **Photo V-Carve** : lignes horizontales seulement (pas d'angle de lignes ni de lignes croisées), profondeur
+  proportionnelle au sombre (correction gamma), V-bit seulement. L'opération est générée (`Path.Op.Custom`) :
+  pour changer l'image ou les réglages, la supprimer et la recréer ; elle n'est pas dupliquée ni enregistrée
+  dans un modèle de parcours.
+- **Temps estimé** : profil trapézoïdal par segment, vitesse en virage selon la *junction deviation* de GRBL
+  (0,01 mm) et planificateur à anticipation complète (GRBL n'anticipe que 16 blocs : sur des milliers de
+  segments très courts, la machine peut être plus lente que l'estimation). Une seule accélération pour tous
+  les axes ; temps de changement d'outil, de mise en route de la broche et de pause non comptés. Accélération
+  inconnue : 500 mm/s² supposés ; rapides : avance maximale XY du profil, sinon 3000 mm/min supposés (écrit
+  sur la fiche).
+- **Fiche PDF** : produite depuis l'interface seulement (Qt `QPdfWriter` exige une application graphique) ;
+  mise en page simple (texte et tableaux de la fiche Markdown), sans image de la pièce.
+- **Moulure** : sections prédéfinies seulement (pas de section dessinée), fraise boule ; au pied d'une section
+  à flanc vertical (quart-de-rond), un congé du rayon de la boule reste ; la boule déborde d'un rayon du
+  côté du bord (prévoir le bord de la planche ou une chute). Rail courbe : décalage latéral par les
+  normales du rail (une section plus large que le rayon de courbure intérieur se recoupe). Pas de coin
+  d'onglet aux angles d'un rail fermé (les passes tournent avec le rail).
+- **Cannelures** : profondeur seule réglable (la largeur suit la forme de l'outil) ; rampes linéaires.
+- **Texture** : coups horizontaux seulement (pas d'angle ni de motif croisé), forme de coup en arc fixe.
+- **Prisme** : V-bit seulement, biseau vers l'intérieur (prisme en relief) ; le flanc extérieur coupe aussi hors
+  du contour sur `p · tan(α/2)` (pocheter les alentours à la même profondeur, comme dans Aspire) ; pas de
+  prisme en creux.
+

@@ -119,6 +119,58 @@
   (`-A.nc`, `-B.nc`), fiche complétée par le retournement, les goujons et l'ordre. Test : plaque à une poche
   ronde de chaque côté, aucune entaille, dessus et dessous finals = pièce à 0,05 mm hors du pied des parois.
 
+- **[S5]** **Prisme** (Aspire « Prism ») : Usiner > Prisme biseaute au V-bit un vecteur fermé depuis son contour
+  (profondeur au contour, pente du flanc vers l'intérieur : crête là où les biseaux se rejoignent, dessus plat
+  sinon). La pointe suit les décalages intérieurs (angles vifs) à `z = −p + s / tan(α/2)`, plat de pointe
+  compris : le flanc du V-bit est exactement le biseau. Rectangle 40 × 20, V-bit 90°, 3 mm : biseau à
+  0,05 mm sur la carte simulée, aucune entaille ; profondeur au-delà de la longueur coupante refusée.
+- **[S5]** **Texture** (Aspire « Texture Toolpath ») : Usiner > Texture remplit un vecteur fermé de coups de
+  gouge courts en rangées décalées (boule ou V-bit), longueur et profondeur tirées au hasard autour des valeurs
+  (numéro de motif = graine : même texture à chaque calcul), chaque coup plongeant en arc ; près du bord, un
+  coup est coupé là où la fraise ne resterait plus entière dans la zone. Disque R18 au V-bit 60° : rien coupé
+  hors du disque (carte simulée à 0,1 mm), jamais plus profond que la profondeur maximale tirée.
+- **[S5]** **Moulure et cannelures** (Aspire « Moulding » et « Fluting ») : Usiner > Moulure balaie à la fraise
+  boule une section (quart-de-rond, gorge, chanfrein, doucine ; largeur, profondeur, côté) le long d'un vecteur
+  du dessin, en passes parallèles au rail au pas latéral demandé, paliers d'ébauche en option ; la hauteur de
+  chaque passe est calculée en 2D comme une boule posée sur la section (jamais dessous), la boule débordant
+  d'un rayon côté bord pour finir le flanc raide. Usiner > Cannelures suit des vecteurs avec rampes de
+  profondeur au début et à la fin (boule ou V-bit). Opérations `Path.Op.Custom` simulées par le contrôle
+  matière : quart-de-rond R10 à la boule de 6 mm, section à 0,014 mm sur la carte de hauteur (hors congé de
+  pied de R3), aucune entaille.
+- **[S5]** **Temps d'usinage avec l'accélération et fiche de préparation en PDF** : nouveau champ
+  « Accélération (mm/s²) » du profil machine ; le temps estimé (fiche, section « Estimated machining time »,
+  par opération et total) suit un profil de vitesse trapézoïdal par segment avec la limite de vitesse en
+  virage du planificateur de GRBL (*junction deviation* 0,01 mm) et un passage avant / arrière. Accélération
+  inconnue : 500 mm/s² supposés ; rapides à l'avance maximale XY, sinon 3000 mm/min supposés ; les
+  suppositions sont écrites sur la fiche. Exporter > Fiche de préparation (PDF) écrit la fiche en PDF A4
+  (`QTextDocument` + `QPdfWriter` de Qt, sans dépendance). Planificateur vectorisé (passes avant / arrière
+  en minimums cumulés, identiques à la boucle) : 0,74 s pour 200 000 commandes ; export du plateau
+  `bitTray3030+v7.stl` (finition 3D, 69 000 commandes) : 1,96 → 2,14 s (+9 %), estimation 58 min 19 s.
+- **[S5]** **Vectorisation d'image et Photo V-Carve** (comme Aspire « Trace Bitmap » et « Photo V-Carving ») :
+  Dessin > Vectoriser une image seuille l'image en niveaux de gris (seuil, inversion, tolérance du contour,
+  taches ignorées) par *marching squares* au sous-pixel, chaîne les contours fermés (trous gardés) et les
+  simplifie (Douglas-Peucker) : un vecteur du dessin, usinable en poche, contour ou V-carving. `potrace`
+  n'existe pas dans FreeCAD : contours polygonaux. Usiner > Photo V-Carve grave une photo au V-bit en lignes
+  horizontales aller-retour, profondeur = profondeur maximale × sombre (gamma réglable), écart entre lignes
+  par défaut = largeur du V-bit à la profondeur maximale ; les zones plus claires que 0,05 mm de profondeur
+  sont sautées. Opération `Path.Op.Custom` (avances converties en mm/s comme la gravure enroulée), simulée
+  par le contrôle matière.
+- **[S5]** **Dessin vectoriel dans l'atelier** (menu et barre d'outils Dessin, dialogues CAM2027, comme les
+  outils de dessin d'Aspire) : texte (police TrueType, hauteur, espacement) en ligne droite, sur un arc ou le
+  long d'un vecteur ; décalage d'un vecteur fermé (angles ronds ou vifs, formes qui se recouvrent soudées) ;
+  union, soustraction, intersection de deux vecteurs ; miroir ; copies circulaires. Géométrie Part de FreeCAD
+  (`makeWireString`, moteur de `Draft.ShapeString` ; `makeOffset2D`, moteur de `Draft.make_offset` ;
+  booléens Part sur des prismes de 1 mm, ceux des faces planes découpant sans réunir). Les contours de police
+  sont des polygones à 0,01 mm (les B-splines des glyphes faisaient échouer le décalage OCC). Un vecteur
+  dessiné après le panneau reçoit sa face et ses clones dans le modèle du job. La poche 2D, le V-carving et
+  les autres stratégies à faces prennent maintenant **toutes** les faces d'un vecteur (un texte importé ou
+  dessiné n'était usiné que sur sa première lettre).
+- **[S5]** **Modèles de parcours** (Aspire « Toolpath Templates ») : Usiner > Enregistrer un modèle de parcours
+  écrit les opérations du projet 2D (stratégie, outil par nom, préréglage par nom, réglages, calque et nom du
+  vecteur ciblé) dans un fichier `.cam2027template` ; Usiner > Appliquer un modèle de parcours les recrée sur
+  un autre dessin : vecteurs du même calque (calque Inkscape ou groupe SVG, calque DXF), sinon du même nom,
+  puis calcul. Une opération sans cible ou sans outil est rapportée et non créée. Les calques SVG sont lus à
+  l'import (propriété `CAM2027Layer` des vecteurs).
 - **Poches à plusieurs profondeurs, chacune jusqu'à son fond** (comme Fusion) : FreeCAD usine des fonds
   sélectionnés ensemble jusqu'au plus haut d'entre eux ; sur le disque WobbleRing, les logements d'écrou
   (141,57) restaient à la hauteur des rainures (142,58). Poche, poche 2D et adaptative : une opération par

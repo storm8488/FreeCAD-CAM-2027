@@ -32,6 +32,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
 
         commands.register()
         self.appendToolbar("CAM2027", commands.TOOLBAR)
+        self.appendToolbar("CAM2027 Drawing", commands.aspirecmds.DRAWING_MENU)  # S5 : dessin vectoriel
         # menus par étape du métier : Préparer / Usiner / Simuler / Exporter
         for title, names in commands.STAGE_MENUS:
             self.appendMenu(tr(title), names)
