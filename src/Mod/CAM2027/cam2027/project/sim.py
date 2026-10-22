@@ -289,6 +289,10 @@ class ZMap(object):
         inside = d <= r + 1e-9
         if tool.kind == "flat" and not (dz != 0).any():  # fraise plate à plat : le dessous est au Z du segment
             z = z0 + np.zeros_like(d)
+        elif tool.kind == "ball" and not (dz != 0).any():
+            # boule à plat (Z constant) : le point le plus bas de la plage est le point le plus proche, même
+            # résultat que la formule de la pente avec dz = 0, sans ses tableaux intermédiaires
+            z = z0 + tool.lift(np.minimum(d, r))
         elif tool.kind in ("flat", "ball"):
             d_perp = np.hypot(X - (x0 + t_foot * dx), Y - (y0 + t_foot * dy))
             reach = np.sqrt(np.maximum(r * r - d_perp * d_perp, 0.0))

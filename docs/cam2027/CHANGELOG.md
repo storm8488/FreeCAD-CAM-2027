@@ -32,6 +32,9 @@
   niveau calculait des tableaux (segments × largeur du plus long segment du niveau) ; un seul long segment faisait
   calculer sa largeur aux 20 000 autres. Paires (segment, colonne) à plat, mêmes formules : carte identique bit à
   bit. Ébauche 3D du chauffage (344 573 commandes) : remplissage 8,5-8,7 s → 0,6-0,8 s, contrôle 16,6 s → 7,7-9,5 s.
+- **[B2]** **Contrôle matière plus rapide à Z constant avec une fraise boule** : segments horizontaux d'une boule
+  sans les tableaux de la formule de pente (même résultat avec dz = 0). Z constant du plateau (232 212 commandes) :
+  13,4-13,9 s → 11,3-11,4 s, carte identique bit à bit.
 - **[S1]** **Limiter à une zone** (découpe de parcours sans recalcul, Fusion « Toolpath trimming ») : onglet
   « Reprise et zone » de l'éditeur, rectangle ou contour fermé sélectionné, garder dedans ou dehors
   (`project/trim.py`, habillage CAM2027). Les mouvements de coupe sont échantillonnés et coupés au bord (dichotomie),
