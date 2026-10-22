@@ -137,6 +137,31 @@ def write_gcode(sections, path):
 _NOT_POSITION_G = ("10", "28", "30", "53", "92")
 
 
+#: plan d'arc -> (axe 1, axe 2, mot de centre 1, mot de centre 2)
+_ARC_PLANES = {"17": ("X", "Y", "I", "J"), "18": ("Z", "X", "K", "I"), "19": ("Y", "Z", "J", "K")}
+
+
+def _arc_error(pos, values, plane):
+    """Écart (mm) qui fait refuser l'arc par GRBL 1.1, 0 s'il est accepté, ``None`` si la position de départ est
+    inconnue. Règles de ``gc_execute_line`` : centre I/J/K, rayons de début et de fin à 0,005 mm et 0,1 % près
+    (ou 0,5 mm), error:33 ; rayon R plus petit que la demi-corde, error:34 ; ni centre ni rayon, error:35."""
+    a, b, ia, ib = _ARC_PLANES[plane]
+    if pos[a] is None or pos[b] is None:
+        return None
+    sa, sb = pos[a], pos[b]
+    ea, eb = values.get(a, sa), values.get(b, sb)
+    if "R" in values:
+        half = 0.5 * ((ea - sa) ** 2 + (eb - sb) ** 2) ** 0.5
+        return max(0.0, half - abs(values["R"])) if half > abs(values["R"]) + 1e-9 else 0.0
+    if ia not in values and ib not in values:
+        return float("inf")
+    ca, cb = sa + values.get(ia, 0.0), sb + values.get(ib, 0.0)
+    r_start = ((sa - ca) ** 2 + (sb - cb) ** 2) ** 0.5
+    r_end = ((ea - ca) ** 2 + (eb - cb) ** 2) ** 0.5
+    delta = abs(r_end - r_start)
+    return delta if delta > 0.5 or (delta > 0.005 and delta > 0.001 * r_end) else 0.0
+
+
 def analyze_gcode(text):
     """Analyse statique d'un G-code : codes, axes, unités, repères, enveloppe, lignes."""
     codes = set()
@@ -160,6 +185,10 @@ def analyze_gcode(text):
     max_a_step = 0.0  # plus grand changement de A dans un seul mouvement de coupe (deg)
     a_current = None
     relative = False  # G91 : positions inconnues (palpage relatif), hors enveloppe
+    plane = "17"
+    pos = {"X": None, "Y": None, "Z": None}  # position de travail courante (None : inconnue)
+    bad_arcs = 0  # arcs refusés par GRBL 1.1 (error:33 / 34 / 35)
+    max_arc_error = 0.0
     for raw in text.splitlines():
         line = raw.split(";")[0]
         line = re.sub(r"\(.*?\)", "", line).strip()
@@ -181,9 +210,20 @@ def analyze_gcode(text):
                     relative = True
                 elif g == "90":
                     relative = False
+                elif g in ("17", "18", "19"):
+                    plane = g
                 elif g in _NOT_POSITION_G or g.startswith("38."):
-                    not_position = True
+                    not_position = g
         has_axis = any(letter.upper() in "XYZABC" for letter, _n in words)
+        values = {}
+        for letter, number in words:
+            values[letter.upper()] = float(number)
+        if motion in ("G2", "G3") and not inverse_time and not relative and not not_position                 and any(k in values for k in "XYZIJKR"):
+            err = _arc_error(pos, values, plane)
+            if err is not None and err > 0.0:
+                bad_arcs += 1
+                if err != float("inf"):  # arc sans centre : compté, sans écart
+                    max_arc_error = max(max_arc_error, err)
         f_words = [float(n) for letter, n in words if letter.upper() == "F"]
         if inverse_time and motion in ("G1", "G2", "G3") and has_axis:
             if not f_words:
@@ -230,6 +270,17 @@ def analyze_gcode(text):
                 max_feed = max(max_feed, float(number))
             elif letter == "S":
                 spindle.add(float(number))
+        for axis in "XYZ":
+            if axis not in values:
+                continue
+            if not_position in ("92", "10"):  # G92 / G10 L20 : la position courante prend cette valeur
+                pos[axis] = values[axis] if (not_position == "92" or values.get("L") == 20) else None
+            elif not_position:  # G28 / G30 / G53 / palpage : position de travail inconnue ensuite
+                pos[axis] = None
+            elif relative:
+                pos[axis] = None if pos[axis] is None else pos[axis] + values[axis]
+            else:
+                pos[axis] = values[axis]
     return {
         "lines": lines,
         "codes": sorted(codes),
@@ -248,6 +299,8 @@ def analyze_gcode(text):
         "g93_arcs": g93_arcs,
         "max_a_rate": max_a_rate,
         "max_a_step": max_a_step,
+        "bad_arcs": bad_arcs,
+        "max_arc_error": max_arc_error,
         "ends_in_g93": inverse_time,
         "probe": __import__("cam2027.project.probe", fromlist=["analyze"]).analyze(text),
     }
@@ -284,6 +337,9 @@ def verify(analysis, machine, stock_bounds=None):
     if analysis.get("g93_arcs"):
         issues.append(("error", Msg("{n} arc(s) in inverse-time mode (G93): not checked, not supported",
                                     n=analysis["g93_arcs"])))
+    if analysis.get("bad_arcs"):
+        issues.append(("error", Msg("{n} arc(s) that GRBL rejects (error:33 to 35): end point off the circle by up to {d:.3f} mm, or no centre, or radius too small",
+                                    n=analysis["bad_arcs"], d=analysis["max_arc_error"])))
     if analysis.get("ends_in_g93"):
         issues.append(("error", Msg("the program ends in inverse-time mode (G93): G94 missing")))
     for axis, attr in (("X", "travel_x_mm"), ("Y", "travel_y_mm"), ("Z", "travel_z_mm")):

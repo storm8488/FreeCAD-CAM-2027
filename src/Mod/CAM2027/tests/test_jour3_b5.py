@@ -267,6 +267,61 @@ class TestModelImport(unittest.TestCase):
         self.assertIn(".3mf", importers.SUPPORTED_EXTENSIONS)
 
 
+class TestSheet(unittest.TestCase):
+    def test_drawing_off_z0_is_moved_onto_the_sheet(self):
+        """Dessin plan hors de Z 0 (DXF avec élévation, esquisse décalée) : posé sur le dessus du panneau (Z 0),
+        contour jamais sous le fond demandé. Soupçon d'audit (``o.Placement.move`` sur une copie) non confirmé :
+        garde-fou."""
+        import Part
+
+        V = FreeCAD.Vector
+        for z in (5.0, -3.0):
+            proj = Project.create("Sheet Z", starter_library())
+            self.addCleanup(proj.close)
+            square = proj.doc.addObject("Part::Feature", "Square")
+            square.Shape = Part.makePolygon([V(0, 0, z), V(40, 0, z), V(40, 30, z), V(0, 30, z), V(0, 0, z)])
+            proj.doc.recompute()
+            proj.create_sheet_job(thickness=12.0)
+            self.assertAlmostEqual(square.Shape.BoundBox.ZMin, 0.0, places=6, msg=z)
+            face = proj.doc.getObject("Square_Face")
+            self.assertAlmostEqual(face.Shape.BoundBox.ZMax, 0.0, places=6, msg=z)
+            sb = proj.stock_bounds()
+            self.assertAlmostEqual(sb["zmax"], 0.0, places=6)
+            lib = proj.library
+            t = [t for t in lib.search("3 mm flat end mill") if t.tool_type == "endmill"][0]
+            asm = lib.assemblies_for_tool(t.id)[0]
+            proj.add_operation("profile", "Cut", asm.id, t.presets[0].id, base=[(square, [])],
+                               params={"FinalDepth": -12.0, "StepDown": 4.0, "Side": "Outside"})
+            r = proj.compute()[0]
+            self.assertTrue(r["valid"], r)
+            self.assertGreaterEqual(r["zmin"], -12.0 - 1e-6, (z, r["zmin"]))
+
+
+class TestGrblRules(unittest.TestCase):
+    def test_arc_radius_mismatch_refused(self):
+        """GRBL 1.1 (``gc_execute_line``) refuse un arc I/J/K dont le rayon de fin diffère de celui du début de
+        plus de 0,005 mm et 0,1 % (ou 0,5 mm) : error:33, programme arrêté en pleine coupe. Non contrôlé (B5-9)."""
+        ok = "\n".join(["G21", "G17 G90", "G54", "G0 X10 Y0 Z1", "G1 Z-1 F100", "G2 X0 Y10 I-10 J0 F500",
+                        "G3 X10 Y0 I0 J-10", "G2 X10.001 Y0.002 I-10 J0", "G0 Z5", "M5", "M2"])
+        a = exportmod.analyze_gcode(ok)
+        self.assertEqual(a["bad_arcs"], 0, a)
+        self.assertFalse(any("arc" in str(m) for _l, m in exportmod.verify(a, machine())))
+        bad = ok.replace("G2 X0 Y10 I-10 J0 F500", "G2 X0 Y10.02 I-10 J0 F500")  # fin à 10,02 du centre
+        a = exportmod.analyze_gcode(bad)
+        self.assertEqual(a["bad_arcs"], 1, a)
+        self.assertAlmostEqual(a["max_arc_error"], 0.02, places=6)
+        errors = [str(m) for lvl, m in exportmod.verify(a, machine()) if lvl == "error"]
+        self.assertTrue(any("arc" in e and "error:33" in e for e in errors), errors)
+        # plan G18 (X/Z, I/K) : le même arc juste n'est pas compté faux
+        xz = "\n".join(["G21", "G90", "G54", "G18", "G0 X10 Y0 Z0", "G2 X0 Z10 I-10 K0 F500", "G17", "M2"])
+        self.assertEqual(exportmod.analyze_gcode(xz)["bad_arcs"], 0)
+        # arc sans centre ni rayon : refusé par GRBL (error:26 / 33)
+        self.assertEqual(exportmod.analyze_gcode("G21\nG90\nG0 X0 Y0\nG2 X10 Y0 F100\n")["bad_arcs"], 1)
+        # arc en rayon R impossible (corde plus longue que le diamètre)
+        self.assertEqual(exportmod.analyze_gcode("G21\nG90\nG0 X0 Y0\nG2 X30 Y0 R10 F100\n")["bad_arcs"], 1)
+        self.assertEqual(exportmod.analyze_gcode("G21\nG90\nG0 X0 Y0\nG2 X20 Y0 R10.001 F100\n")["bad_arcs"], 0)
+
+
 PROBE = {"present": True, "tip_diameter_mm": 2.0, "plate_thickness_mm": 0.0, "feed_mm_min": 100.0, "travel_mm": 25.0}
 
 
