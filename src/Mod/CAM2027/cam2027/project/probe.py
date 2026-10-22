@@ -113,6 +113,9 @@ _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
 def analyze(text):
     """Palpages d'un G-code : nombre, sans avance, broche en marche, G10 mal formés, courses (mode relatif)."""
     count = no_feed = spindle_on = bad_g10 = 0
+    upper = text.upper()
+    if "G38" not in upper and "G10" not in upper:  # programme sans palpage : pas de seconde passe (400 000 lignes : 1 s)
+        return {"count": 0, "no_feed": 0, "spindle_on": 0, "bad_g10": 0, "max_travel": 0.0}
     feed = None
     spindle = False
     max_travel = 0.0
