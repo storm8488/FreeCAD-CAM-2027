@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **[S3]** **Imbrication par forme réelle** (défaut de Préparer > Imbriquer) : silhouette de chaque dessin (contours
+  extérieurs, trous bouchés) décalée de la moitié de l'espacement (`Part.makeOffset2D`), rotations par pas de 15°
+  (ou 90°), grille prudente (toute cellule touchée par la silhouette est occupée) et positions libres trouvées par
+  corrélation FFT (numpy) ; la pièce va là où son dessus est le plus bas. Plusieurs panneaux (posés à droite du
+  premier, le job prend le premier). Les rectangles englobants restent au choix (« rapide »). Test : 20 pièces en L
+  sur 300 × 300 : 20 posées (utilisation 44,4 %) contre 16 en rectangles (35,6 %), soit +25 %, en 5 s, aucune
+  silhouette à moins de 5 mm d'une autre.
+
 - **[S3]** **Zones interdites** (« keep-out zones » d'Aspire 12) : Préparer > Zones interdites dessine des boîtes
   (vue de dessus + Z du dessus) ; option « les rapides évitent aussi les brides ». À la fin du calcul de chaque
   opération, un rapide qui passerait au-dessus d'une zone plus bas que son dessus + marge (2 mm par défaut, outil

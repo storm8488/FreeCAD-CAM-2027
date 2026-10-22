@@ -593,12 +593,17 @@ class Project(object):
         return {"female_ops": female, "male_project": male, "male_ops": male_ops, "mirror_x": mirror_x,
                 "notes": notes, **gaps}
 
-    def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None):
+    def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None,
+                      true_shape=True, angle_step=15.0, max_sheets=1):
         """Imbrication des dessins 2D sur un panneau ``sheet_width × sheet_length`` (origine 0, 0), avant
         « Brut et montage > panneau ». ``copies`` : ``{objet: nombre}`` (copies créées). Les dessins placés
         sont déplacés ; ceux qui ne tiennent pas restent où ils sont et sont rapportés.
 
-        Retourne un dict : placés ``[(libellé, x, y, tourné)]``, non placés, taux d'utilisation."""
+        ``true_shape`` : silhouettes réelles (rotations par pas de ``angle_step`` si ``rotate``), sinon rectangles
+        englobants (rotation de 90°). ``max_sheets`` > 1 : les panneaux suivants sont posés à droite du premier,
+        à ``nesting.SHEET_GAP`` mm ; le job reprend le premier.
+
+        Retourne un dict : placés ``[(libellé, x, y, angle)]``, non placés, taux d'utilisation, panneaux."""
         from . import nesting
 
         if self.has_job:
@@ -612,24 +617,41 @@ class Project(object):
                 dup.Label = "%s (%d)" % (obj.Label, k)
                 objs.append(dup)
         self.doc.recompute()
-        items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
-        placed, unplaced = nesting.skyline_pack(items, sheet_width - 2 * margin, sheet_length - 2 * margin,
-                                                spacing, rotate)
-        report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length)}
+        report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length), "sheet_of": {}}
         used = 0.0
+        width, length = sheet_width - 2 * margin, sheet_length - 2 * margin
+        if true_shape:
+            items = [(o.Name, nesting.silhouette(o.Shape)) for o in objs]
+            placed, unplaced, res = nesting.shape_pack(items, width, length, spacing,
+                                                       angle_step if rotate else 0.0, max_sheets)
+            report["resolution"] = res
+        else:
+            items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
+            placed, unplaced = nesting.skyline_pack(items, width, length, spacing, rotate)
+        sheets = 1
         for o in objs:
-            if o.Name in placed:
+            if o.Name not in placed:
+                report["unplaced"].append(o.Label)
+                continue
+            if true_shape:
+                sheet, angle, dx, dy = placed[o.Name]
+                shift = sheet * (sheet_width + nesting.SHEET_GAP)
+                nesting.place_shape(o, angle, margin + dx + shift, margin + dy)
+                sheets = max(sheets, sheet + 1)
+                report["sheet_of"][o.Label] = sheet
+            else:
                 x, y, rot = placed[o.Name]
                 nesting.move_to(o, margin + x, margin + y, rot)
-                report["placed"].append((o.Label, margin + x, margin + y, rot))
-                used += nesting.outline_area(o)
-            else:
-                report["unplaced"].append(o.Label)
+                angle = 90.0 if rot else 0.0
+            bb = o.Shape.BoundBox
+            report["placed"].append((o.Label, bb.XMin, bb.YMin, angle))
+            used += nesting.outline_area(o)
         if "NestedSheet" not in self.info.PropertiesList:
             self.info.addProperty("App::PropertyString", "NestedSheet", "CAM2027", "Sheet chosen when nesting (JSON)")
         self.info.NestedSheet = json.dumps([0.0, 0.0, float(sheet_width), float(sheet_length)])
         self.doc.recompute()
-        report["utilization"] = used / (sheet_width * sheet_length)
+        report["sheets"] = sheets
+        report["utilization"] = used / (sheets * sheet_width * sheet_length)
         report["objects"] = [o for o in objs if o.Name in placed]
         return report
 

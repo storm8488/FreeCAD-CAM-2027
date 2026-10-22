@@ -185,3 +185,54 @@ def scenario_keepout(scenario, tmp):
     if not os.path.isfile(out):
         G.problem(scenario, "no G-code written with the keep-out zone")
     G.check_docks(scenario)
+
+
+def scenario_nest_shapes(scenario, tmp):
+    """SVG d'une pièce en L : 12 copies imbriquées par forme réelle (dialogue, défaut), aucune pièce à moins de
+    l'espacement d'une autre, puis panneau et contour."""
+    from cam2027.project import nesting, sheet as sheetmod
+
+    svg = os.path.join(tmp, "l_part.svg")
+    with open(svg, "w", encoding="utf-8") as fp:
+        fp.write('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="80mm" '
+                 'viewBox="0 0 80 80"><path d="M 5 5 L 65 5 L 65 25 L 25 25 L 25 65 L 5 65 Z" fill="none" stroke="black"/></svg>')
+    G.new_project(scenario, "NestShapes")
+    G.driver.open_files.append(svg)
+    G.run_command(scenario, "CAM2027_ImportModel")
+
+    def nest(dlg):
+        dlg.table.cellWidget(0, 2).setValue(12)
+        dlg.width.setValue(300.0)
+        dlg.length.setValue(220.0)
+        dlg.spacing.setValue(5.0)
+        if dlg.mode.currentData() != 15.0:
+            G.problem(scenario, "true-shape nesting is not the default")
+        return True
+
+    G.driver.handlers[G.tr("Nest parts on a sheet")] = nest
+    msgs = G.run_command(scenario, "CAM2027_Nest")
+    proj = G.project()
+    objs = [o for o in sheetmod.vector_objects(proj.doc) if sheetmod.closed_wires(o)]
+    if len(objs) != 12:
+        G.problem(scenario, "expected 12 drawings after nesting, found %d" % len(objs))
+        return
+    faces = [nesting.silhouette(o.Shape) for o in objs]
+    worst = min(faces[a].distToShape(faces[b])[0] for a in range(len(faces)) for b in range(a + 1, len(faces)))
+    out = [o.Label for o, f in zip(objs, faces) if f.BoundBox.XMin < 10 - 1e-6 or f.BoundBox.YMin < 10 - 1e-6
+           or f.BoundBox.XMax > 290 + 1e-6 or f.BoundBox.YMax > 210 + 1e-6]
+    G.log("  12 L parts nested, min gap %.2f mm, outside the margin: %s" % (worst, out))
+    if worst < 5.0 - 1e-3 or out:
+        G.problem(scenario, "nested parts too close (%.2f mm) or outside the sheet margin %s" % (worst, out))
+    if any(k == "warn" for k, _t in msgs):
+        G.problem(scenario, "nesting warned: %s" % msgs)
+    G.driver.handlers[G.tr("Stock & fixture")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
+    G.run_command(scenario, "CAM2027_StockFixture")
+    proj = G.project()
+    if not proj.has_job:
+        G.problem(scenario, "no sheet job after the nesting")
+        return
+    sb = proj.stock_bounds()
+    if (round(sb["length"], 3), round(sb["width"], 3)) != (300.0, 220.0):
+        G.problem(scenario, "sheet job is not the nesting sheet: %s" % sb)
+    G.check_docks(scenario)
+

@@ -213,7 +213,7 @@ class TestNesting(unittest.TestCase):
         disc = drawing("Disc", Part.Wire(Part.makeCircle(30, V(-200, 40, 0))))
         tri = drawing("Tri", Part.makePolygon([V(0, 0, 0), V(150, 0, 0), V(0, 40, 0), V(0, 0, 0)]))
         proj.doc.recompute()
-        rep = proj.nest_drawings([rect, disc, tri], 300, 200, spacing=5, margin=10, copies={rect: 3})
+        rep = proj.nest_drawings([rect, disc, tri], 300, 200, spacing=5, margin=10, copies={rect: 3}, true_shape=False)
         self.assertEqual(rep["unplaced"], [])
         self.assertEqual(len(rep["placed"]), 5)  # 3 rectangles, disque, triangle
         boxes = []
@@ -249,6 +249,26 @@ class TestNesting(unittest.TestCase):
         rep2 = proj2.nest_drawings(objs, 230, 200, spacing=5, margin=10)
         self.assertEqual((len(rep2["placed"]), len(rep2["unplaced"])), (4, 2))
         proj2.close()
+        # mêmes dessins par forme réelle (défaut) : dans la marge, silhouettes à 5 mm au moins, même utilisation
+        proj3 = Project.create("Nesting shapes", lib)
+        rect = proj3.doc.addObject("Part::Feature", "Rect")
+        rect.Shape = Part.makePolygon([V(500, 500, 0), V(600, 500, 0), V(600, 550, 0), V(500, 550, 0), V(500, 500, 0)])
+        disc = proj3.doc.addObject("Part::Feature", "Disc")
+        disc.Shape = Part.Wire(Part.makeCircle(30, V(-200, 40, 0)))
+        tri = proj3.doc.addObject("Part::Feature", "Tri")
+        tri.Shape = Part.makePolygon([V(0, 0, 0), V(150, 0, 0), V(0, 40, 0), V(0, 0, 0)])
+        proj3.doc.recompute()
+        rep3 = proj3.nest_drawings([rect, disc, tri], 300, 200, spacing=5, margin=10, copies={rect: 3})
+        self.assertEqual((len(rep3["placed"]), rep3["unplaced"]), (5, []))
+        faces = [Part.makeFace(sheetmod.closed_wires(o), "Part::FaceMakerBullseye") for o in rep3["objects"]]
+        for f in faces:
+            bb = f.BoundBox
+            self.assertTrue(bb.XMin >= 10 - 1e-6 and bb.YMin >= 10 - 1e-6 and bb.XMax <= 290 + 1e-6 and bb.YMax <= 190 + 1e-6)
+        for a in range(len(faces)):
+            for b in range(a + 1, len(faces)):
+                self.assertGreaterEqual(faces[a].distToShape(faces[b])[0], 5 - 1e-3)
+        self.assertAlmostEqual(rep3["utilization"], expected, places=3)
+        proj3.close()
 
 
 if __name__ == "__main__":

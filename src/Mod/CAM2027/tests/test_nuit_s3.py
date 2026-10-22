@@ -343,3 +343,107 @@ class TestKeepOut(unittest.TestCase):
         out, hits = keepout.reroute(cmds, [("box", bb)], 3.0, 2.0)
         self.assertEqual(len(out), 2)
         self.assertEqual(hits[0][0], 2)
+
+
+def l_shape(name, doc):
+    V = FreeCAD.Vector
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = Part.makePolygon([V(0, 0, 0), V(60, 0, 0), V(60, 20, 0), V(20, 20, 0), V(20, 60, 0), V(0, 60, 0),
+                                  V(0, 0, 0)])
+    return obj
+
+
+class TestShapeNesting(unittest.TestCase):
+    def _check_layout(self, objs, spacing, rects):
+        """Silhouettes à ``spacing`` au moins l'une de l'autre, chacune dans le rectangle de son panneau."""
+        from cam2027.project import nesting
+
+        faces = [nesting.silhouette(o.Shape) for o in objs]
+        for f, (x0, y0, x1, y1) in zip(faces, rects):
+            bb = f.BoundBox
+            self.assertGreaterEqual(bb.XMin, x0 - 1e-6)
+            self.assertGreaterEqual(bb.YMin, y0 - 1e-6)
+            self.assertLessEqual(bb.XMax, x1 + 1e-6)
+            self.assertLessEqual(bb.YMax, y1 + 1e-6)
+        worst = float("inf")
+        for a in range(len(faces)):
+            for b in range(a + 1, len(faces)):
+                if rects[a] != rects[b]:
+                    continue
+                worst = min(worst, faces[a].distToShape(faces[b])[0])
+        self.assertGreaterEqual(worst, spacing - 1e-3)
+        return worst
+
+    def test_twenty_l_parts(self):
+        """20 pièces en L sur un panneau 300 x 300 : toutes posées par forme réelle (16 en rectangles), utilisation
+        supérieure d'au moins 15 %, aucune pièce à moins de 5 mm d'une autre, toutes dans la marge."""
+        lib = starter_library()
+        reps = {}
+        for true_shape in (False, True):
+            proj = Project.create("Nest L %s" % true_shape, lib)
+            part = l_shape("L", proj.doc)
+            proj.doc.recompute()
+            t0 = time.time()
+            rep = proj.nest_drawings([part], 300, 300, spacing=5, margin=10, copies={part: 20}, true_shape=true_shape)
+            rep["time"] = time.time() - t0
+            if true_shape:
+                self.assertEqual(rep["unplaced"], [])
+                self.assertEqual(rep["sheets"], 1)
+                gap = self._check_layout(rep["objects"], 5.0, [(10, 10, 290, 290)] * len(rep["objects"]))
+                angles = sorted({round(p[3]) % 360 for p in rep["placed"]})
+                rep["gap"] = gap
+                rep["angles"] = angles
+            reps[true_shape] = rep
+            proj.close()
+        rect, shape = reps[False], reps[True]
+        self.assertEqual(len(rect["placed"]), 16)
+        self.assertEqual(len(shape["placed"]), 20)
+        self.assertGreaterEqual(shape["utilization"], 1.15 * rect["utilization"])
+        print("nesting 20 L on 300x300: rectangles %d parts %.1f %%, true shape %d parts %.1f %% (+%.0f %%) in %.1f s, "
+              "min gap %.2f mm, angles %s" % (len(rect["placed"]), 100 * rect["utilization"], len(shape["placed"]),
+                                              100 * shape["utilization"],
+                                              100 * (shape["utilization"] / rect["utilization"] - 1), shape["time"],
+                                              shape["gap"], shape["angles"]))
+
+    def test_several_sheets(self):
+        """Panneau trop petit : les pièces suivantes vont sur un 2e panneau posé à droite du premier."""
+        from cam2027.project import nesting
+
+        lib = starter_library()
+        proj = Project.create("Nest sheets", lib)
+        part = l_shape("L", proj.doc)
+        proj.doc.recompute()
+        rep = proj.nest_drawings([part], 160, 160, spacing=4, margin=5, copies={part: 10}, max_sheets=3)
+        self.assertEqual(rep["unplaced"], [])
+        self.assertGreaterEqual(rep["sheets"], 2)
+        rects = []
+        for o in rep["objects"]:
+            k = rep["sheet_of"][o.Label]
+            x0 = k * (160 + nesting.SHEET_GAP)
+            rects.append((x0 + 5, 5, x0 + 155, 155))
+        self._check_layout(rep["objects"], 4.0, rects)
+        # un seul panneau permis : le reste est rapporté, jamais posé dehors
+        proj2 = Project.create("Nest one sheet", lib)
+        part = l_shape("L", proj2.doc)
+        proj2.doc.recompute()
+        rep2 = proj2.nest_drawings([part], 160, 160, spacing=4, margin=5, copies={part: 10})
+        self.assertEqual(len(rep2["placed"]) + len(rep2["unplaced"]), 10)
+        self.assertTrue(rep2["unplaced"])
+        self.assertEqual(len(rep2["placed"]), len([o for o in rep["objects"] if rep["sheet_of"][o.Label] == 0]))
+        proj.close()
+        proj2.close()
+
+    def test_holes_filled_and_circle(self):
+        """Silhouette : un trou n'accueille pas de pièce ; un disque reste un disque (pas son carré englobant)."""
+        from cam2027.project import nesting
+
+        V = FreeCAD.Vector
+        ring = Part.Compound([Part.Wire(Part.makeCircle(30, V(0, 0, 0))), Part.Wire(Part.makeCircle(10, V(0, 0, 0)))])
+        face = nesting.silhouette(ring)
+        self.assertAlmostEqual(face.Area, 3.141592653589793 * 900, delta=1.0)
+        mask, _x0, _y0 = nesting.raster_mask(face, 0.0, 1.0, 0.0)
+        import math
+
+        self.assertLess(mask.sum(), 0.9 * mask.size)  # coins du carré englobant libres
+        self.assertGreaterEqual(mask.sum(), math.pi * 30 ** 2)  # prudent : au moins la surface du disque
+

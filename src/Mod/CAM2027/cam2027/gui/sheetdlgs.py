@@ -185,7 +185,15 @@ class NestDialog(QtWidgets.QDialog):
         form.addRow(tr("Spacing between parts (mm)"), self.spacing)
         form.addRow(tr("Margin to the sheet edge (mm)"), self.margin)
         form.addRow("", self.rotate)
-        _hint(form, tr("Parts are placed by their bounding rectangles (not true-shape nesting). Do it before Stock & fixture; the sheet will have this size."))
+        self.mode = QtWidgets.QComboBox()  # imbrication par forme réelle (S3)
+        self.mode.addItem(tr("True shape, rotation by 15°"), 15.0)
+        self.mode.addItem(tr("True shape, rotation by 90°"), 90.0)
+        self.mode.addItem(tr("Bounding rectangles (fast)"), 0.0)
+        form.addRow(tr("Nesting"), self.mode)
+        self.sheets = QtWidgets.QSpinBox()
+        self.sheets.setRange(1, 50)
+        form.addRow(tr("Sheets at most"), self.sheets)
+        _hint(form, tr("True shape: the parts fit into each other's recesses (outline offset by half the spacing, holes not used). Extra sheets are laid to the right of the first one; the job uses the first sheet. Do it before Stock & fixture; the sheet will have this size."))
         self.buttons = _buttons(self, form)
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(bool(self.objects) and not proj.has_job)
 
@@ -195,5 +203,7 @@ class NestDialog(QtWidgets.QDialog):
             if self.table.item(r, 0).checkState() == QtCore.Qt.Checked:
                 chosen.append(obj)
                 copies[obj] = self.table.cellWidget(r, 2).value()
+        step = self.mode.currentData()
         return self.proj.nest_drawings(chosen, self.width.value(), self.length.value(), self.spacing.value(),
-                                       self.margin.value(), self.rotate.isChecked(), copies)
+                                       self.margin.value(), self.rotate.isChecked(), copies,
+                                       true_shape=bool(step), angle_step=step or 90.0, max_sheets=self.sheets.value())

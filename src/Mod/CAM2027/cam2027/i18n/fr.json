@@ -1057,5 +1057,13 @@
   "Y to (mm)": "Y à (mm)",
   "Zone": "Zone",
   "{op}: a cut enters the keep-out zone {zone}, command {n}, tip at X{x} Y{y} Z{z}": "{op} : une coupe entre dans la zone interdite {zone}, commande {n}, pointe en X{x} Y{y} Z{z}",
-  "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export": "Boîtes que les rapides passent par-dessus (brides, zones dessinées) ; une coupe qui entre dans une zone bloque l'export"
+  "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export": "Boîtes que les rapides passent par-dessus (brides, zones dessinées) ; une coupe qui entre dans une zone bloque l'export",
+  "True shape, rotation by 15°": "Forme réelle, rotation par pas de 15°",
+  "True shape, rotation by 90°": "Forme réelle, rotation par pas de 90°",
+  "Bounding rectangles (fast)": "Rectangles englobants (rapide)",
+  "Nesting": "Imbrication",
+  "Sheets at most": "Panneaux au plus",
+  "True shape: the parts fit into each other's recesses (outline offset by half the spacing, holes not used). Extra sheets are laid to the right of the first one; the job uses the first sheet. Do it before Stock & fixture; the sheet will have this size.": "Forme réelle : les pièces s'emboîtent dans les creux les unes des autres (contour décalé de la moitié de l'espacement, trous non utilisés). Les panneaux suivants sont posés à droite du premier ; le job prend le premier panneau. À faire avant « Brut et montage » ; le panneau aura cette taille.",
+  "Place the 2D drawings on sheets of a given size (true shape or bounding rectangles, rotations, copies)": "Place les dessins 2D sur des panneaux de taille donnée (forme réelle ou rectangles englobants, rotations, copies)",
+  "Sheets used: {n} (laid to the right of the first one).": "Panneaux utilisés : {n} (posés à droite du premier)."
 }

@@ -238,6 +238,13 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   non contrôlé automatiquement. Le mâle est un projet séparé, à enregistrer.
 - **Imbrication** : par rectangles englobants seulement (une pièce en L ne reçoit rien dans son
   creux) ; un seul panneau ; pièces non placées rapportées. À faire avant « Brut et montage ».
+  Mise à jour S3 : **forme réelle** par défaut. Grille d'environ 250 000 cellules par panneau (0,5 à 2 mm) :
+  chaque bord de pièce peut perdre jusqu'à `res·√2/2` mm (0,4 mm sur 300 × 300) ; grand panneau
+  (1220 × 2440, grille de 2 mm) : calcul plus long (une FFT par rotation et par pièce, non mesuré sur
+  50 pièces). Placement glouton (dessus le plus bas), pas d'optimisation globale de l'ordre ; les trous des
+  pièces ne reçoivent pas d'autres pièces ; sens du fil non géré. Plusieurs panneaux : posés côte à côte
+  dans le document ; le job « panneau » est créé sur le premier : les dessins des panneaux suivants sont
+  alors hors du brut (à déplacer dans un autre projet avant « Brut et montage » ; pas de job par panneau).
 
 ## 4e axe
 

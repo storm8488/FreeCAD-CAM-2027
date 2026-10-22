@@ -738,7 +738,7 @@ class Inlay(_Base):
 class Nest(_Base):
     atelier = "measure"
     text = "Nest parts on a sheet"
-    tooltip = "Place the 2D drawings on a sheet of a given size (bounding rectangles, 90° rotation, copies)"
+    tooltip = "Place the 2D drawings on sheets of a given size (true shape or bounding rectangles, rotations, copies)"
 
     @_undoable
     def Activated(self):
@@ -751,6 +751,8 @@ class Nest(_Base):
         rep = _sheet_dialog(proj, "NestDialog")
         if rep:
             lines = [tr("Placed: {n} part(s), sheet use {u} %.", n=len(rep["placed"]), u="%.0f" % (100 * rep["utilization"]))]
+            if rep.get("sheets", 1) > 1:
+                lines.append(tr("Sheets used: {n} (laid to the right of the first one).", n=rep["sheets"]))
             if rep["unplaced"]:
                 lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
             lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
