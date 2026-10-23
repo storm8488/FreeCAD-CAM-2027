@@ -278,6 +278,28 @@ class TestBitmap(unittest.TestCase):
             self.assertGreater(edges.distToShape(v)[0], 1.5 - 0.02, (x, y))
         self.assertFalse(any(math.hypot(x - 30, y - 30) < 8.0 for x, y, z in pts))  # trou de l'anneau intact
 
+    def test_trace_close_shapes_do_not_cross(self):
+        """Encoche de 4 mm dans le dessus d'un bloc, carré posé dans l'encoche à 1 mm du fond, simplification
+        grossière (5 mm) : la simplification seule efface l'encoche et fait passer le bloc dans le carré (face
+        invalide, V-carving en échec sur un dragon vectorisé) ; le tracé resimplifie le bloc plus finement,
+        sans contact, et le vecteur donne des faces valides."""
+        from cam2027.project import bitmap, vectors
+
+        def grey(i, j):
+            block = 10 <= i <= 110 and 5 <= j <= 30 and not (40 <= i <= 70 and j >= 27)
+            square = 45 <= i <= 65 and 28 <= j <= 50
+            return 0.0 if block or square else 1.0
+
+        png = write_image(os.path.join(self.tmp, "notch.png"), 120, 60, grey)
+        raw = bitmap.trace(png, 119.0, tolerance=0.0)
+        self.assertTrue(bitmap._contacts([bitmap._simplify_loop(p, 5.0) for p in raw]))  # cas qui croisait
+        loops = bitmap.trace(png, 119.0, tolerance=5.0)
+        self.assertEqual(len(loops), 2)
+        self.assertEqual(bitmap._contacts(loops), set())
+        face = vectors.faces_of(bitmap.loops_shape(loops))
+        self.assertEqual(len(face.Faces), 2)
+        self.assertTrue(face.isValid())
+
     def test_photo_vcarve_depth_follows_grey(self):
         """Dégradé blanc -> noir de gauche à droite, 60 x 40 mm, profondeur maximale 2 mm au V-bit 60° : sur la
         carte de hauteur simulée, profondeur du trait = 2 x sombre (± 0,1), jamais plus de 2 mm, rien dans le blanc."""

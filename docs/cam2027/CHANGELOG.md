@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **Vectorisation d'image : contours qui se croisaient**. La simplification des contours (écart 0,05 mm) faisait
+  parfois se recouper un contour (bords proches d'un dessin détaillé) : la face du vecteur était invalide et le
+  V-carving du dragon vectorisé finissait en « Échec » (2 669 commandes, parcours incomplet). Les contours recoupés
+  sont maintenant resimplifiés plus finement (au pire gardés tels que tracés) : faces valides, V-carving calculé.
 - **Relief depuis une image : profondeur par IA**. Troisième choix « Hauteur d'après » : un modèle Depth Anything V2
   Small (licence Apache 2.0, format ONNX) estime la profondeur de l'image (proche = haut), le volume d'une photo ou
   d'une illustration ; une part des niveaux de gris y creuse les traits d'un dessin. Rien n'est installé d'office :

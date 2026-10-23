@@ -125,6 +125,51 @@ def _simplify_loop(loop, tol):
     return a[:-1] + b[:-1]
 
 
+def _seg_dist(a, b, c, d):
+    def cross(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    if cross(a, b, c) * cross(a, b, d) < 0 and cross(c, d, a) * cross(c, d, b) < 0:
+        return 0.0
+
+    def point(p, s0, s1):
+        dx, dy = s1[0] - s0[0], s1[1] - s0[1]
+        n = dx * dx + dy * dy
+        t = 0.0 if n < 1e-24 else min(max(((p[0] - s0[0]) * dx + (p[1] - s0[1]) * dy) / n, 0.0), 1.0)
+        return math.hypot(s0[0] + t * dx - p[0], s0[1] + t * dy - p[1])
+
+    return min(point(a, c, d), point(b, c, d), point(c, a, b), point(d, a, b))
+
+
+def _contacts(loops, eps=1e-4, cell=2.0):
+    """Indices des contours qui coupent ou touchent (à ``eps`` près) un autre contour ou eux-mêmes : la
+    simplification peut faire se croiser deux bords proches, ce qui rend la face du vecteur invalide."""
+    grid = {}
+    for k, pts in enumerate(loops):
+        n = len(pts)
+        for s in range(n):
+            (x0, y0), (x1, y1) = pts[s], pts[(s + 1) % n]
+            for gx in range(int(math.floor((min(x0, x1) - eps) / cell)), int(math.floor((max(x0, x1) + eps) / cell)) + 1):
+                for gy in range(int(math.floor((min(y0, y1) - eps) / cell)), int(math.floor((max(y0, y1) + eps) / cell)) + 1):
+                    grid.setdefault((gx, gy), []).append((k, s))
+    bad, seen = set(), set()
+    for segs in grid.values():
+        for u in range(len(segs)):
+            k, s = segs[u]
+            n = len(loops[k])
+            for v in range(u + 1, len(segs)):
+                l, t = segs[v]
+                if k == l and (abs(s - t) <= 1 or abs(s - t) == n - 1):
+                    continue  # segments voisins du même contour
+                if (k in bad and l in bad) or (segs[u], segs[v]) in seen:
+                    continue
+                seen.add((segs[u], segs[v]))
+                m = len(loops[l])
+                if _seg_dist(loops[k][s], loops[k][(s + 1) % n], loops[l][t], loops[l][(t + 1) % m]) < eps:
+                    bad.update((k, l))
+    return bad
+
+
 def trace(path, width, threshold=0.5, invert=False, cells=400, tolerance=0.05, min_area=1.0, origin=(0.0, 0.0)):
     """Contours fermés (listes de points en mm, X à droite, Y en haut) des zones **sombres** de l'image
     (``invert`` : zones claires), largeur de l'image = ``width`` mm, coin bas gauche = ``origin``.
@@ -144,15 +189,21 @@ def trace(path, width, threshold=0.5, invert=False, cells=400, tolerance=0.05, m
     pad = np.zeros((nx + 2, ny + 2))
     pad[1:-1, 1:-1] = field
     scale = float(width) / (nx - 1) if nx > 1 else 1.0
-    loops = []
+    raw = []
     for loop in _chain(_segments(pad, level)):
         pts = [((i - 1) * scale + origin[0], (j - 1) * scale + origin[1]) for i, j in loop]
         pts = [(min(max(x, origin[0]), origin[0] + width), min(max(y, origin[1]), origin[1] + (ny - 1) * scale)) for x, y in pts]
-        if abs(_area(pts)) < min_area:
-            continue
-        pts = _simplify_loop(pts, tolerance)
-        if len(pts) >= 3 and abs(_area(pts)) >= min_area:
-            loops.append(pts)
+        if abs(_area(pts)) >= min_area:
+            raw.append(pts)
+    simple = [_simplify_loop(pts, tolerance) for pts in raw]
+    # contours recoupés par la simplification : resimplifiés plus finement, au pire gardés tels que tracés
+    for attempt in range(1, 5):
+        bad = _contacts(simple)
+        if not bad:
+            break
+        for k in bad:
+            simple[k] = raw[k] if attempt == 4 else _simplify_loop(raw[k], tolerance / 4 ** attempt)
+    loops = [pts for pts in simple if len(pts) >= 3 and abs(_area(pts)) >= min_area]
     if not loops:
         raise UserError("nothing traced: no area darker than the threshold (try another threshold or invert)")
     return loops
