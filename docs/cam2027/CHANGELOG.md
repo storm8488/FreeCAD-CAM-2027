@@ -100,6 +100,25 @@
   (`project/sim_rotary.py`) au lieu de refuser ; brut simulé et entailles affichés autour de l'axe. Poche à parois
   radiales : aucune entaille, volume enlevé à 0,4 % du volume de la poche ; poche descendue de 0,4 mm de trop :
   entaille de 0,40 mm signalée.
+- **[C5]** **Essais machine** préparés et validés sans machine : `tests/machine_trials/build.py` (FreeCADCmd 1.1.4,
+  ~7 min) génère 9 projets et 10 G-code GRBL dans une planche de bois tendre 200 × 150 × 18 (palpage du coin,
+  poche, poche à deux profondeurs, perçage, ébauche et finition 3D d'un dôme, V-carving d'un texte, contour avec
+  attaches et entrée en arc, recto-verso avec goujons), un outil par fichier, chacun avec sa fiche (cotes au pied
+  à coulisse : valeur attendue et valeur simulée sur la matière à 0,05 mm, toutes dans la tolérance). Guide
+  `docs/cam2027/ESSAIS-MACHINE.md` : ordre, montage, origine, vitesses de départ, `$C` et marche à vide,
+  critères de réussite, que faire en cas d'écart.
+- **[C5]** **Passage dans un interpréteur GRBL 1.1** : `tests/machine_trials/validate.py` envoie chaque fichier
+  ligne par ligne (ok / error) au simulateur GRBL 1.1h de cncjs, lu sans modification avec une horloge simulée
+  (`grbl_check.js`, < 1 s pour les 10 fichiers), plus les règles de GRBL que le simulateur n'applique pas
+  (commentaires, codes et lettres, groupes modaux, mots répétés ou inutilisés, 80 caractères). Les 10 fichiers :
+  0 `error:`, 0 `ALARM`, chaque position de fin de mouvement, la position finale et l'enveloppe identiques au
+  parcours CAM2027 (avant postprocesseur) à 0,0005 mm. Test `test_jour4_c5` (ignoré sans Node).
+- **[C5]** Défauts constatés pendant la préparation (non corrigés, hors zone C5, prouvés par des tests
+  `expectedFailure`) : poche avec les réglages initiaux (motif zigzag de FreeCAD, sans passe de paroi) : festons
+  de ~0,5 mm sur les parois, poche 40 × 30 à 39,55 mm (les essais utilisent « zigzag + contour ») ; ébauche 3D
+  « pièce entière » d'un relief dans une cuvette fermée au ras du brut : aucun mouvement de coupe, sans message
+  (le dôme des essais est dans une cuvette ouverte sur un chant, limitée à une zone).
+
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule
