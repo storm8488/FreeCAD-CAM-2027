@@ -170,12 +170,14 @@ class SetupSheetPdf(base._Base):
         if not path.lower().endswith(".pdf"):
             path += ".pdf"
         try:
-            with base.busy(tr("Computing the toolpaths...")):
+            with base.busy(tr("Computing the toolpaths...")) as b:
                 _text, analysis, issues = proj.preview_gcode()
                 sheet = exportmod.prep_sheet(proj, [], analysis, issues, [path])
                 exportmod.write_pdf(sheet, path, title=proj.doc.Label)
         except Exception as exc:
             base._warn(tr("Operation failed: {error}", error=tr_msg(exc)))
+            return
+        if b.stopped:
             return
         base._info(tr("Setup sheet written: {file}", file=path))
 

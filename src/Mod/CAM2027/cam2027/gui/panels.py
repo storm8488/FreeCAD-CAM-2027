@@ -1523,6 +1523,10 @@ class _StepLabel(QtWidgets.QLabel):
 
 
 def refresh_project_panel():
+    from ..project import operations as opsmod
+
+    if opsmod.GuiTicker.defer(refresh_project_panel):  # calcul en cours : une fois à la fin
+        return
     dock = _docks.get("Project")
     if dock is not None and _is_alive(dock):
         dock.widget().refresh()

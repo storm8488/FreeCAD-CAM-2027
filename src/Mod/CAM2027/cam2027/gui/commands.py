@@ -16,6 +16,7 @@ from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
 from ..project import export as exportmod
 from ..project import undo
+from ..project import operations as opsmod
 from ..project.machine import MachineProfile
 from . import state, panels, standalone, theme, welcome
 
@@ -42,16 +43,20 @@ def _need_project():
 
 
 class busy(object):
-    """Curseur d'attente + message dans la barre d'état pendant une action longue (import, calcul...).
+    """Curseur d'attente + fenêtre de progression avec « Arrêter le calcul » pendant une action longue (import,
+    calcul...). L'interface garde la main toutes les 0,1 s (``opsmod.GuiTicker``) ; la fenêtre est modale :
+    seuls son bouton et le rafraîchissement passent.
 
-    ``stoppable`` (projet) : fenêtre de progression avec « Arrêter le calcul » ; l'adaptative de FreeCAD rend
-    la main à l'interface pendant son calcul et s'arrête quand ``StopProcessing`` passe à vrai."""
+    « Arrêter » lève ``ComputationStopped`` dans le calcul, retenue à la sortie du bloc (``stopped`` vrai, le
+    code qui suit le bloc ne doit pas utiliser un résultat incomplet). ``stoppable`` (projet) : l'adaptative de
+    FreeCAD s'arrête aussi quand ``StopProcessing`` passe à vrai."""
 
     def __init__(self, message, stoppable=None):
         self.message = message
         self.project = stoppable
         self.dialog = None
         self.stopped = False
+        self.ticker = None
 
     def __enter__(self):
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -59,28 +64,32 @@ class busy(object):
             FreeCADGui.getMainWindow().statusBar().showMessage(self.message)
         except Exception:
             pass
-        if self.project is not None:
-            self.dialog = QtWidgets.QProgressDialog(self.message, tr("Stop the computation"), 0, 0,
-                                                    FreeCADGui.getMainWindow())
-            self.dialog.setWindowTitle("CAM2027")
-            self.dialog.setMinimumDuration(0)
-            self.dialog.setWindowModality(QtCore.Qt.WindowModal)
-            self.dialog.canceled.connect(self.stop)
-            self.dialog.show()
+        parent = QtWidgets.QApplication.activeModalWidget() or FreeCADGui.getMainWindow()
+        self.dialog = QtWidgets.QProgressDialog(self.message, tr("Stop the computation"), 0, 0, parent)
+        self.dialog.setWindowTitle("CAM2027")
+        self.dialog.setMinimumDuration(0)
+        self.dialog.setWindowModality(QtCore.Qt.WindowModal)
+        self.dialog.canceled.connect(self.stop)
+        self.dialog.show()
         QtWidgets.QApplication.processEvents()
+        self.ticker = opsmod.GuiTicker()
+        self.ticker.__enter__()
         return self
 
     def stop(self):
         self.stopped = True
+        opsmod.GuiTicker.stop()
         try:
-            for op in self.project.operations():
+            for op in self.project.operations() if self.project is not None else ():
                 base = self.project.base_operation(op)
                 if "StopProcessing" in base.PropertiesList:
                     base.StopProcessing = True
         except Exception:
             pass
 
-    def __exit__(self, *_exc):
+    def __exit__(self, exc_type, *_exc):
+        if self.ticker is not None:
+            self.ticker.__exit__()
         if self.dialog is not None:
             self.dialog.canceled.disconnect(self.stop)
             self.dialog.close()
@@ -90,24 +99,19 @@ class busy(object):
             FreeCADGui.getMainWindow().statusBar().clearMessage()
         except Exception:
             pass
+        stopped_here = exc_type is not None and issubclass(exc_type, opsmod.ComputationStopped)
+        self.stopped = self.stopped or stopped_here
+        if self.stopped and self.project is not None:
+            opsmod.hold_stopped(self.project.doc)
         if self.stopped:
-            _warn(tr("Computation stopped: the operations concerned have an incomplete toolpath (recompute them later)."))
-        return False
+            _warn(tr("Computation stopped: the operations concerned have an incomplete toolpath (recompute them later).")
+                  if self.project is not None else tr("Computation stopped."))
+        return stopped_here
 
 
-#: au-delà, le brut simulé affiché est simplifié (erreur 0,01 mm) : 700 000 triangles alourdissaient la vue 3D
+#: au-delà, le brut simulé affiché est simplifié (erreur 0,01 mm, ``sim.display_mesh``) : 700 000 triangles
+#: alourdissaient la vue 3D
 DISPLAY_MESH_MAX_FACETS = 100000
-
-
-def _display_mesh(mesh):
-    """Maillage pour l'affichage seulement : zones planes simplifiées (``decimate``, 0,01 mm au plus), 10 fois
-    moins de triangles sur une grande pièce ; le contrôle garde sa carte de hauteur complète."""
-    if mesh.CountFacets > DISPLAY_MESH_MAX_FACETS:
-        try:
-            mesh.decimate(0.01, 0.9)
-        except Exception:
-            pass
-    return mesh
 
 
 def _after_change():
@@ -202,10 +206,13 @@ class ImportModel(_Base):
             import_relief_dialog(proj, path)  # une image devient un relief 3D
             return
         try:
-            with busy(tr("Importing {file}...", file=os.path.basename(path))):
+            with busy(tr("Importing {file}...", file=os.path.basename(path))) as b:
                 res = proj.import_model(path)
         except Exception as exc:  # erreurs OCC / lecteurs
             _warn(tr("Import failed: {error}", error=tr_msg(exc)))
+            return
+        if b.stopped:
+            panels.refresh_project_panel()  # pas de recalcul : il referait ce qui vient d'être arrêté
             return
         FreeCADGui.SendMsgToActiveView("ViewFit")
         _after_change()
@@ -387,8 +394,10 @@ class StockFixture(_Base):
                     faces = sum(len(o.Shape.Faces) for o in sel if hasattr(o, "Shape"))
                     if len(sel) > 1 and all(o.TypeId.startswith("Part::") for o in sel):
                         if faces <= MERGE_MAX_FACES:
-                            with busy(tr("Merging the {n} bodies into one part...", n=len(sel))):
+                            with busy(tr("Merging the {n} bodies into one part...", n=len(sel))) as b:
                                 merged = proj.merge_models(sel, proj.doc.Label)
+                            if b.stopped:
+                                return
                             if merged is not None:
                                 sel = [merged]
                             else:
@@ -542,7 +551,10 @@ class AddOperation(_Base):
         explicit = bool(base)
         if not base:
             models = list(proj.job.Model.Group)  # toute la pièce : chaque objet du modèle, pas seulement le premier
-            auto = opsmod.auto_geometry(k, models)
+            with busy(tr("Computing the toolpaths...")) as b:
+                auto = opsmod.auto_geometry(k, models)  # fonds des alvéoles d'un plateau : 0,5 s
+            if b.stopped:
+                return
             if auto is None:
                 base = [(m, []) for m in models]
             elif auto:
@@ -574,11 +586,14 @@ class AddOperation(_Base):
                     part_params.setdefault("UseOutline", True)  # trous débouchants laissés ouverts (Fusion)
                 added_ops.append(proj.add_operation(k, part_label, a.id, preset.currentData(), base=part_base,
                                                     params=part_params, index_deg=index_deg))
-            with busy(tr("Computing the toolpaths..."), stoppable=proj):
+            with busy(tr("Computing the toolpaths..."), stoppable=proj) as b:
                 proj.compute()
         except Exception as exc:
             _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
             _after_change()
+            return
+        if b.stopped:  # opérations gardées, parcours incomplet (message de busy) ; pas de recalcul
+            panels.refresh_project_panel()
             return
         skipped = []
         if not explicit:
@@ -700,14 +715,22 @@ def open_wrap_dialog(proj, op=None, rotary=False):
         dlg = WrapDialog(proj, FreeCADGui.getMainWindow(), selected=selected, op=op)
     if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
         return None
+    result = None
     try:
         with undo.transaction(proj.doc, dlg.windowTitle()):
-            result = dlg.apply()
-            proj.compute()
+            with busy(tr("Computing the toolpaths..."), stoppable=proj) as b:
+                result = dlg.apply()
+                proj.compute()
     except Exception as exc:
         _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
         _after_change()
         return None
+    if b.stopped:
+        panels.refresh_project_panel()  # pas de recalcul : il referait ce qui vient d'être arrêté
+        return result
+    if result is None:
+        _after_change()
+        return result
     rec = proj.registry.get(result.Name, {})
     if rec.get("warnings"):
         _info("\n".join(tr_msg(w) for w in rec["warnings"]))
@@ -721,16 +744,17 @@ def _sheet_dialog(proj, dlg_cls, **kw):
     dlg = getattr(sheetdlgs, dlg_cls)(proj, FreeCADGui.getMainWindow(), **kw)
     if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
         return None
-    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
     try:
-        result = dlg.apply()
-        if proj.has_job:
-            proj.compute()
+        with busy(tr("Computing the toolpaths..."), stoppable=proj if proj.has_job else None) as b:
+            result = dlg.apply()
+            if proj.has_job:
+                proj.compute()
     except Exception as exc:
         _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
         return None
-    finally:
-        QtWidgets.QApplication.restoreOverrideCursor()
+    if b.stopped:
+        panels.refresh_project_panel()  # pas de recalcul : il referait ce qui vient d'être arrêté
+        return None
     _after_change()
     return result
 
@@ -926,6 +950,7 @@ class BulkEdit(_Base):
         try:
             changes = dlg.changes()
             ops = dlg.operations()
+            ignored = {}
             with busy(tr("Computing the toolpaths...")):
                 ignored = dlg.apply()
                 proj.compute()
@@ -954,8 +979,11 @@ class Compute(_Base):
         if not proj.has_job:
             _warn(tr("Define the stock & fixture first (this creates the job)."))
             return
-        with busy(tr("Computing the toolpaths..."), stoppable=proj):
+        with busy(tr("Computing the toolpaths..."), stoppable=proj) as b:
             results = proj.compute()
+        if b.stopped:
+            panels.refresh_project_panel()  # pas de recalcul : il referait ce qui vient d'être arrêté
+            return
         bad = [r["name"] for r in results if not r["valid"] or r["commands"] == 0]
         if bad:
             _warn(tr("Operations without a valid toolpath: {names}", names=", ".join(bad)))
@@ -1026,20 +1054,26 @@ class Export(_Base):
 
         def do_preview():
             try:
-                text, analysis, issues = proj.preview_gcode(post.currentText(), args.text())
+                with busy(tr("Post-processing..."), stoppable=proj) as b:
+                    text, analysis, issues = proj.preview_gcode(post.currentText(), args.text())
+                    rows = exportmod.export_summary(proj, analysis, issues)
+                    sheet_text = exportmod.prep_sheet(proj, [], analysis, issues, [out.text()])
             except Exception as exc:
                 checks.setPlainText(tr("Post-processing failed: {error}", error=tr_msg(exc)))
                 return
+            if b.stopped:
+                return
             preview.setPlainText(text)
-            summary.setHtml(_format_summary(exportmod.export_summary(proj, analysis, issues)))
+            summary.setHtml(_format_summary(rows))
             checks.setHtml(_format_checks(analysis, issues))
-            sheet.setPlainText(exportmod.prep_sheet(proj, [], analysis, issues, [out.text()]))
+            sheet.setPlainText(sheet_text)
 
         def do_export():
             try:
                 from ..project import twosided
 
-                result = twosided.exporter(proj)(out.text(), post.currentText(), args.text())  # recto-verso : un fichier par face
+                with busy(tr("Post-processing..."), stoppable=proj) as b:
+                    result = twosided.exporter(proj)(out.text(), post.currentText(), args.text())  # recto-verso : un fichier par face
             except ExportBlocked as exc:
                 checks.setHtml(_format_checks(exc.analysis, exc.issues))
                 tabs.setCurrentWidget(checks)
@@ -1047,6 +1081,8 @@ class Export(_Base):
                 return
             except Exception as exc:
                 _warn(tr("Export failed: {error}", error=tr_msg(exc)))
+                return
+            if b.stopped:
                 return
             preview.setPlainText(result["gcode"])
             checks.setHtml(_format_checks(result["analysis"], result["issues"]))
@@ -1207,15 +1243,15 @@ class MaterialCheck(_Base):
         if not proj.has_job or not proj.operations():
             _warn(tr("No operation to simulate."))
             return
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         try:
-            rep = proj.material_check()
-            show_material_result(proj, rep)
+            with busy(tr("Material and collision check...")) as b:
+                rep = proj.material_check()
+                show_material_result(proj, rep)
         except Exception as exc:
             _warn(tr("Material check failed: {error}", error=tr_msg(exc)))
             return
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
+        if b.stopped:
+            return
         _info(material_report_text(rep))
 
 
@@ -1227,7 +1263,7 @@ def show_material_result(proj, rep):
     doc = proj.doc
     objs = []
     for name, mesh, colour in (
-            ("CAM2027SimStock", _display_mesh(sim.surface_mesh(proj.last_zmap)), (0.62, 0.66, 0.72)),
+            ("CAM2027SimStock", sim.display_mesh(proj.last_zmap, DISPLAY_MESH_MAX_FACETS), (0.62, 0.66, 0.72)),
             ("CAM2027SimGouges", sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights,
                                                                                 rep["tolerance"]), lift=0.02),
              (0.9, 0.15, 0.15))):

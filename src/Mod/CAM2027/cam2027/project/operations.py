@@ -835,16 +835,25 @@ def patch_adaptive_slicing(mod=None):
     parallel_adaptive.install(mod)
 
 
-def keep_gui_alive(_state={"t": 0.0}):
-    """Rend la main à l'interface (au plus toutes les 0,2 s) pendant un calcul long en Python : sans cela
+#: intervalle de l'horloge qui rend la main à l'interface pendant un calcul (``GuiTicker``)
+TICK_S = 0.1
+
+
+#: rendus de main à l'interface : nombre et durée totale (mesure de leur coût, scénarios C2)
+GUI_STATS = {"calls": 0, "seconds": 0.0, "stops": []}
+
+
+def keep_gui_alive(_state={"t": 0.0, "inside": False}):
+    """Rend la main à l'interface (au plus toutes les ``TICK_S``) pendant un calcul long en Python : sans cela
     Windows marque CAM2027 « Ne répond pas » et « Arrêter le calcul » reste sans effet. La fenêtre de
     progression est modale : seuls son bouton et le rafraîchissement passent."""
     import time
 
     now = time.time()
-    if now - _state["t"] < 0.2:
+    if now - _state["t"] < TICK_S or _state["inside"]:
         return
     _state["t"] = now
+    _state["inside"] = True  # appel venu d'un événement traité ici : pas de traitement imbriqué
     try:
         import FreeCAD
 
@@ -854,6 +863,158 @@ def keep_gui_alive(_state={"t": 0.0}):
             FreeCADGui.updateGui()
     except Exception:
         pass
+    finally:
+        _state["inside"] = False
+        GUI_STATS["calls"] += 1
+        GUI_STATS["seconds"] += time.time() - now
+
+
+class ComputationStopped(BaseException):
+    """« Arrêter le calcul » : levée dans le calcul en cours, comme Ctrl+C. Dérive de ``BaseException`` : les
+    ``except Exception`` de FreeCAD et de CAM2027 ne la retiennent pas."""
+
+
+class GuiTicker(object):
+    """Pendant un calcul lancé de l'interface (``busy``), rend la main à l'interface toutes les ``TICK_S``,
+    quel que soit le code Python qui calcule (FreeCAD ou CAM2027) : un fil d'horloge simule un signal
+    (``PyErr_SetInterruptEx``) dont le gestionnaire Python tourne dans le fil principal entre deux
+    instructions Python et appelle ``keep_gui_alive``. Un appel C++ long (OpenCascade, libarea) n'est pas
+    interrompu : la main revient à sa fin.
+
+    ``stop()`` (bouton « Arrêter le calcul ») : le gestionnaire lève ``ComputationStopped`` dans le calcul en
+    cours, comme Ctrl+C, jamais pendant le rendu de la main ni la fermeture du bloc (``PROTECTED``) ; de
+    nouveau toutes les ``RESTOP_S`` tant que le calcul continue (une opération FreeCAD qui échoue n'arrête pas
+    le recalcul du document : la suivante est arrêtée à son tour). Rien hors de l'interface ; les blocs
+    imbriqués partagent la même horloge."""
+
+    SIGNAL = "SIGBREAK"  # Windows ; SIGUSR1 ailleurs
+    RESTOP_S = 0.3
+    #: fonctions (noms de code) dans lesquelles l'arrêt n'est jamais levé
+    PROTECTED = {"keep_gui_alive", "__exit__"}
+
+    _depth = 0
+    _deferred = []
+    _thread = None
+    _halt = None
+    _stop = False
+    _stopped_at = 0.0
+    _old = None
+    _signum = None
+
+    def __enter__(self):
+        import signal
+        import threading
+
+        cls = GuiTicker
+        cls._depth += 1
+        if cls._depth > 1 or not _gui_up() or threading.current_thread() is not threading.main_thread():
+            return self
+        signum = getattr(signal, cls.SIGNAL, None) or getattr(signal, "SIGUSR1", None)
+        if signum is None:
+            return self
+        try:
+            cls._old = signal.signal(signum, cls._handler)
+        except (ValueError, OSError):
+            return self
+        cls._signum = signum
+        cls._stop = False
+        cls._stopped_at = 0.0
+        cls._halt = threading.Event()
+        cls._thread = threading.Thread(target=cls._run, args=(cls._halt, signum), name="CAM2027-gui-ticker",
+                                       daemon=True)
+        cls._thread.start()
+        return self
+
+    def __exit__(self, *_exc):
+        import signal
+
+        cls = GuiTicker
+        cls._depth -= 1
+        if cls._depth > 0 or cls._thread is None:
+            return False
+        cls._halt.set()
+        cls._thread.join(2.0)
+        cls._thread = None
+        cls._stop = False
+        deferred, cls._deferred = cls._deferred, []
+        for fn in deferred:
+            try:
+                fn()
+            except Exception:
+                pass
+        try:
+            signal.signal(cls._signum, cls._old if cls._old is not None else signal.SIG_DFL)
+        except (ValueError, OSError, TypeError):
+            pass
+        return False
+
+    @classmethod
+    def stop(cls):
+        cls._stop = True
+
+    @classmethod
+    def active(cls):
+        return cls._thread is not None
+
+    @classmethod
+    def defer(cls, fn):
+        """Pendant le calcul, ``fn`` (rafraîchissement d'un panneau : 0,5 s pour 21 000 commandes) est appelée
+        une seule fois, à la fin, au lieu de chaque rendu de main. Vrai si différée."""
+        if cls._thread is None:
+            return False
+        if fn not in cls._deferred:
+            cls._deferred.append(fn)
+        return True
+
+    @classmethod
+    def _handler(cls, _signum, frame):
+        import time
+
+        if cls._thread is None:
+            return
+        f, protected = frame, False
+        while f is not None:
+            if f.f_code.co_name in cls.PROTECTED:
+                protected = True
+                break
+            f = f.f_back
+        if cls._stop:
+            now = time.time()
+            if not protected and now - cls._stopped_at >= cls.RESTOP_S:
+                cls._stopped_at = now
+                GUI_STATS["stops"].append("%s:%d" % (frame.f_code.co_name, frame.f_lineno))
+                raise ComputationStopped()
+            return
+        if not protected:
+            keep_gui_alive()
+
+    @classmethod
+    def _run(cls, halt, signum):
+        import ctypes
+
+        trip = ctypes.pythonapi.PyErr_SetInterruptEx
+        trip.argtypes = [ctypes.c_int]
+        trip.restype = ctypes.c_int
+        while not halt.wait(TICK_S):
+            trip(signum)
+
+
+def hold_stopped(doc):
+    """Après « Arrêter le calcul » : les objets en échec restent « à recalculer » pour FreeCAD, et le premier
+    recalcul venu (même hors calcul, sans fenêtre de progression) referait tout ce qui vient d'être arrêté
+    (7 s figées sur le plateau). Leur état « à recalculer » est retiré ; ``Project.compute`` les reprend."""
+    for o in doc.Objects:
+        if "Invalid" in o.State and "Touched" in o.State:
+            o.purgeTouched()
+
+
+def _gui_up():
+    try:
+        import FreeCAD
+
+        return bool(FreeCAD.GuiUp)
+    except Exception:
+        return False
 
 
 #: empreinte SHA-1 de ``_workingEdgeHelperRoughing`` de FreeCAD 1.1.4 (le remplacement n'est installé que sur

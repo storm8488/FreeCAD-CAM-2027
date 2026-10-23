@@ -1260,6 +1260,9 @@ class Project(object):
         opsmod.patch_surface_keepalive()
         opsmod.patch_pocket()
         restmod.sync(self)  # reprise de matière : opérations précédentes à jour (ordre, activation)
+        for o in self.doc.Objects:
+            if "Invalid" in o.State and "Touched" not in o.State:
+                o.touch()  # arrêtées par « Arrêter le calcul » (operations.hold_stopped)
         self.doc.recompute()
         if indexing.refresh(self):  # positionnements A : dégagements maintenant calculés, brut à jour
             self.doc.recompute()

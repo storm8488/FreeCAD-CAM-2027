@@ -1467,5 +1467,8 @@
   "{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)": "{n} mouvement(s) de coupe broche arrêtée (avant M3, après M5 ou à S0)",
   "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée.",
   "{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision": "{n} ligne(s) de plus de {m} caractères (GRBL 1.1 error:11) : réduire la précision du postprocesseur",
-  "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin"
+  "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin",
+  "Computation stopped.": "Calcul arrêté.",
+  "Material and collision check...": "Contrôle matière et collisions...",
+  "Post-processing...": "Postprocesseur..."
 }

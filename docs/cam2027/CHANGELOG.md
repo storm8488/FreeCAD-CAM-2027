@@ -2,6 +2,20 @@
 
 ## Non publié
 
+- **[C2]** **Interface vivante pendant les calculs** : pendant toute action longue (ajout d'opération, recalcul,
+  contrôle matière, export, imbrication, rotatif, perçage, incrustation, import...), une horloge rend la main à
+  l'interface toutes les 0,1 s, quel que soit le code Python qui calcule (FreeCAD ou CAM2027), avec la fenêtre de
+  progression et « Arrêter le calcul » partout (le contrôle matière et l'export n'en avaient pas). Sonde d'horloge
+  Qt sur le plateau `bitTray3030+v7` (pire pause) : contrôle matière 2,35 → 0,21 s, export 0,78 → 0,23 s,
+  imbrication 1,34 → 0,20 s, rotatif 1,12 → 0,29 s, incrustation 1,24 → 0,17 s, perçage 0,79 → 0,22 s, ajout
+  d'une poche 2,30 → 0,94 s (reste un seul appel d'OpenCascade, `getEnvelope`, voir LIMITS). Le maillage d'affichage du brut simulé (2 appels C++ d'un tenant, 2,9 s) est construit
+  dans un processus (même maillage, vérifié point à point). Le panneau Projet n'est plus rafraîchi à chaque rendu
+  de main (0,5 s par rafraîchissement à 21 000 commandes) mais une fois à la fin : durées des commandes inchangées.
+- **[C2]** **« Arrêter le calcul »** : 5,8 s après le clic sur le plateau (seule l'adaptative s'arrêtait, et le
+  recalcul qui suivait l'arrêt refaisait tout hors de la fenêtre de progression) → 0,5 s ; contrôle matière 0,2 s.
+  Les opérations arrêtées gardent un parcours incomplet et ne sont plus recalculées en cachette ; « Recalculer »
+  les reprend.
+
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

@@ -848,6 +848,76 @@ def surface_mesh(zmap, mask=None, lift=0.0):
     return Mesh.Mesh([tuple(p) for p in tri.tolist()])
 
 
+_DISPLAY_WORKER = """
+import os, sys, types
+bindir = os.path.dirname(sys.executable)
+for d in (bindir, os.path.join(os.path.dirname(bindir), "lib")):
+    if os.path.isdir(d):
+        sys.path.insert(0, d)
+        os.add_dll_directory(d)
+sys.path.insert(0, sys.argv[1])
+import numpy as np
+import FreeCAD, Mesh
+from cam2027.project import sim
+tmp = sys.argv[2]
+zmap = types.SimpleNamespace(**{k: np.load(os.path.join(tmp, k + ".npy")) for k in ("xs", "ys", "top")})
+mesh = sim.surface_mesh(zmap)
+if mesh.CountFacets > int(sys.argv[3]):
+    mesh.decimate(float(sys.argv[4]), float(sys.argv[5]))
+mesh.write(os.path.join(tmp, "part.bms"))
+os.replace(os.path.join(tmp, "part.bms"), os.path.join(tmp, "out.bms"))
+"""
+
+
+def display_mesh(zmap, max_facets, tolerance=0.01, reduction=0.9, in_process=None):
+    """Maillage d'affichage du brut simulé : ``surface_mesh(zmap)``, simplifié par ``decimate(tolerance,
+    reduction)`` de FreeCAD au-delà de ``max_facets`` triangles. Quand l'interface tourne, calculé dans un
+    processus ``bin/python.exe`` (deux appels C++ : 0,6 s puis 2,3 s pour le plateau, interface figée
+    sinon) : même code, carte échangée en ``.npy`` et maillage en ``.bms`` natif (exacts)."""
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+
+    import Mesh
+
+    np = _np()
+    exe = os.path.join(FreeCAD.getHomePath(), "bin", "python.exe")
+    if in_process is None:
+        in_process = not FreeCAD.GuiUp
+    if in_process or not os.path.isfile(exe):
+        mesh = surface_mesh(zmap)
+        if mesh.CountFacets > max_facets:
+            try:
+                mesh.decimate(tolerance, reduction)
+            except Exception:
+                pass
+        return mesh
+    from .operations import keep_gui_alive
+
+    tmp = tempfile.mkdtemp(prefix="cam2027-mesh-")
+    proc = None
+    try:
+        for k in ("xs", "ys", "top"):
+            np.save(os.path.join(tmp, k + ".npy"), getattr(zmap, k))
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        proc = subprocess.Popen([exe, "-c", _DISPLAY_WORKER, root, tmp, str(int(max_facets)), repr(tolerance),
+                                 repr(reduction)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        while proc.poll() is None:
+            keep_gui_alive()
+            time.sleep(0.02)
+        out = os.path.join(tmp, "out.bms")
+        if proc.returncode != 0 or not os.path.isfile(out):
+            return display_mesh(zmap, max_facets, tolerance, reduction, in_process=True)
+        return Mesh.Mesh(out)
+    finally:
+        if proc is not None and proc.poll() is None:
+            proc.kill()  # « Arrêter le calcul »
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 #: entailles vérifiées en 3D (distance exacte à la pièce) : les plus profondes d'abord, au plus tant de colonnes
 REFINE_MAX_CELLS = 4000
 #: portée de la recherche de la surface autour d'une colonne entaillée (mm) ; au-delà, l'entaille verticale
