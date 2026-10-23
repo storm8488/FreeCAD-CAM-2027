@@ -62,6 +62,23 @@
 - **[C2]** Statistiques des parcours (panneau Projet) : le cache plein (64 parcours) était vidé en entier, et le
   rafraîchissement suivant relisait tous les parcours hors de la fenêtre de progression (0,5 s pour 21 000
   commandes, vu en fin de longue session) ; seule la plus ancienne entrée part maintenant.
+- **[C3]** Reprise des angles : la chute de la boule (OpenCamLib) indexait le modèle triangulé pour **chaque**
+  passe (`setSTL` reconstruit l'arbre des triangles : 68 des 76 s sur le chauffage Vz330, 178 passes). Un seul
+  calculateur pour toutes les passes, mêmes points. Avec le filtre en fils : chauffage 84–94 s → 8 s, plateau
+  58 s → 13–21 s, plaque des tests 42 s → 4,6 s, disque 22 s → 3 s ; G-code identique octet pour octet,
+  entaille 0, au plus 0,44 Go de plus que FreeCAD au repos.
+- **[C3]** Reprise des angles plus rapide, parcours identique (G-code octet pour octet sur la plaque des tests,
+  le disque WobbleX, le plateau et le chauffage, 2 répétitions, entaille 0) : le filtre de la boule de référence
+  traite ensemble les deux lignes symétriques du noyau et se répartit sur 8 fils (`scipy.ndimage` rend le GIL).
+  Plaque 42,1 → 4,8 s, disque 22,0 → 3,5 s, plateau 57,9 → 41,0 s ; filtre du chauffage 14 → 1,3 s.
+- **[C3]** Relief depuis une image : la surface du dessus (la même B-spline par les points de la grille) est
+  découpée en tuiles d'environ 8 × 8 points. OpenCascade triangulait la grande face d'un seul tenant en un temps
+  et une mémoire bien plus que proportionnels : à l'écart de la finition 3D (tolérance du job / 4), 23 s et
+  3,1 Go pour le relief 80 × 60 du test (`test_relief_from_image` culminait à 6,0 Go), plus de 6 Go pour un
+  disque à bord franc. Maintenant 0,3 s et 0,25 Go ; le test passe à 3,5 Go (dont 3 Go réservés sans être utilisés par
+  OpenBLAS au chargement de numpy, un tampon par cœur) en 19 s au lieu de 29. Hauteurs identiques à 10⁻¹⁴ mm près ; le volume
+  calculé suit maintenant celui du maillage (l'intégration d'une seule grande face se trompait de 0,13 %).
+  Tests `test_jour4_c3`.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

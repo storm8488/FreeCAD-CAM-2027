@@ -874,7 +874,8 @@ def main():
             + tuple(__import__("tests.gui_scenarios_b3", fromlist=["*"]).entries(sys.modules[__name__], files, tmp)) \
             + __import__("tests.gui_scenarios_b5", fromlist=["*"]).scenarios(globals(), files, tmp) \
             + __import__("tests.gui_scenarios_c1", fromlist=["*"]).scenarios(globals(), files, tmp) \
-            + __import__("tests.gui_scenarios_c2", fromlist=["*"]).scenarios(globals(), files, tmp):
+            + __import__("tests.gui_scenarios_c2", fromlist=["*"]).scenarios(globals(), files, tmp) \
+            + __import__("tests.gui_scenarios_c3", fromlist=["*"]).scenarios(globals(), files, tmp):
         if os.environ.get("CAM2027_SCENARIO_ONLY") and not name.startswith(os.environ["CAM2027_SCENARIO_ONLY"]):
             continue
         only = os.environ.get("CAM2027_SCENARIOS")  # liste « a;b » : seulement ces scénarios
