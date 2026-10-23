@@ -206,14 +206,16 @@ def drop_ball(shapes, lines, diameter, zmin, deflection=0.01, length=50.0):
             stl.addTriangle(ocl.Triangle(ocl.Point(va.x, va.y, va.z), ocl.Point(vb.x, vb.y, vb.z),
                                          ocl.Point(vc.x, vc.y, vc.z)))
     cutter = ocl.BallCutter(diameter, length)
+    # un seul PathDropCutter : ``setSTL`` reconstruit l'arbre de recherche des triangles (68 des 76 s sur le
+    # chauffage Vz330 quand il était appelé pour chacune des 178 passes) ; points identiques
+    pdc = ocl.PathDropCutter()
+    pdc.setSTL(stl)
+    pdc.setCutter(cutter)
+    pdc.setZ(zmin)
+    pdc.setSampling(SAMPLING)
     out = []
     for line in lines:
-        pdc = ocl.PathDropCutter()
-        pdc.setSTL(stl)
-        pdc.setCutter(cutter)
-        pdc.setZ(zmin)
-        pdc.setSampling(SAMPLING)
-        path = ocl.Path()
+        path = ocl.Path()  # référencé pendant ``run`` : OpenCamLib ne retient que son adresse
         for a, b in zip(line[:-1], line[1:]):
             path.append(ocl.Line(ocl.Point(float(a[0]), float(a[1]), 0.0), ocl.Point(float(b[0]), float(b[1]), 0.0)))
         pdc.setPath(path)

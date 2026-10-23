@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- **[C3]** Reprise des angles : la chute de la boule (OpenCamLib) indexait le modèle triangulé pour **chaque**
+  passe (`setSTL` reconstruit l'arbre des triangles : 68 des 76 s sur le chauffage Vz330, 178 passes). Un seul
+  calculateur pour toutes les passes, mêmes points. Avec le filtre en fils : chauffage 84–94 s → 8 s, plateau
+  58 s → 13–21 s, plaque des tests 42 s → 4,6 s, disque 22 s → 3 s ; G-code identique octet pour octet,
+  entaille 0, au plus 0,44 Go de plus que FreeCAD au repos.
 - **[C3]** Reprise des angles plus rapide, parcours identique (G-code octet pour octet sur la plaque des tests,
   le disque WobbleX, le plateau et le chauffage, 2 répétitions, entaille 0) : le filtre de la boule de référence
   traite ensemble les deux lignes symétriques du noyau et se répartit sur 8 fils (`scipy.ndimage` rend le GIL).

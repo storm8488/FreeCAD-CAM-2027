@@ -98,5 +98,67 @@ class TestPencilFilter(unittest.TestCase):
             pencil.FILTER_WORKERS = workers
 
 
+class TestPencilDrop(unittest.TestCase):
+    def test_one_tree_for_all_passes(self):
+        """Chute de la boule : le modèle OpenCamLib n'est indexé qu'une fois pour toutes les passes (``setSTL``
+        reconstruisait l'arbre des triangles pour chacune : 68 des 76 s sur le chauffage Vz330, 178 passes) ;
+        mêmes points qu'avec un ``PathDropCutter`` neuf par passe."""
+        from cam2027.project import pencil
+
+        ocl = pencil._ocl()
+        calls = []
+
+        class Counting(object):
+            def __init__(self):
+                self._pdc = ocl.PathDropCutter()
+
+            def setSTL(self, stl):
+                calls.append(1)
+                return self._pdc.setSTL(stl)
+
+            def __getattr__(self, name):
+                return getattr(self._pdc, name)
+
+        class Proxy(object):
+            PathDropCutter = Counting
+
+            def __getattr__(self, name):
+                return getattr(ocl, name)
+
+        shape = Part.makeBox(40, 30, 10).cut(Part.makeCylinder(8, 10, V(20, 15, 4)))
+        lines = [[(2.0 + k, 2.0), (2.0 + k, 28.0), (20.0, 15.0 + 0.5 * k)] for k in range(12)]
+        import numpy as np
+
+        lines = [np.array(l) for l in lines]
+        plain = pencil._ocl
+        pencil._ocl = lambda: Proxy()
+        try:
+            got = pencil.drop_ball([shape], lines, 6.0, -1.0)
+        finally:
+            pencil._ocl = plain
+        self.assertEqual(len(calls), 1)
+        want = []
+        stl = ocl.STLSurf()
+        verts, tris = shape.copy(True, False).tessellate(0.01)
+        for a, b, c in tris:
+            va, vb, vc = verts[a], verts[b], verts[c]
+            stl.addTriangle(ocl.Triangle(ocl.Point(va.x, va.y, va.z), ocl.Point(vb.x, vb.y, vb.z),
+                                         ocl.Point(vc.x, vc.y, vc.z)))
+        cutter = ocl.BallCutter(6.0, 50.0)
+        for line in lines:
+            pdc = ocl.PathDropCutter()
+            pdc.setSTL(stl)
+            pdc.setCutter(cutter)
+            pdc.setZ(-1.0)
+            pdc.setSampling(pencil.SAMPLING)
+            path = ocl.Path()
+            for a, b in zip(line[:-1], line[1:]):
+                path.append(ocl.Line(ocl.Point(float(a[0]), float(a[1]), 0.0), ocl.Point(float(b[0]), float(b[1]), 0.0)))
+            pdc.setPath(path)
+            pdc.run()
+            want.append(pencil._simplify([(p.x, p.y, p.z) for p in pdc.getCLPoints()]))
+        self.assertEqual(got, want)
+
+
 if __name__ == "__main__":
     unittest.main()
