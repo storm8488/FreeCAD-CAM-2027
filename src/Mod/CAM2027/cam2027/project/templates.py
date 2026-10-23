@@ -192,7 +192,7 @@ def apply(proj, template):
     """Recrée les opérations du modèle sur le dessin du projet (job du panneau déjà créé).
     Retourne ``{"created": [(op, comment)], "missing": [Msg]}`` ; ne calcule pas."""
     if not proj.has_job:
-        raise UserError("Define the stock & fixture first (this creates the job).")
+        raise UserError("Define the stock and fixture first (this creates the job).")
     lib = proj.library
     created, missing = [], []
     for entry in template.get("operations", []):

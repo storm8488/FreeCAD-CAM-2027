@@ -16,7 +16,7 @@ import os
 import re
 
 from .. import compat
-from ..i18n import Msg
+from ..i18n import Msg, UserError
 
 _WORD = re.compile(r"([A-Za-z])\s*([-+]?\d*\.?\d+)")
 _COMMENT = re.compile(r"\(.*?\)")
@@ -85,10 +85,10 @@ def postprocess(job, post_name=None, post_args=None):
     if post_args is not None:
         job.PostProcessorArgs = post_args
     if not job.PostProcessor:
-        raise ValueError("aucun postprocesseur sélectionné")
+        raise UserError("no post-processor selected")
     processor = PostProcessorFactory.get_post_processor(job, job.PostProcessor)
     if processor is None:
-        raise ValueError("postprocesseur introuvable : %s" % job.PostProcessor)
+        raise UserError("post-processor not found: {post}", post=job.PostProcessor)
     with _identity_placement_passthrough():
         sections = processor.export()
     out = []

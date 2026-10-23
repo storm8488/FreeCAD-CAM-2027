@@ -39,10 +39,8 @@ def freecad_version_string():
 def check_minimum_version():
     v = freecad_version()
     if v < FREECAD_MIN_VERSION:
-        raise RuntimeError(
-            "CAM2027 requiert FreeCAD >= %s (version détectée : %s)"
-            % (".".join(map(str, FREECAD_MIN_VERSION)), freecad_version_string())
-        )
+        raise RuntimeError("CAM2027 requires FreeCAD >= {required} (found: {found})".format(required=".".join(map(str, FREECAD_MIN_VERSION)), found=freecad_version_string()),
+                           )
     return v
 
 

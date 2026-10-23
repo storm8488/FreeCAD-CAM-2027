@@ -208,7 +208,7 @@ def _run_parallel(jobs, progress):
 
     exe = _python()
     if exe is None:
-        raise RuntimeError("python.exe absent")
+        raise RuntimeError("python.exe not found")
     n = max(1, min(MAX_WORKERS, (os.cpu_count() or 2) - 1, len(jobs)))
     # répartition par coût (taille des contours), le plus gros d'abord vers le processus le moins chargé
     loads = [[0, []] for _k in range(n)]

@@ -17,6 +17,8 @@ la mise à l'échelle DPI, aucune multiplication manuelle.
 import json
 import os
 
+from ..i18n import UserError
+
 _RES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Resources")
 TOKENS_PATH = os.path.join(_RES, "theme", "tokens.json")
 ICON_DIR = os.path.join(_RES, "icons", "atelier")
@@ -48,7 +50,7 @@ def preference():
 
 def set_preference(value):
     if value not in THEMES:
-        raise ValueError("thème inconnu : %r" % (value,))
+        raise UserError("unknown theme: {value}", value=repr(value))
     import FreeCAD
 
     FreeCAD.ParamGet("User parameter:BaseApp/Preferences/CAM2027").SetString("Theme", value)

@@ -161,7 +161,7 @@ class OperationEditor(QtWidgets.QDialog):
                 self.tabs.addTab(_scrolled(self._params_tab(by_group[key])), tr(label))
         self.dressup_boxes = {}
         if self.kind in _DRESSUP_KINDS:
-            self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit & tabs"))
+            self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit and tabs"))
         from . import restlimit
 
         self.rest_limit = restlimit.add_tab(self)  # reprise de matière, limiter à une zone

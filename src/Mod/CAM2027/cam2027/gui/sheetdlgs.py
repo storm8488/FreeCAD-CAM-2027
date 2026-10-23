@@ -208,7 +208,7 @@ class NestDialog(QtWidgets.QDialog):
         self.sheets = QtWidgets.QSpinBox()
         self.sheets.setRange(1, 50)
         form.addRow(tr("Sheets at most"), self.sheets)
-        _hint(form, tr("True shape: the parts fit into each other's recesses (outline offset by half the spacing, holes not used). Extra sheets are laid to the right of the first one; the job uses the first sheet. Do it before Stock & fixture; the sheet will have this size."))
+        _hint(form, tr("True shape: the parts fit into each other's recesses (outline offset by half the spacing, holes not used). Extra sheets are laid to the right of the first one; the job uses the first sheet. Do it before Stock and fixture; the sheet will have this size."))
         self.buttons = _buttons(self, form)
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(bool(self.objects) and not proj.has_job)
 

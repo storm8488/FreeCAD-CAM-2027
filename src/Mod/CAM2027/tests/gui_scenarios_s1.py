@@ -72,9 +72,9 @@ def scenario_rest_and_area(g, scenario, files):
         ed.reject()
         return
     titles = [ed.tabs.tabText(i) for i in range(ed.tabs.count())]
-    if g.tr("Rest & area") not in titles:
-        g.problem(scenario, "no 'Rest & area' tab in the editor: %s" % titles)
-    ed.tabs.setCurrentIndex(titles.index(g.tr("Rest & area")))
+    if g.tr("Rest and area") not in titles:
+        g.problem(scenario, "no 'Rest and area' tab in the editor: %s" % titles)
+    ed.tabs.setCurrentIndex(titles.index(g.tr("Rest and area")))
     tab.rest_box.setChecked(True)
     tab.ignore.setValue(0.1)
     g.pump(0.2)
@@ -112,7 +112,7 @@ def scenario_rest_and_area(g, scenario, files):
     for key, value in (("xmin", b["xmin"] - 1), ("ymin", b["ymin"] - 1), ("xmax", xmid), ("ymax", b["ymax"] + 1)):
         tab.rect[key].setValue(value)
     g.combo_select(tab.keep, True)
-    ed.tabs.setCurrentIndex([ed.tabs.tabText(i) for i in range(ed.tabs.count())].index(g.tr("Rest & area")))
+    ed.tabs.setCurrentIndex([ed.tabs.tabText(i) for i in range(ed.tabs.count())].index(g.tr("Rest and area")))
     g.pump(0.2)
     ed.grab().save(os.path.join(g.OUT, "dialogs", "s1_area_tab.png"))
     ed.accept()

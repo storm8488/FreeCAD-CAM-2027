@@ -701,7 +701,7 @@ def scenario_stock_undo(scenario, files):
     G.driver.open_files.append(files["step"])
     G.run_command(scenario, "CAM2027_ImportModel")
     doc = G.project().doc
-    _undo_step(scenario, "Stock & fixture", doc, lambda: G.run_command(scenario, "CAM2027_StockFixture"))
+    _undo_step(scenario, "Stock and fixture", doc, lambda: G.run_command(scenario, "CAM2027_StockFixture"))
     G.driver.handlers[G.tr("Add operation")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "profile"), "profile"), True)[1]
 
     def add():
@@ -993,7 +993,7 @@ def scenario_undo_redo_job(scenario, files):
     _gui_undo(doc, redo=True)
     proj = G.project()
     if not proj.has_job:
-        G.problem(scenario, "B3 no job after Ctrl+Z, Ctrl+Y of Stock & fixture")
+        G.problem(scenario, "B3 no job after Ctrl+Z, Ctrl+Y of Stock and fixture")
         return
     _add(scenario, "millface")
     proj = G.project()

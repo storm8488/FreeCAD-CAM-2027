@@ -66,7 +66,7 @@ class ApplyTemplate(base._Base):
         if proj is None:
             return
         if not proj.has_job:
-            base._warn(tr("Define the stock & fixture first (this creates the job)."))
+            base._warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         path, _f = QtWidgets.QFileDialog.getOpenFileName(
             FreeCADGui.getMainWindow(), tr("Apply toolpath template"), _templates_dir(),
@@ -132,7 +132,7 @@ class PhotoVCarve(base._Base):
         if proj is None:
             return
         if not proj.has_job:
-            base._warn(tr("Define the stock & fixture first (this creates the job)."))
+            base._warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         path = _image_path(tr("Photo V-carve"))
         if not path:
@@ -192,7 +192,7 @@ class _DecorCommand(base._Base):
         if proj is None:
             return
         if not proj.has_job:
-            base._warn(tr("Define the stock & fixture first (this creates the job)."))
+            base._warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         sel = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
         res = base._sheet_dialog(proj, self.dialog, selected=sel)

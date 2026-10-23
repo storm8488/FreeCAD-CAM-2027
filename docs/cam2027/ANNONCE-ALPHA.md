@@ -7,7 +7,7 @@ Textes prêts à coller. Discord : moins de 2 000 caractères (limite d'un messa
 
 **CAM2027 — une FAO libre et gratuite pour vos CNC, en alpha : testeurs recherchés 🛠️**
 
-Salut ! Je développe **CAM2027**, un logiciel de FAO open source (LGPL) pour fraiseuses CNC de loisir et d'atelier : bois, plastique, alu, 3 axes et 4e axe. Il repose sur le moteur CAM de FreeCAD 1.1, avec une interface pensée pour l'usinage, en français, inspirée de Fusion 360 et d'Aspire.
+Salut ! Je développe **CAM2027**, un logiciel de FAO open source (LGPL) pour fraiseuses CNC de loisir et d'atelier : bois, plastique, alu, 3 axes et 4e axe. Il repose sur le moteur CAM de FreeCAD 1.1, avec une interface pensée pour l'usinage (français ou anglais), inspirée de Fusion 360 et d'Aspire.
 
 **Ce qu'il fait déjà**
 • Import STEP / STL / SVG / DXF / image, brut et montage (brides, zones interdites), bibliothèque d'outils
@@ -33,7 +33,7 @@ Merci d'avance ! 🙏
 
 **CAM2027 — free, open-source CAM for your CNC, alpha testers wanted 🛠️**
 
-Hi! I'm building **CAM2027**, an open-source (LGPL) CAM for hobby and workshop CNC routers: wood, plastics, aluminium, 3-axis and 4th axis. It runs on FreeCAD 1.1's CAM engine with a machining-first UI inspired by Fusion 360 and Aspire (French UI for now, English welcome in feedback).
+Hi! I'm building **CAM2027**, an open-source (LGPL) CAM for hobby and workshop CNC routers: wood, plastics, aluminium, 3-axis and 4th axis. It runs on FreeCAD 1.1's CAM engine with a machining-first UI inspired by Fusion 360 and Aspire, in English or French.
 
 **What it already does**
 • Import STEP / STL / SVG / DXF / images, stock and setup (clamps, keep-out zones), tool library
@@ -71,7 +71,7 @@ What works today:
 - Vector drawing, image tracing, Photo V-Carve, mouldings, flutes, textures, sheet nesting, two-sided jobs with dowels
 - Simulation and material check (gouges, leftover, holder / clamp collisions, rapids into stock), G-code checked before export
 
-**It's an alpha.** It produces real G-code, but it hasn't cut much yet: always simulate and dry-run above the part first. The UI is French for now (all strings go through translation, English is planned).
+**It's an alpha.** It produces real G-code, but it hasn't cut much yet: always simulate and dry-run above the part first. The UI is in English and French (it follows Windows; View > Language switches it).
 
 What I'd love from you: try it on a real part and a real machine, and tell me what breaks, what's missing and what's tedious. In the app, Help > Report a bug / Suggest a feature opens a GitHub form with your versions already filled in; attaching the file that shows the problem helps a lot. Comments here are fine too.
 
@@ -85,7 +85,7 @@ It's free and will stay free. If it helps you: https://buymeacoffee.com/damouse8
 
 Bonjour à tous,
 
-Je développe **CAM2027**, un logiciel de FAO libre et gratuit (licence LGPL) pour les fraiseuses CNC de loisir et d'atelier : bois, plastiques, aluminium, 3 axes et 4e axe. Il s'appuie sur le moteur CAM de FreeCAD 1.1 (calcul des parcours, post-processeurs, OpenCamLib), avec une interface en français pensée pour l'usinage, dans l'esprit de Fusion 360 et d'Aspire.
+Je développe **CAM2027**, un logiciel de FAO libre et gratuit (licence LGPL) pour les fraiseuses CNC de loisir et d'atelier : bois, plastiques, aluminium, 3 axes et 4e axe. Il s'appuie sur le moteur CAM de FreeCAD 1.1 (calcul des parcours, post-processeurs, OpenCamLib), avec une interface pensée pour l'usinage, en français ou en anglais, dans l'esprit de Fusion 360 et d'Aspire.
 
 **Ce qu'il fait aujourd'hui**
 - Projet guidé : import STEP / STL / SVG / DXF / image, brut et montage (brides, zones interdites), profil machine, bibliothèque d'outils avec vitesses par matière.
@@ -114,6 +114,6 @@ I've been working on **CAM2027**, an independent LGPL fork built on FreeCAD 1.1.
 
 Along the way I found a few things in the CAM workbench that might be worth upstreaming, for example in `Path/Op/Vcarve.py`: `isPartOfDomain` rebuilds its classifier on every Voronoi vertex (25 min on a traced drawing; an even-odd test on the diagram's own segments gives byte-identical G-code in 16 s), and depth is interpolated linearly along Voronoi edges touching a corner, where the true distance dips mid-edge (up to 0.8 mm overcut on a traced image). I'd be happy to open issues or PRs if that's useful.
 
-It's an alpha, French-first UI (strings translated through a catalogue). Feedback from people who know the CAM workbench would be very valuable: https://github.com/storm8488/FreeCAD-CAM-2027
+It's an alpha, with an English and French UI. Feedback from people who know the CAM workbench would be very valuable: https://github.com/storm8488/FreeCAD-CAM-2027
 
 Thanks to everyone who built the CAM workbench — CAM2027 would not exist without it.

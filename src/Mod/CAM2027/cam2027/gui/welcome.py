@@ -16,8 +16,12 @@ BRANDING = os.path.join(MOD_DIR, "Resources", "branding")
 
 
 def logo_path(effective_theme):
-    """Logo horizontal adapté au fond : texte clair sur thème sombre, texte foncé sur thème clair."""
-    return os.path.join(BRANDING, "cam2027-logo-%s.png" % ("dark" if effective_theme == "dark" else "light"))
+    """Logo horizontal adapté au fond (texte clair sur thème sombre, foncé sur thème clair) et à la langue (ligne
+    « FAO · USINAGE CNC » ou « CAM · CNC MACHINING »)."""
+    from .. import i18n
+
+    suffix = "" if i18n.language() == "fr" else "-en"
+    return os.path.join(BRANDING, "cam2027-logo-%s%s.png" % ("dark" if effective_theme == "dark" else "light", suffix))
 DEMO = os.path.join(MOD_DIR, "tests", "gui_demo.py")
 MAX_RECENT = 8
 

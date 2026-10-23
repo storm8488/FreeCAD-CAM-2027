@@ -6,6 +6,7 @@ course, avance maximale, plage de broche ni caractéristique de l'axe A n'est
 déduite du modèle de machine : elles proviennent uniquement de l'utilisateur.
 """
 
+from ..i18n import UserError, tr
 from ..ids import new_id
 from ..version import DATA_VERSION
 
@@ -46,7 +47,7 @@ class RotaryAxis(object):
         self.tailstock = kwargs.pop("tailstock", None)  # bool ou None
         self.present = kwargs.pop("present", False)
         if kwargs:
-            raise ValueError("axe rotatif : champs inconnus %s" % sorted(kwargs))
+            raise UserError("rotary axis: unknown fields {fields}", fields=sorted(kwargs))
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.FIELDS}
@@ -125,9 +126,9 @@ class MachineProfile(object):
         rotary = kwargs.pop("rotary", None)
         self.rotary = RotaryAxis.from_dict(rotary) if isinstance(rotary, dict) else (rotary or RotaryAxis())
         if kwargs:
-            raise ValueError("machine : champs inconnus %s" % sorted(kwargs))
+            raise UserError("machine: unknown fields {fields}", fields=sorted(kwargs))
         if self.controller not in CONTROLLERS:
-            raise ValueError("machine : contrôleur inconnu %r" % (self.controller,))
+            raise UserError("machine: unknown controller {controller}", controller=repr(self.controller))
 
     def unknown_fields(self):
         """Champs encore à renseigner (None)."""
@@ -168,8 +169,5 @@ def lunyee_4040_nova():
         spindle_power_w=1500,
         tool_change="manual",
         coolant_options=["none"],
-        notes=(
-            "Contrôleur supposé GRBL (piloté par CNCjs) : à confirmer. "
-            "Courses, avances maximales, plage de broche, pince et axe A : à renseigner."
-        ),
+        notes=tr("Controller assumed to be GRBL (driven by CNCjs): to be confirmed. Travel, maximum feeds, spindle range, collet and A axis: to be filled in."),
     )

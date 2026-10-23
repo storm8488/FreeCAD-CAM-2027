@@ -176,7 +176,7 @@ def scenario_pattern_default(h, scenario, files):
     h["driver"].handlers[h["tr"]("Toolpath pattern")] = fill
     h["run_command"](scenario, "CAM2027_Pattern")
     h["log"]("  pattern dialog: expected steps %s, seen %s" % (expected, [(s, ok, t[-120:]) for s, ok, t in seen]))
-    stock_word = h["tr"]("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & fixture) or use fewer copies.",
+    stock_word = h["tr"]("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock and fixture) or use fewer copies.",
                          n=2, d=0.0).split(":")[0][:12]
     if len(seen) != 2 or any(abs(a - b) > 1e-6 for a, b in zip(seen[0][0], expected)) or seen[0][1] \
             or stock_word not in seen[0][2] or not seen[1][1]:

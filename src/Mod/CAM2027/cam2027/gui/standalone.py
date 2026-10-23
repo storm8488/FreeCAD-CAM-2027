@@ -156,6 +156,7 @@ class CamOnlyManipulator(object):
             {"insert": "CAM2027_NewProject", "menuItem": "Std_Open"},
             {"insert": "CAM2027_ImportModel", "menuItem": "Std_RecentFiles", "after": ""},
             {"append": "CAM2027_Theme", "menuItem": "Std_DrawStyle"},
+            {"append": "CAM2027_Language", "menuItem": "CAM2027_Theme"},
             {"append": "CAM2027_AdvancedMode", "menuItem": "Std_DrawStyle"},
             {"append": "CAM2027_ResetLayout", "menuItem": "Std_DrawStyle"},
             {"append": "CAM2027_ReportBug", "menuItem": "Std_WhatsThis"},

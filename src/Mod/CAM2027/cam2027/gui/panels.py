@@ -915,9 +915,9 @@ class ProjectPanel(QtWidgets.QWidget):
 
     STEPS = (
         ("model", "1. Part", "Import model / drawing", "CAM2027_ImportModel"),
-        ("stock", "2. Stock & fixture", "Stock & fixture", "CAM2027_StockFixture"),
+        ("stock", "2. Stock and fixture", "Stock and fixture", "CAM2027_StockFixture"),
         ("ops", "3. Operations", "Add operation", "CAM2027_AddOperation"),
-        ("export", "4. Check & export", "Export G-code", "CAM2027_Export"),
+        ("export", "4. Check and export", "Export G-code", "CAM2027_Export"),
     )
 
     def __init__(self, parent=None):
@@ -1055,7 +1055,7 @@ class ProjectPanel(QtWidgets.QWidget):
         if proj is None:
             self.side_bar.refresh(None)
             self.title.setText("<b>%s</b><br>%s" % (tr("No CAM2027 project in the active document."),
-                                                     tr("Workflow: Project > Model > Stock & fixture > Operations > Export")))
+                                                     tr("Workflow: Project > Model > Stock and fixture > Operations > Export")))
             for key in self.step_rows:
                 self._set_step(key, False)
             self.steps.setText("")

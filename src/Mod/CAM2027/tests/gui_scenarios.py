@@ -269,7 +269,7 @@ def scenario_solid(scenario, path, tmp, strategy="profile"):
     run_command(scenario, "CAM2027_StockFixture")
     proj = project()
     if not proj.has_job:
-        problem(scenario, "Stock & fixture did not create the job")
+        problem(scenario, "Stock and fixture did not create the job")
         return
     if not steps_done().get("stock"):
         problem(scenario, "step 2 (stock) not checked")
@@ -362,7 +362,7 @@ def scenario_sheet(scenario, files, tmp):
         combo_select(find_combo_with(dlg, "sheet"), "sheet")
         return True
 
-    driver.handlers[tr("Stock & fixture")] = sheet
+    driver.handlers[tr("Stock and fixture")] = sheet
     run_command(scenario, "CAM2027_StockFixture")
     proj = project()
     if not proj.has_job:
@@ -646,7 +646,7 @@ def scenario_machine_and_wrap(scenario, files):
         combo_select(find_combo_with(dlg, "cylinder_x"), "cylinder_x")
         return True
 
-    driver.handlers[tr("Stock & fixture")] = round_bar
+    driver.handlers[tr("Stock and fixture")] = round_bar
     run_command(scenario, "CAM2027_StockFixture")
     proj = project()
     if not proj.has_job:
@@ -690,7 +690,7 @@ def scenario_inlay(scenario, files):
     proj = new_project(scenario, "InlayCmd")
     driver.open_files.append(files["svg"])
     run_command(scenario, "CAM2027_ImportModel")
-    driver.handlers[tr("Stock & fixture")] = lambda dlg: (combo_select(find_combo_with(dlg, "sheet"), "sheet"), True)[1]
+    driver.handlers[tr("Stock and fixture")] = lambda dlg: (combo_select(find_combo_with(dlg, "sheet"), "sheet"), True)[1]
     run_command(scenario, "CAM2027_StockFixture")
     from cam2027.project import sheet as sheetmod
 
@@ -746,7 +746,7 @@ def scenario_projection(scenario, tmp):
     run_command(scenario, "CAM2027_StockFixture")
     proj = project()
     if not proj.has_job:
-        problem(scenario, "Stock & fixture did not create the job")
+        problem(scenario, "Stock and fixture did not create the job")
         return
     sq = proj.doc.addObject("Part::Feature", "Square")
     sq.Shape = Part.makePolygon([V(22, 14, 10), V(38, 14, 10), V(38, 26, 10), V(22, 26, 10), V(22, 14, 10)])

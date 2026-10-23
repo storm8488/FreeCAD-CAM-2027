@@ -11,8 +11,10 @@ du logo source (« FreeCAD CAM ») est remplacé par le nom du logiciel, « CAM2
 
 Sorties (PNG, sauf l'icône) :
 - ``cam2027-mark.png`` : symbole seul, carré 512 px (fonds clairs et sombres) ;
-- ``cam2027-logo-light.png`` / ``cam2027-logo-dark.png`` : logo horizontal pour fond clair / sombre ;
-- ``cam2027-splash.png`` : écran de démarrage (fond clair, 760 × 380) ;
+- ``cam2027-logo-light.png`` / ``cam2027-logo-dark.png`` : logo horizontal pour fond clair / sombre (français) ;
+  ``…-en.png`` : mêmes logos, ligne « CAM · CNC MACHINING » (interface en anglais) ;
+- ``cam2027-splash.png`` : écran de démarrage (fond clair, 760 × 380), en anglais : il s'affiche avant que la
+  langue de l'interface soit connue ;
 - ``cam2027-icon.png`` : icône 256 px (symbole), base du ``.ico`` fabriqué à la construction ;
 - ``cam2027-programlogo.png`` : logo sombre de 28 px de haut (coin de la fenêtre principale).
 Les images produites sont enregistrées dans le dépôt : la construction n'a besoin d'aucune police.
@@ -60,15 +62,18 @@ def font(px, weight):
     return f
 
 
-def wordmark(mark, text_colour, blue, height=360):
-    """Logo horizontal : symbole + « CAM2027 » (CAM foncé / clair, 2027 bleu) + « FAO · USINAGE CNC »."""
+#: ligne sous le nom, par langue de l'interface
+TAGS = {"fr": "FAO · USINAGE CNC", "en": "CAM · CNC MACHINING"}
+
+
+def wordmark(mark, text_colour, blue, tag=TAGS["fr"], height=360):
+    """Logo horizontal : symbole + « CAM2027 » (CAM foncé / clair, 2027 bleu) + ``tag``."""
     mark_h = height
     m = mark.scaledToHeight(mark_h, QtCore.Qt.SmoothTransformation)
     name_font = font(int(height * 0.40), QtGui.QFont.Black)
     tag_font = font(int(height * 0.13), QtGui.QFont.DemiBold)
     tag_font.setLetterSpacing(QtGui.QFont.PercentageSpacing, 135)
     fm_name, fm_tag = QtGui.QFontMetrics(name_font), QtGui.QFontMetrics(tag_font)
-    tag = "FAO · USINAGE CNC"
     name_w = fm_name.horizontalAdvance("CAM2027")
     text_w = max(name_w, fm_tag.horizontalAdvance(tag))
     gap = int(height * 0.12)
@@ -108,7 +113,7 @@ def splash(logo_light, size=(760, 380)):
     p.setFont(font(15, QtGui.QFont.Normal))
     p.setPen(QtGui.QColor("#4B5563"))
     p.drawText(QtCore.QRect(0, int(h * 0.72), w, 24), QtCore.Qt.AlignHCenter,
-               "Fork indépendant basé sur FreeCAD et son atelier CAM - LGPL-2.1+")
+               "Independent fork based on FreeCAD and its CAM workbench - LGPL-2.1+")
     p.end()
     return out
 
@@ -125,9 +130,11 @@ def main(src, out_dir):
         "cam2027-icon.png": square(mark, 256, pad=0.02),
         "cam2027-logo-light.png": wordmark(mark, DARK_TEXT, BLUE),
         "cam2027-logo-dark.png": wordmark(mark, LIGHT_TEXT, BLUE_ON_DARK),
+        "cam2027-logo-light-en.png": wordmark(mark, DARK_TEXT, BLUE, TAGS["en"]),
+        "cam2027-logo-dark-en.png": wordmark(mark, LIGHT_TEXT, BLUE_ON_DARK, TAGS["en"]),
     }
-    outputs["cam2027-splash.png"] = splash(outputs["cam2027-logo-light.png"])
-    outputs["cam2027-programlogo.png"] = outputs["cam2027-logo-dark.png"].scaledToHeight(
+    outputs["cam2027-splash.png"] = splash(outputs["cam2027-logo-light-en.png"])
+    outputs["cam2027-programlogo.png"] = outputs["cam2027-logo-dark-en.png"].scaledToHeight(
         28, QtCore.Qt.SmoothTransformation)
     for name, image in outputs.items():
         path = os.path.join(out_dir, name)

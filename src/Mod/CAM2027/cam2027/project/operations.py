@@ -392,7 +392,7 @@ def thread_table(thread_type):
     mod = strategy_module("threadmill")
     filename = mod.ThreadTypeData.get(thread_type)
     if filename is None:
-        raise ValueError("type de filet sans table standard : %r" % (thread_type,))
+        raise UserError("thread type without a standard table: {thread_type}", thread_type=repr(thread_type))
     path = os.path.join(FreeCAD.getHomePath(), "Mod", "CAM", "Data", "Threads", filename)
     with open(path, "r", newline="", encoding="utf-8") as fp:
         return list(csv.DictReader(fp))
@@ -409,7 +409,7 @@ def thread_spec(thread_type, name, fit=50):
     """
     rows = [r for r in thread_table(thread_type) if r["name"] == name]
     if not rows:
-        raise ValueError("filet %r inconnu dans la table %s" % (name, thread_type))
+        raise UserError("thread {name} not in the {table} table", name=repr(name), table=thread_type)
     row = rows[0]
     f = float(fit) / 100.0
     major = float(row["dMajorMin"]) + (float(row["dMajorMax"]) - float(row["dMajorMin"])) * f
@@ -485,7 +485,7 @@ def resolve_params(kind, tool, params):
     if kind != "threadmill":
         return params
     if tool.tool_type != "threadmill":
-        raise ValueError("le fraisage de filets exige un outil « threadmill » (outil : %s)" % tool.tool_type)
+        raise UserError("thread milling needs a “threadmill” tool (tool: {tool_type})", tool_type=tool.tool_type)
     g = tool.geometry
     if "ThreadName" in params and "MajorDiameter" not in params:
         params.setdefault("ThreadType", DEFAULT_THREAD_TYPE)
@@ -494,8 +494,8 @@ def resolve_params(kind, tool, params):
         params["Pitch"] = g.pitch
     pitch = 25.4 / params["TPI"] if params.get("TPI") else float(params["Pitch"])
     if pitch < (g.pitch_min or 0.0) - 1e-6 or pitch > g.pitch + 1e-6:
-        raise ValueError("pas de filet %.3f mm hors de la plage de l'outil %s (%.3f-%.3f mm)"
-                         % (pitch, tool.name, g.pitch_min or 0.0, g.pitch))
+        raise UserError("thread pitch {pitch:.3f} mm outside the range of tool {tool} ({low:.3f}-{high:.3f} mm)",
+                        pitch=pitch, tool=tool.name, low=g.pitch_min or 0.0, high=g.pitch)
     return params
 
 
@@ -532,7 +532,8 @@ def _own_strategy_resources(strategy, kind):
 
 def strategy_module(kind):
     if kind not in STRATEGIES:
-        raise ValueError("stratégie inconnue : %r (disponibles : %s)" % (kind, ", ".join(sorted(STRATEGIES))))
+        raise UserError("unknown strategy: {kind} (available: {available})",
+                        kind=repr(kind), available=", ".join(sorted(STRATEGIES)))
     mod = importlib.import_module(STRATEGIES[kind]["module"])
     if kind in ("adaptive", "rough3d"):
         patch_adaptive_slicing(mod)

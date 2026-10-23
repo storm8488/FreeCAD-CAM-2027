@@ -16,6 +16,8 @@ import importlib
 
 import FreeCAD
 
+from ..i18n import UserError
+
 #: clé -> module, libellé, paramètres (nom -> genre pour l'éditeur), limites
 DRESSUPS = {
     "tags": {
@@ -126,11 +128,12 @@ def top_of(job, op):
 def add_dressup(job, op, kind, params=None, count=None):
     """Ajoute l'habillage ``kind`` au-dessus de ``op`` (ou de son habillage courant) et le met dans le groupe."""
     if kind not in DRESSUPS:
-        raise ValueError("habillage inconnu : %r (disponibles : %s)" % (kind, ", ".join(DRESSUPS)))
+        raise UserError("unknown dressup: {kind} (available: {available})",
+                        kind=repr(kind), available=", ".join(DRESSUPS))
     meta = DRESSUPS[kind]
     current = top_of(job, op)
     if any(dressup_kind(d) == kind for d in dressup_chain(current)):
-        raise ValueError("l'opération %s a déjà un habillage %s" % (op.Label, kind))
+        raise UserError("operation {op} already has a {kind} dressup", op=op.Label, kind=kind)
     # ordre d'empilement fixe (ORDER) : les attaches et la rampe sous les entrées/sorties (contour fermé), le motif
     # au-dessus de tout ; un habillage ajouté après un habillage plus haut est inséré dessous
     upper = None
@@ -148,12 +151,10 @@ def add_dressup(job, op, kind, params=None, count=None):
             if is_dressup(current) and not current.Path.Commands:
                 current.recompute()
             if not any(c.Name in ("G1", "G01", "G2", "G02", "G3", "G03") for c in current.Path.Commands):
-                from ..i18n import UserError
-
                 raise UserError("Holding tags need a computed contour toolpath: {op} has no cutting move", op=op.Label)
             obj = mod.Create(current, name=name)
             if obj is None:
-                raise ValueError("FreeCAD refuse les attaches sur %s (contour fermé requis)" % op.Label)
+                raise UserError("FreeCAD refuses tags on {op} (closed profile required)", op=op.Label)
             if count:
                 obj.Proxy.generateTags(obj, int(count))
         elif kind == "dogbone":
@@ -161,8 +162,6 @@ def add_dressup(job, op, kind, params=None, count=None):
             strategy = type(getattr(base, "Proxy", None)).__module__
             pattern = getattr(base, "ClearingPattern", getattr(base, "OffsetPattern", None))
             if dogbone_refused(strategy, pattern):
-                from ..i18n import UserError
-
                 if strategy == "Path.Op.Adaptive":
                     raise UserError("Dogbones are not available on an adaptive toolpath ({op}): FreeCAD puts bones at the turns of the trochoids, into the walls", op=op.Label)
                 raise UserError("Dogbones are not available on {op} with the {pattern} pattern: FreeCAD puts bones at the turns of the passes, into the walls; choose the Offset pattern", op=op.Label, pattern=pattern)
@@ -266,7 +265,6 @@ def set_dressup_params(obj, params):
 def _secure_leads(obj):
     """Entrées/sorties loin de la pièce (point de départ déplacé sur 1.1) ou refus avec la position du contact."""
     from . import leads
-    from ..i18n import UserError
 
     import PathScripts.PathUtils as PathUtils
 

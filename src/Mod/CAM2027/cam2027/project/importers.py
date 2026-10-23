@@ -204,7 +204,7 @@ def mesh_to_solid(doc, mesh_obj, tolerance=0.05):
 
     mesh = mesh_obj.Mesh
     if not mesh.isSolid():
-        raise ValueError("%s : maillage non fermé, conversion impossible" % mesh_obj.Label)
+        raise UserError("{mesh}: open mesh, cannot convert", mesh=mesh_obj.Label)
     shape = Part.Shape()
     shape.makeShapeFromMesh(mesh.Topology, tolerance)
     solid = Part.makeSolid(shape)

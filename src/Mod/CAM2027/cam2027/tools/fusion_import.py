@@ -17,6 +17,7 @@ import json
 import zlib
 import zipfile
 
+from ..i18n import UserError
 from .model import ToolDefinition, Holder, ToolAssembly, CuttingPreset
 
 # type Fusion -> (type CAM2027, note)
@@ -106,7 +107,7 @@ def _read_json(path):
             with zipfile.ZipFile(path) as zf:
                 names = [n for n in zf.namelist() if n.lower().endswith(".json")]
                 if not names:
-                    raise ValueError("archive .tools sans fichier JSON")
+                    raise UserError(".tools archive without a JSON file")
                 names.sort(key=lambda n: (n.lower() != "tools.json", n))
                 with zf.open(names[0]) as fp:
                     return json.loads(fp.read().decode("utf-8"))
@@ -142,7 +143,7 @@ def import_fusion_library(path, library, holder_cache=None):
     data = _read_json(path)
     tools = data.get("data") if isinstance(data, dict) else data
     if not isinstance(tools, list):
-        raise ValueError("structure Fusion inattendue (clé 'data' absente)")
+        raise UserError("unexpected Fusion structure ('data' key missing)")
     holder_cache = holder_cache if holder_cache is not None else {}
     existing = {_same_tool_key(t) for t in library.tools.values()}
     numbers = set()  # numéros du fichier : un outil renuméroté ne prend pas celui d'un outil importé ensuite

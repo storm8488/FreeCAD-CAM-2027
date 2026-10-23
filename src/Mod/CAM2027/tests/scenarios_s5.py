@@ -16,7 +16,7 @@ def _sheet_project(gs, scenario, name, svg):
         gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet")
         return True
 
-    gs.driver.handlers[gs.tr("Stock & fixture")] = sheet
+    gs.driver.handlers[gs.tr("Stock and fixture")] = sheet
     gs.run_command(scenario, "CAM2027_StockFixture")
     proj = gs.project()
     if proj is None or not proj.has_job:
@@ -127,7 +127,7 @@ def scenario_vectors(gs, scenario):
         gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet")
         return True
 
-    gs.driver.handlers[gs.tr("Stock & fixture")] = sheet
+    gs.driver.handlers[gs.tr("Stock and fixture")] = sheet
     gs.run_command(scenario, "CAM2027_StockFixture")
     proj = gs.project()
     if not proj.has_job:
@@ -179,7 +179,7 @@ def scenario_bitmap(gs, scenario, tmp):
         gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet")
         return True
 
-    gs.driver.handlers[gs.tr("Stock & fixture")] = sheet
+    gs.driver.handlers[gs.tr("Stock and fixture")] = sheet
     gs.run_command(scenario, "CAM2027_StockFixture")
     proj = gs.project()
     if not proj.has_job:
@@ -328,7 +328,7 @@ def scenario_dragon_vcarve(gs, scenario):
     if not traced:
         gs.problem(scenario, "Trace bitmap created no vector")
         return
-    gs.driver.handlers[gs.tr("Stock & fixture")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
+    gs.driver.handlers[gs.tr("Stock and fixture")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
     gs.run_command(scenario, "CAM2027_StockFixture")
     proj = gs.project()
     if not proj.has_job:

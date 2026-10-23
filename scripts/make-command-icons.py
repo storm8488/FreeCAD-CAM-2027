@@ -108,6 +108,8 @@ ICONS = {
     "cmd-texture": (["P:M3 4h18v16H3z"], ["P:M6 8l3 1 M11 7.5l3 1 M16 8l2.5 1 M7.5 12.5l3 1 M13 12l3 1 M6 16.5l3 1 M11 16l3 1 M16 16.5l2.5 1"]),
     "cmd-prism": (["P:M3 4h18v16H3z"], ["P:M3 4l6 8-6 8 M21 4l-6 8 6 8 M9 12h6"]),
     # ---- affichage / aide
+    "cmd-language": (['<circle cx="12" cy="12" r="9"/>', "P:M3.5 9h17 M3.5 15h17"],
+                     ["P:M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"]),
     "cmd-theme": (['<circle cx="12" cy="12" r="8.5"/>'], ['<path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="{ac}" stroke="none"/>']),
     "cmd-advanced": (["P:M4 7h16 M4 12h16 M4 17h16"], ['<circle cx="9" cy="7" r="2.1" fill="{ac}" stroke="none"/>',
                                                     '<circle cx="15.5" cy="12" r="2.1" fill="{ac}" stroke="none"/>',

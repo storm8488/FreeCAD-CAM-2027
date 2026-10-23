@@ -47,7 +47,7 @@ def radius_of_stock(job):
     stock = getattr(job, "Stock", None)
     radius = getattr(stock, "Radius", None)
     if radius is None:
-        raise UserError("wrapping needs a round stock along X (Stock & fixture > round bar on the A axis)")
+        raise UserError("wrapping needs a round stock along X (Stock and fixture > round bar on the A axis)")
     return float(radius.getValueAs("mm")) if hasattr(radius, "getValueAs") else float(radius)
 
 

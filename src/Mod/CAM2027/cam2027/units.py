@@ -18,6 +18,8 @@ sont acceptées en entrée via :func:`to_mm` et :func:`to_float`.
 import math
 import re
 
+from .i18n import UserError
+
 _NUMBER = re.compile(r"^\s*([-+]?\d*[.,]?\d+(?:[eE][-+]?\d+)?)\s*([a-zA-Z/°\"']*)\s*$")
 
 # Facteurs de conversion vers l'unité interne pour chaque grandeur.
@@ -46,21 +48,21 @@ _ANGLE_FACTORS = {"": 1.0, "deg": 1.0, "°": 1.0, "rad": 180.0 / math.pi}
 
 def _parse(value, factors, what):
     if isinstance(value, bool):
-        raise ValueError("%s : booléen inattendu" % what)
+        raise UserError("{what}: unexpected boolean", what=what)
     if isinstance(value, (int, float)):
         return float(value)
     if hasattr(value, "Value") and hasattr(value, "Unit"):
         # FreeCAD.Units.Quantity : Value est déjà exprimé en unité interne FreeCAD (mm, deg)
         return float(value.Value)
     if value is None:
-        raise ValueError("%s : valeur manquante" % what)
+        raise UserError("{what}: missing value", what=what)
     m = _NUMBER.match(str(value))
     if not m:
         raise ValueError("%s : valeur illisible %r" % (what, value))
     number = float(m.group(1).replace(",", "."))
     unit = m.group(2)
     if unit not in factors:
-        raise ValueError("%s : unité non prise en charge %r" % (what, unit))
+        raise UserError("{what}: unsupported unit {unit}", what=what, unit=repr(unit))
     return number * factors[unit]
 
 

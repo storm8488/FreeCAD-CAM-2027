@@ -98,9 +98,9 @@ class Project(object):
     def from_document(cls, doc):
         info = docobjects.find_info(doc)
         if info is None:
-            raise ValueError("%s : ce document n'est pas un projet CAM2027" % doc.Label)
+            raise UserError("{doc}: this document is not a CAM2027 project", doc=doc.Label)
         if int(info.DataVersion) > DATA_VERSION:
-            raise ValueError("projet écrit par une version plus récente (data_version %d)" % info.DataVersion)
+            raise UserError("project written by a newer version (data_version {version})", version=info.DataVersion)
         return cls(doc, info)
 
     # -- propriétés -----------------------------------------------------------
@@ -151,7 +151,7 @@ class Project(object):
     def job(self):
         job = self.info.Job
         if job is None:
-            raise ValueError("le projet n'a pas encore de job (appeler create_job)")
+            raise UserError("the project has no job yet (call create_job)")
         return job
 
     @property
@@ -226,7 +226,7 @@ class Project(object):
 
     def create_job(self, models, stock=None, fixtures=("G54",), post_processor=None, post_args=None):
         if self.info.Job is not None:
-            raise ValueError("le projet a déjà un job")
+            raise UserError("the project already has a job")
         for m in models:  # une boîte invalide fait boucler le brut de FreeCAD (Stock.execute) jusqu'au plantage
             if m.TypeId.startswith("Mesh::"):
                 # le clone du job n'a pas de forme pour un maillage : brut sans boite (plantage du 2026-10-20)
@@ -276,7 +276,8 @@ class Project(object):
         post = post_processor or self.machine.post_processor
         if post:
             if post not in job.getEnumerationsOfProperty("PostProcessor"):
-                raise ValueError("postprocesseur %r non disponible (activer dans les préférences CAM)" % post)
+                raise UserError("post-processor {post} not available (enable it in the CAM preferences)",
+                                post=repr(post))
             job.PostProcessor = post
         job.PostProcessorArgs = post_args if post_args is not None else (self.machine.post_processor_args or "")
         self.doc.recompute()
@@ -287,7 +288,7 @@ class Project(object):
         vecteur fermé, brut = panneau. ``vectors`` par défaut : tous les vecteurs du document."""
         vectors = list(vectors) if vectors else sheetmod.vector_objects(self.doc)
         if not vectors:
-            raise ValueError("aucun dessin 2D dans le projet (importer un SVG ou un DXF)")
+            raise UserError("no 2D drawing in the project (import an SVG or a DXF)")
         if sheet_rect is None and getattr(self.info, "NestedSheet", ""):
             sheet_rect = json.loads(self.info.NestedSheet)  # panneau choisi à l'imbrication
         sheet = sheetmod.make_sheet(self.doc, vectors, float(thickness), float(margin), rect=sheet_rect)
@@ -302,7 +303,7 @@ class Project(object):
         name = source.Name + (sheetmod.FACE_SUFFIX if face else "")
         target = self.doc.getObject(name)
         if target is None:
-            raise ValueError("pas de %s pour %s" % ("face" if face else "vecteur", source.Label))
+            raise UserError("no {what} for {source}", what=Msg("face" if face else "vector"), source=source.Label)
         return opsmod.model_clone(self.job, target)
 
     def set_stock(self, spec):
@@ -1126,7 +1127,7 @@ class Project(object):
         reg = self.registry
         rec = reg.get(op.Name)
         if rec is None:
-            raise ValueError("opération %s absente du registre" % op.Label)
+            raise UserError("operation {op} missing from the registry", op=op.Label)
         asm, tool, holder = self.library.resolve_assembly(assembly_id)
         preset = tool.preset(preset_id)
         values = preset.resolve(tool)
@@ -1186,7 +1187,7 @@ class Project(object):
         op = dressupmod.base_operation(op)
         rec = self.registry.get(op.Name)
         if rec is None:
-            raise ValueError("opération %s absente du registre" % op.Label)
+            raise UserError("operation {op} missing from the registry", op=op.Label)
         if rec["kind"] not in opsmod.STRATEGIES and rec["kind"] != wrapmod.KIND:
             raise UserError("{op} is generated (flat depth clearing): it cannot be duplicated", op=op.Label)
         if rec["kind"] == wrapmod.KIND:
@@ -1214,7 +1215,7 @@ class Project(object):
         """Supprime l'opération (et ses habillages), son ToolController et son ToolBit, et l'entrée de registre."""
         op = dressupmod.base_operation(op)
         if indexing.is_index_op(op):
-            raise ValueError("les positionnements A sont gérés automatiquement : supprimer ou réindexer les opérations")
+            raise UserError("A positionings are managed automatically: delete or re-index the operations")
         self.job.Operations.Group = [o for o in self.job.Operations.Group if not indexing.is_index_op(o)]
         for idx in [o for o in self.doc.Objects if indexing.is_index_op(o)]:
             idx.Label = "CAM2027IndexRemoved"
@@ -1312,7 +1313,7 @@ class Project(object):
         """Postprocesse, analyse, vérifie, écrit le G-code et la fiche. Retourne un dict."""
         job = self.job
         if not self.operations():
-            raise ValueError("aucune opération à exporter")
+            raise UserError("no operation to export")
         self.doc.recompute()
         if indexing.refresh(self):
             self.doc.recompute()
@@ -1359,7 +1360,7 @@ class Project(object):
             self.doc.saveAs(path)
         else:
             if not self.doc.FileName:
-                raise ValueError("chemin requis pour la première sauvegarde")
+                raise UserError("a path is required for the first save")
             self.doc.save()
         return self.doc.FileName
 

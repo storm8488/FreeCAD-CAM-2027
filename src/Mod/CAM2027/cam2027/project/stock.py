@@ -11,6 +11,8 @@ en 3D mais **pas encore prises en compte** par le contrôle de collision.
 import FreeCAD
 import Path.Main.Stock as PathStock
 
+from ..i18n import UserError
+
 ORIGIN_CHOICES = ("stock_top_front_left", "stock_top_center", "stock_bottom_front_left", "model_origin")
 
 
@@ -87,7 +89,7 @@ def set_stock(job, spec):
             placement = FreeCAD.Placement(FreeCAD.Vector(*origin), FreeCAD.Rotation()) if origin else None
             stock = PathStock.CreateCylinder(job, float(spec["radius"]), float(spec["height"]), placement)
         else:
-            raise ValueError("type de brut inconnu : %r" % (kind,))
+            raise UserError("unknown stock type: {kind}", kind=repr(kind))
         job.Stock = stock
         if old is not None and old.Name != stock.Name:
             old.Label = "StockRemoved"  # libère l'étiquette avant la suppression (différée sur 1.1)
@@ -116,7 +118,7 @@ def set_fixtures(job, fixtures):
     allowed = ("G54", "G55", "G56", "G57", "G58", "G59", "G59.1", "G59.2", "G59.3")
     for f in fixtures:
         if f not in allowed:
-            raise ValueError("repère inconnu : %r" % (f,))
+            raise UserError("unknown frame: {frame}", frame=repr(f))
     job.Fixtures = list(fixtures)
     return job.Fixtures
 

@@ -49,7 +49,7 @@ def scenario_two_sided(scenario, tmp):
     G.run_command(scenario, "CAM2027_StockFixture")
     proj = G.project()
     if not proj.has_job:
-        G.problem(scenario, "no job after Stock & fixture")
+        G.problem(scenario, "no job after Stock and fixture")
         return
     p = G.panel()
     if p.side_bar.isVisible():
@@ -227,7 +227,7 @@ def scenario_nest_shapes(scenario, tmp):
         G.problem(scenario, "nested parts too close (%.2f mm) or outside the sheet margin %s" % (worst, out))
     if any(k == "warn" for k, _t in msgs):
         G.problem(scenario, "nesting warned: %s" % msgs)
-    G.driver.handlers[G.tr("Stock & fixture")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
+    G.driver.handlers[G.tr("Stock and fixture")] = lambda dlg: (G.combo_select(G.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
     G.run_command(scenario, "CAM2027_StockFixture")
     proj = G.project()
     if not proj.has_job:

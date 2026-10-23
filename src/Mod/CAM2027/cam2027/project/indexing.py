@@ -19,7 +19,7 @@ renseignés dans le profil machine, sinon l'index est refusé.
 
 import FreeCAD
 
-from ..i18n import Msg
+from ..i18n import Msg, UserError
 
 INDEX_PREFIX = "CAM2027Index"
 ANGLE_PROPERTY = "IndexAngle"
@@ -30,13 +30,13 @@ def check_machine(machine):
     """Lève ValueError si le profil ne permet pas l'indexation ; retourne (cy, cz, signe)."""
     rot = machine.rotary
     if not rot.present:
-        raise ValueError("le profil machine n'a pas d'axe rotatif A (cocher « axe A présent »)")
+        raise UserError("the machine profile has no rotary A axis (tick “A axis present”)")
     if rot.about != "X":
-        raise ValueError("axe rotatif autour de %s : seul A autour de X est pris en charge" % rot.about)
+        raise UserError("rotary axis around {about}: only A around X is supported", about=rot.about)
     if rot.center_offset_mm is None:
-        raise ValueError("centre de l'axe A inconnu : renseigner Y et Z du centre dans le profil machine")
+        raise UserError("A axis centre unknown: enter its Y and Z in the machine profile")
     if rot.positive_direction not in POSITIVE_DIRECTIONS:
-        raise ValueError("sens positif de l'axe A non renseigné dans le profil machine")
+        raise UserError("A axis positive direction not set in the machine profile")
     cy, cz = (float(v) for v in rot.center_offset_mm)
     return cy, cz, (1.0 if rot.positive_direction == "right_hand" else -1.0)
 
@@ -44,9 +44,9 @@ def check_machine(machine):
 def check_angle(machine, angle):
     rot = machine.rotary
     if rot.min_deg is not None and angle < rot.min_deg - 1e-9:
-        raise ValueError("angle A %.3f inférieur au minimum %.3f" % (angle, rot.min_deg))
+        raise UserError("A angle {angle:.3f} below the minimum {limit:.3f}", angle=angle, limit=rot.min_deg)
     if rot.max_deg is not None and angle > rot.max_deg + 1e-9:
-        raise ValueError("angle A %.3f supérieur au maximum %.3f" % (angle, rot.max_deg))
+        raise UserError("A angle {angle:.3f} above the maximum {limit:.3f}", angle=angle, limit=rot.max_deg)
 
 
 def rotation_matrix(angle, cy, cz):
@@ -133,11 +133,11 @@ def index_base(project, kind, base, angle, tool_diameter):
             elif kind == "rough3d":
                 subs = opsmod.raised_faces(rotated)
             else:
-                raise ValueError("opération indexée A%g : sélectionner les faces ou arêtes à usiner" % angle)
+                raise UserError("indexed operation A{angle:g}: select the faces or edges to machine", angle=angle)
         if subs:
             out.append((rotated, subs))
     if not out:
-        raise ValueError("opération indexée A%g : aucune géométrie usinable à cet angle" % angle)
+        raise UserError("indexed operation A{angle:g}: nothing to machine at this angle", angle=angle)
     return out
 
 

@@ -121,7 +121,7 @@ class HoleCommand(object):
         if proj is None:
             return
         if not proj.has_job:
-            commands._warn(tr("Define the stock & fixture first (this creates the job)."))
+            commands._warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         dlg = HoleDialog(proj, FreeCADGui.getMainWindow())
         if commands.exec_dialog(dlg) != QtWidgets.QDialog.Accepted:

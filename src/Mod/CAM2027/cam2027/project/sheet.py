@@ -108,7 +108,7 @@ def expand_drawing_base(doc, kind, base):
         if kind in FACE_STRATEGIES:
             face = source if is_face_obj else doc.getObject(source.Name + FACE_SUFFIX)
             if face is None:
-                raise ValueError("%s n'est pas un contour fermé : pas de face pour cette stratégie" % source.Label)
+                raise UserError("{source} is not a closed profile: no face for this strategy", source=source.Label)
             out.append((face, ["Face%d" % (i + 1) for i in range(len(face.Shape.Faces))]))  # texte : une face par lettre
         elif is_face_obj:
             vector = doc.getObject(source.Name[: -len(FACE_SUFFIX)])
@@ -123,14 +123,14 @@ def make_sheet(doc, vectors, thickness, margin=10.0, rect=None):
 
     ``rect`` = ``(x, y, largeur, longueur)`` : panneau de taille imposée (imbrication)."""
     if thickness <= 0:
-        raise ValueError("épaisseur du panneau <= 0")
+        raise UserError("sheet thickness <= 0")
     bb = None
     for o in vectors:
         bb = o.Shape.BoundBox if bb is None else bb.united(o.Shape.BoundBox)
     if bb is None:
-        raise ValueError("aucun vecteur à usiner")
+        raise UserError("no vector to machine")
     if abs(bb.ZMax - bb.ZMin) > 1e-6:
-        raise ValueError("le dessin n'est pas plan (Z de %.3f à %.3f)" % (bb.ZMin, bb.ZMax))
+        raise UserError("the drawing is not flat (Z from {zmin:.3f} to {zmax:.3f})", zmin=bb.ZMin, zmax=bb.ZMax)
     for o in vectors:
         if abs(bb.ZMin) > 1e-9:
             o.Placement.move(FreeCAD.Vector(0, 0, -bb.ZMin))

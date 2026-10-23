@@ -163,5 +163,5 @@ def add_tab(editor):
     tab = RestLimitTab(editor)
     from .opeditor import _scrolled
 
-    editor.tabs.addTab(_scrolled(tab.widget), tr("Rest & area"))
+    editor.tabs.addTab(_scrolled(tab.widget), tr("Rest and area"))
     return tab

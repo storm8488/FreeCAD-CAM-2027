@@ -27,6 +27,7 @@ Unités : voir ``cam2027.units``.
 import copy
 import math
 
+from ..i18n import UserError, UserKeyError
 from ..ids import new_id, is_id
 from ..units import to_mm, to_mm_min, to_rpm, to_deg, to_float
 
@@ -87,7 +88,7 @@ PRESET_USAGES = ("general", "roughing", "finishing", "slotting", "drilling", "en
 def geometry_fields_for(tool_type):
     """Champs géométriques pertinents pour un type d'outil (ordre d'affichage)."""
     if tool_type not in TOOL_TYPES:
-        raise ValueError("type d'outil inconnu : %r" % (tool_type,))
+        raise UserError("unknown tool type: {tool_type}", tool_type=repr(tool_type))
     return COMMON_GEOMETRY_FIELDS + TOOL_TYPES[tool_type][1]
 
 
@@ -110,9 +111,9 @@ class Segment(object):
         self.upper_diameter = to_mm(upper_diameter)
         self.length = to_mm(length)
         if self.length <= 0:
-            raise ValueError("segment : longueur <= 0")
+            raise UserError("segment: length <= 0")
         if self.lower_diameter < 0 or self.upper_diameter < 0:
-            raise ValueError("segment : diamètre négatif")
+            raise UserError("segment: negative diameter")
 
     def to_dict(self):
         return {
@@ -199,22 +200,22 @@ class CuttingPreset(object):
         self.radial_engagement_mm = _opt(kwargs.pop("radial_engagement_mm", None), to_mm)
         self.coolant = kwargs.pop("coolant", "none")
         if kwargs:
-            raise ValueError("préréglage : champs inconnus %s" % sorted(kwargs))
+            raise UserError("preset: unknown fields {fields}", fields=sorted(kwargs))
         self.validate()
 
     def validate(self):
         if self.usage not in PRESET_USAGES:
-            raise ValueError("préréglage %s : usage inconnu %r" % (self.name, self.usage))
+            raise UserError("preset {name}: unknown use {usage}", name=self.name, usage=repr(self.usage))
         if self.rpm_source not in ("rpm", "vc"):
-            raise ValueError("préréglage %s : rpm_source invalide" % self.name)
+            raise UserError("preset {name}: invalid rpm_source", name=self.name)
         if self.feed_source not in ("feed", "fz"):
-            raise ValueError("préréglage %s : feed_source invalide" % self.name)
+            raise UserError("preset {name}: invalid feed_source", name=self.name)
         if self.coolant not in COOLANTS:
-            raise ValueError("préréglage %s : arrosage inconnu %r" % (self.name, self.coolant))
+            raise UserError("preset {name}: unknown coolant {coolant}", name=self.name, coolant=repr(self.coolant))
         for f in ("spindle_rpm", "feed_mm_min", "feed_per_tooth_mm", "surface_speed_m_min"):
             v = getattr(self, f)
             if v is not None and v < 0:
-                raise ValueError("préréglage %s : %s négatif" % (self.name, f))
+                raise UserError("preset {name}: negative {field}", name=self.name, field=f)
 
     def resolve(self, tool):
         """Retourne un dict complet (rpm, vc, feed, fz, avances annexes) cohérent.
@@ -230,24 +231,24 @@ class CuttingPreset(object):
         vc = self.surface_speed_m_min
         if self.rpm_source == "vc":
             if vc is None:
-                raise ValueError("préréglage %s : Vc manquante" % self.name)
+                raise UserError("preset {name}: Vc missing", name=self.name)
             rpm = 1000.0 * vc / (math.pi * d)
             derived.append("spindle_rpm")
         else:
             if rpm is None:
-                raise ValueError("préréglage %s : vitesse de broche manquante" % self.name)
+                raise UserError("preset {name}: spindle speed missing", name=self.name)
             vc = math.pi * d * rpm / 1000.0
             derived.append("surface_speed_m_min")
         feed = self.feed_mm_min
         fz = self.feed_per_tooth_mm
         if self.feed_source == "fz":
             if fz is None:
-                raise ValueError("préréglage %s : fz manquante" % self.name)
+                raise UserError("preset {name}: fz missing", name=self.name)
             feed = rpm * z * fz
             derived.append("feed_mm_min")
         else:
             if feed is None:
-                raise ValueError("préréglage %s : avance manquante" % self.name)
+                raise UserError("preset {name}: feed rate missing", name=self.name)
             fz = feed / (rpm * z) if rpm > 0 else 0.0
             derived.append("feed_per_tooth_mm")
 
@@ -365,7 +366,7 @@ class ToolGeometry(object):
             setattr(self, f, None)
         for k, v in kwargs.items():
             if k not in self.ALL_FIELDS:
-                raise ValueError("géométrie : champ inconnu %r" % k)
+                raise UserError("geometry: unknown field {field}", field=repr(k))
             if v is None or v == "":
                 continue
             if k in self._LENGTHS:
@@ -374,7 +375,7 @@ class ToolGeometry(object):
                 v = to_deg(v)
             elif k in self._ENUMS:
                 if v not in self._ENUMS[k]:
-                    raise ValueError("%s inconnu %r" % (k, v))
+                    raise UserError("unknown {key} {value}", key=k, value=repr(v))
             elif k == "thread_teeth":
                 v = int(to_float(v))
             elif k == "profile":
@@ -385,15 +386,15 @@ class ToolGeometry(object):
         fields = geometry_fields_for(tool_type)
         for f in ("diameter", "overall_length"):
             if getattr(self, f) is None or getattr(self, f) <= 0:
-                raise ValueError("géométrie : %s requis et > 0" % f)
+                raise UserError("geometry: {field} required and > 0", field=f)
         if self.shank_diameter is None:
             self.shank_diameter = self.diameter
         if self.flute_length is None:
             self.flute_length = min(self.overall_length, self.diameter * 3)
         if self.flute_length > self.overall_length:
-            raise ValueError("géométrie : longueur taillée > longueur totale")
+            raise UserError("geometry: flute length > overall length")
         if self.shoulder_length is not None and self.shoulder_length < self.flute_length:
-            raise ValueError("géométrie : longueur d'épaulement < longueur taillée")
+            raise UserError("geometry: shoulder length < flute length")
         if "corner_radius" in fields and self.corner_radius is None:
             self.corner_radius = self.diameter / 2.0 if tool_type == "taperedball" else 0.0
         if (
@@ -401,23 +402,23 @@ class ToolGeometry(object):
             and tool_type not in ("barrel", "lens", "ogive", "taperbarrel")
             and self.corner_radius > self.diameter / 2.0 + 1e-9
         ):
-            raise ValueError("géométrie : rayon de bec > rayon de l'outil")
+            raise UserError("geometry: corner radius > tool radius")
         if "tip_included_angle_deg" in fields:
             if self.tip_included_angle_deg is None:
                 self.tip_included_angle_deg = 118.0 if tool_type == "drill" else 90.0
             if not 0 < self.tip_included_angle_deg < 180:
-                raise ValueError("géométrie : angle inclus de pointe hors de ]0, 180[")
+                raise UserError("geometry: included tip angle outside ]0, 180[")
         if "tip_diameter" in fields and self.tip_diameter is None:
             self.tip_diameter = 0.0
         if "taper_half_angle_deg" in fields:
             if self.taper_half_angle_deg is None:
-                raise ValueError("géométrie : demi-angle de cône requis")
+                raise UserError("geometry: taper half-angle required")
             if not 0 <= self.taper_half_angle_deg < 90:
-                raise ValueError("géométrie : demi-angle de cône hors de [0, 90[")
+                raise UserError("geometry: taper half-angle outside [0, 90[")
         if self.body_length is not None and self.body_length > self.overall_length:
-            raise ValueError("géométrie : longueur sous porte-outil > longueur totale")
+            raise UserError("geometry: length below holder > overall length")
         if "barrel_radius" in fields and (self.barrel_radius is None or self.barrel_radius <= 0):
-            raise ValueError("géométrie : rayon du profil requis et > 0")
+            raise UserError("geometry: profile radius required and > 0")
         for f in ("upper_radius", "lower_radius"):
             if f in fields and getattr(self, f) is None:
                 setattr(self, f, 0.0)
@@ -431,11 +432,11 @@ class ToolGeometry(object):
             self.taper_tip = "bullnose" if self.corner_radius else "flat"
         if tool_type == "threadmill":
             if not self.pitch:
-                raise ValueError("géométrie : pas de filetage (maximal) requis")
+                raise UserError("geometry: (maximum) thread pitch required")
             if self.pitch_min is None:
                 self.pitch_min = self.pitch
             if self.pitch_min > self.pitch:
-                raise ValueError("géométrie : pas minimal > pas maximal")
+                raise UserError("geometry: minimum pitch > maximum pitch")
             if self.thread_teeth is None:
                 self.thread_teeth = 1
             if self.thread_profile_angle_deg is None:
@@ -466,7 +467,7 @@ class ToolDefinition(object):
         self.id = kwargs.pop("id", None) or new_id()
         self.name = name
         if tool_type not in TOOL_TYPES:
-            raise ValueError("type d'outil inconnu : %r" % (tool_type,))
+            raise UserError("unknown tool type: {tool_type}", tool_type=repr(tool_type))
         self.tool_type = tool_type
         self.geometry = geometry if isinstance(geometry, ToolGeometry) else ToolGeometry.from_dict(geometry)
         self.flute_count = int(to_float(kwargs.pop("flute_count", 2)))
@@ -486,16 +487,16 @@ class ToolDefinition(object):
             CuttingPreset.from_dict(p) if isinstance(p, dict) else p for p in kwargs.pop("presets", [])
         ]
         if kwargs:
-            raise ValueError("outil %s : champs inconnus %s" % (name, sorted(kwargs)))
+            raise UserError("tool {name}: unknown fields {fields}", name=name, fields=sorted(kwargs))
         self.validate()
 
     def validate(self):
         if not self.name:
-            raise ValueError("outil : nom requis")
+            raise UserError("tool: name required")
         if self.flute_count < 1:
-            raise ValueError("outil %s : nombre de dents < 1" % self.name)
+            raise UserError("tool {name}: number of flutes < 1", name=self.name)
         if self.rotation not in ROTATIONS:
-            raise ValueError("outil %s : sens de rotation invalide" % self.name)
+            raise UserError("tool {name}: invalid rotation direction", name=self.name)
         self.geometry.validate(self.tool_type)
         if not self.shank_segments:
             shank_len = self.geometry.overall_length - (
@@ -508,14 +509,14 @@ class ToolDefinition(object):
         seen = set()
         for p in self.presets:
             if p.id in seen:
-                raise ValueError("outil %s : identifiant de préréglage dupliqué" % self.name)
+                raise UserError("tool {name}: duplicate preset id", name=self.name)
             seen.add(p.id)
 
     def preset(self, preset_id):
         for p in self.presets:
             if p.id == preset_id:
                 return p
-        raise KeyError("préréglage %s introuvable sur l'outil %s" % (preset_id, self.name))
+        raise UserKeyError("preset {preset} not found on tool {tool}", preset=preset_id, tool=self.name)
 
     def add_preset(self, preset):
         self.presets.append(preset)
@@ -617,9 +618,9 @@ class Holder(object):
         self.description = kwargs.pop("description", "")
         self.bore_diameter = _opt(kwargs.pop("bore_diameter", None), to_mm)
         if kwargs:
-            raise ValueError("porte-outil %s : champs inconnus %s" % (name, sorted(kwargs)))
+            raise UserError("holder {name}: unknown fields {fields}", name=name, fields=sorted(kwargs))
         if not self.segments:
-            raise ValueError("porte-outil %s : au moins un segment requis" % name)
+            raise UserError("holder {name}: at least one segment required", name=name)
 
     @property
     def length(self):
@@ -667,7 +668,7 @@ class OutputData(object):
         self.post_properties = dict(post_properties or {})
         self.comment = comment
         if self.tool_number < 0:
-            raise ValueError("numéro d'outil négatif")
+            raise UserError("negative tool number")
 
     def to_dict(self):
         return {
@@ -691,7 +692,7 @@ class ToolAssembly(object):
         self.id = kwargs.pop("id", None) or new_id()
         self.name = name
         if not is_id(tool_id):
-            raise ValueError("assemblage %s : tool_id invalide" % name)
+            raise UserError("assembly {name}: invalid tool_id", name=name)
         self.tool_id = tool_id
         self.holder_id = holder_id
         self.stickout = _opt(stickout, to_mm)
@@ -701,7 +702,7 @@ class ToolAssembly(object):
         self.output = output or OutputData()
         self.description = kwargs.pop("description", "")
         if kwargs:
-            raise ValueError("assemblage %s : champs inconnus %s" % (name, sorted(kwargs)))
+            raise UserError("assembly {name}: unknown fields {fields}", name=name, fields=sorted(kwargs))
 
     def validate_against(self, tool, holder):
         """Vérifie la cohérence géométrique avec l'outil et le porte-outil."""
@@ -711,15 +712,13 @@ class ToolAssembly(object):
             # longueur de jauge = sortie + longueur du porte-outil (nez -> référence broche)
             self.gauge_length = self.stickout + (holder.length if holder is not None else 0.0)
         if self.stickout > tool.geometry.overall_length:
-            raise ValueError("assemblage %s : sortie > longueur totale de l'outil" % self.name)
+            raise UserError("assembly {name}: stickout > overall tool length", name=self.name)
         if self.stickout < (tool.geometry.shoulder_length or tool.geometry.flute_length):
-            raise ValueError("assemblage %s : la partie taillée entre dans le porte-outil" % self.name)
+            raise UserError("assembly {name}: the fluted part goes into the holder", name=self.name)
         if holder is not None and holder.bore_diameter is not None:
             if abs(holder.bore_diameter - tool.geometry.shank_diameter) > 1e-6:
-                raise ValueError(
-                    "assemblage %s : alésage du porte-outil (%.3f) != queue (%.3f)"
-                    % (self.name, holder.bore_diameter, tool.geometry.shank_diameter)
-                )
+                raise UserError("assembly {name}: holder bore ({bore:.3f}) != shank ({shank:.3f})",
+                                name=self.name, bore=holder.bore_diameter, shank=tool.geometry.shank_diameter)
 
     def to_dict(self):
         return {

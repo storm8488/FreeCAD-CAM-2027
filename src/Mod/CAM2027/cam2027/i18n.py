@@ -55,6 +55,15 @@ def _detect_language():
     return "fr" if code.lower().startswith("fr") else "en"
 
 
+#: langues de l'interface : code -> nom du réglage « Langue » de FreeCAD
+INTERFACE_LANGUAGES = {"en": "English", "fr": "French"}
+
+
+def save_interface_language(code):
+    """Enregistre la langue de l'interface (FreeCAD et CAM2027), appliquée au prochain démarrage."""
+    FreeCAD.ParamGet("User parameter:BaseApp/Preferences/General").SetString("Language", INTERFACE_LANGUAGES[code])
+
+
 def language():
     global _language
     if _language is None:
@@ -113,6 +122,19 @@ class UserError(ValueError):
         self.params = params
 
 
+class UserKeyError(KeyError):
+    """Élément introuvable (outil, porte-outil…), même gabarit que ``UserError`` ; reste une ``KeyError`` pour le
+    code appelant. ``str()`` donne le message sans les guillemets ajoutés par ``KeyError``."""
+
+    def __init__(self, template, **params):
+        super(UserKeyError, self).__init__(template.format(**params) if params else template)
+        self.template = template
+        self.params = params
+
+    def __str__(self):
+        return self.args[0]
+
+
 def tr_msg(obj):
     """Texte traduit d'un ``Msg``, d'une ``UserError`` ou d'une chaîne (traduite si elle est au catalogue)."""
     parts = getattr(obj, "parts", None)
@@ -131,7 +153,7 @@ def missing_translations(code="fr"):
 
     used = set()
     root = os.path.dirname(__file__)
-    pattern = re.compile(r"\b(?:tr|Msg|UserError)\(\s*([\"'])((?:\\.|(?!\1).)*)\1")
+    pattern = re.compile(r"\b(?:tr|Msg|UserError|UserKeyError)\(\s*([\"'])((?:\\.|(?!\1).)*)\1")
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
             if name.endswith(".py"):

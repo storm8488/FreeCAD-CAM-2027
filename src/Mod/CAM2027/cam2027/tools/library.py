@@ -20,6 +20,7 @@ import datetime
 import json
 import os
 
+from ..i18n import UserError, UserKeyError
 from ..ids import new_id
 from ..version import DATA_VERSION
 from .model import ToolDefinition, Holder, ToolAssembly, CuttingPreset, TOOL_TYPES
@@ -45,19 +46,19 @@ class ToolLibrary(object):
         try:
             return self.tools[tool_id]
         except KeyError:
-            raise KeyError("outil %s introuvable" % tool_id)
+            raise UserKeyError("tool {id} not found", id=tool_id)
 
     def holder(self, holder_id):
         try:
             return self.holders[holder_id]
         except KeyError:
-            raise KeyError("porte-outil %s introuvable" % holder_id)
+            raise UserKeyError("holder {id} not found", id=holder_id)
 
     def assembly(self, assembly_id):
         try:
             return self.assemblies[assembly_id]
         except KeyError:
-            raise KeyError("assemblage %s introuvable" % assembly_id)
+            raise UserKeyError("assembly {id} not found", id=assembly_id)
 
     def resolve_assembly(self, assembly_id):
         """Retourne (assemblage, outil, porte-outil ou None) après validation."""
@@ -71,19 +72,19 @@ class ToolLibrary(object):
 
     def add_tool(self, tool):
         if tool.id in self.tools:
-            raise ValueError("outil déjà présent : %s" % tool.id)
+            raise UserError("tool already present: {id}", id=tool.id)
         self.tools[tool.id] = tool
         return tool
 
     def add_holder(self, holder):
         if holder.id in self.holders:
-            raise ValueError("porte-outil déjà présent : %s" % holder.id)
+            raise UserError("holder already present: {id}", id=holder.id)
         self.holders[holder.id] = holder
         return holder
 
     def add_assembly(self, assembly):
         if assembly.id in self.assemblies:
-            raise ValueError("assemblage déjà présent : %s" % assembly.id)
+            raise UserError("assembly already present: {id}", id=assembly.id)
         self.resolve_assembly_obj(assembly)
         self.assemblies[assembly.id] = assembly
         return assembly
@@ -96,13 +97,13 @@ class ToolLibrary(object):
     def remove_tool(self, tool_id):
         users = [a.name for a in self.assemblies.values() if a.tool_id == tool_id]
         if users:
-            raise ValueError("outil utilisé par les assemblages : %s" % ", ".join(users))
+            raise UserError("tool used by the assemblies: {users}", users=", ".join(users))
         del self.tools[tool_id]
 
     def remove_holder(self, holder_id):
         users = [a.name for a in self.assemblies.values() if a.holder_id == holder_id]
         if users:
-            raise ValueError("porte-outil utilisé par les assemblages : %s" % ", ".join(users))
+            raise UserError("holder used by the assemblies: {users}", users=", ".join(users))
         del self.holders[holder_id]
 
     def remove_assembly(self, assembly_id):
@@ -131,7 +132,7 @@ class ToolLibrary(object):
                     elif key in ("material", "coating", "vendor", "tags", "flute_count", "rotation", "description"):
                         setattr(tool, key, value)
                     else:
-                        raise ValueError("édition groupée : champ non autorisé %r" % key)
+                        raise UserError("bulk edit: field not allowed {key}", key=repr(key))
                 tool.validate()
         except Exception:
             for tid, d in originals.items():
@@ -235,7 +236,7 @@ class ToolLibrary(object):
     def from_dict(cls, data):
         data = migrate(data)
         if data.get("format") != FORMAT:
-            raise ValueError("format de bibliothèque inattendu : %r" % data.get("format"))
+            raise UserError("unexpected library format: {format}", format=repr(data.get("format")))
         lib = cls(data.get("name", "Library"), data.get("id"))
         lib.revision = int(data.get("revision", 0))
         lib.updated = data.get("updated")
@@ -300,9 +301,8 @@ def migrate(data):
     """Migre un dictionnaire de bibliothèque vers DATA_VERSION (sans effet aujourd'hui)."""
     version = int(data.get("data_version", 0))
     if version > DATA_VERSION:
-        raise ValueError(
-            "bibliothèque écrite par une version plus récente (data_version %d > %d)" % (version, DATA_VERSION)
-        )
+        raise UserError("library written by a newer version (data_version {version} > {supported})",
+                        version=version, supported=DATA_VERSION)
     if version < 1:
         data = dict(data)
         data["data_version"] = 1

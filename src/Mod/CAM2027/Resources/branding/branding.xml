@@ -4,7 +4,7 @@
 <Branding version="1.0">
   <Application>CAM2027</Application>
   <WindowTitle>CAM2027</WindowTitle>
-  <CopyrightInfo>CAM2027 - fork indépendant basé sur FreeCAD et son atelier CAM (LGPL-2.1+)</CopyrightInfo>
+  <CopyrightInfo>CAM2027 - independent fork based on FreeCAD and its CAM workbench (LGPL-2.1+)</CopyrightInfo>
   <MaintainerUrl>https://github.com/storm8488/FreeCAD-CAM-2027</MaintainerUrl>
   <WindowIcon>branding/cam2027-icon.png</WindowIcon>
   <ProgramLogo>branding/cam2027-programlogo.png</ProgramLogo>

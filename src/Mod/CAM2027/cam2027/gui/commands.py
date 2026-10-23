@@ -219,7 +219,7 @@ class ImportModel(_Base):
         shown = [o.Label for o in res.objects if o.TypeId.startswith(("Part::", "Mesh::"))]  # pas les repères du STEP
         lines = [tr("Imported: {objects}", objects=", ".join(shown) or "-")]
         if res.kind == "vector":
-            lines.append(tr("2D drawing: next, Stock & fixture > Sheet under the 2D drawing."))
+            lines.append(tr("2D drawing: next, Stock and fixture > Sheet under the 2D drawing."))
         lines += [tr_msg(w) for w in res.warnings]
         if res.warnings or res.kind == "vector":
             _info("\n".join(lines))
@@ -277,7 +277,7 @@ class StockFixture(_Base):
     icon = "cam2027-stock.svg"
     atelier = "cmd-stock"
     accel = "Ctrl+Shift+B"
-    text = "Stock & fixture"
+    text = "Stock and fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
 
     @_undoable
@@ -287,7 +287,7 @@ class StockFixture(_Base):
             return
         dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
         theme.apply(dlg)
-        dlg.setWindowTitle(tr("Stock & fixture"))
+        dlg.setWindowTitle(tr("Stock and fixture"))
         form = QtWidgets.QFormLayout(dlg)
         kind = QtWidgets.QComboBox()
         kind.addItem(tr("Box around the model with margins"), "box_margins")
@@ -349,7 +349,7 @@ class StockFixture(_Base):
                 if proj.has_job:
                     _warn(tr("The project already has a job: the sheet is only available for a new 2D project."))
                     return
-                with busy(tr("Stock & fixture")) as b:
+                with busy(tr("Stock and fixture")) as b:
                     proj.create_sheet_job(thickness=thickness.value(), margin=sheet_margin.value(),
                                           fixtures=[fixture.currentText()])
                 if b.stopped:
@@ -406,7 +406,7 @@ class StockFixture(_Base):
                             else:
                                 _info(tr("The {n} bodies could not be merged into one solid: they are machined as separate parts.", n=len(sel)))
                         else:
-                            _info(tr("{n} bodies ({f} faces): too large to merge, they are machined as separate parts. To machine only some of them, select them before Stock & fixture.",
+                            _info(tr("{n} bodies ({f} faces): too large to merge, they are machined as separate parts. To machine only some of them, select them before Stock and fixture.",
                                      n=len(sel), f=faces))
                 if not sel:
                     from ..project import sheet as sheetmod
@@ -416,7 +416,7 @@ class StockFixture(_Base):
                     else:
                         _warn(tr("Import a part (STEP, STL, OBJ) or a drawing (SVG, DXF) first."))
                     return
-                with busy(tr("Stock & fixture")) as b:
+                with busy(tr("Stock and fixture")) as b:
                     proj.create_job(sel, stock=spec, fixtures=[fixture.currentText()])
                 if b.stopped:
                     return
@@ -444,7 +444,7 @@ class AddOperation(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         # outils créés dans la bibliothèque depuis la création du projet : ajoutés à son instantané
         user = state.library()
@@ -663,7 +663,7 @@ class WrapEngrave(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         open_wrap_dialog(proj)
 
@@ -679,7 +679,7 @@ class RotaryMachining(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         open_wrap_dialog(proj, rotary=True)
 
@@ -695,7 +695,7 @@ class ProjectOnPart(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         from .projectiondlg import ProjectionDialog
 
@@ -794,7 +794,7 @@ class Inlay(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         sel = [s.Object for s in FreeCADGui.Selection.getSelectionEx() if s.Object.Document.Name == proj.doc.Name]
         res = _sheet_dialog(proj, "InlayDialog", selected=sel)
@@ -830,7 +830,7 @@ class Nest(_Base):
         if proj is None:
             return
         if proj.has_job:
-            _warn(tr("Nesting is done before Stock & fixture (the job is already created)."))
+            _warn(tr("Nesting is done before Stock and fixture (the job is already created)."))
             return
         rep = _sheet_dialog(proj, "NestDialog")
         if rep:
@@ -841,7 +841,7 @@ class Nest(_Base):
                 lines.append(tr("Kept together: {parts}", parts=" + ".join(group)))
             if rep["unplaced"]:
                 lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
-            lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
+            lines.append(tr("Next: Stock and fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
             _info("\n".join(lines))
             FreeCADGui.SendMsgToActiveView("ViewFit")
 
@@ -916,7 +916,7 @@ class TwoSided(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         from . import twosided as tsgui
 
@@ -943,7 +943,7 @@ class KeepOut(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         from . import keepout as kogui
 
@@ -1011,7 +1011,7 @@ class Compute(_Base):
         if proj is None:
             return
         if not proj.has_job:
-            _warn(tr("Define the stock & fixture first (this creates the job)."))
+            _warn(tr("Define the stock and fixture first (this creates the job)."))
             return
         with busy(tr("Computing the toolpaths..."), stoppable=proj) as b:
             results = proj.compute()
@@ -1369,7 +1369,7 @@ def material_report_text(rep):
         if col["no_holder"]:
             lines.append(tr("No holder in the assembly: {ops}", ops=", ".join(col["no_holder"])))
         if not col["clamps_defined"]:
-            lines.append(tr("No clamp defined: clamps not checked (Stock & fixture)."))
+            lines.append(tr("No clamp defined: clamps not checked (Stock and fixture)."))
         kinds = {"flute_length": tr("material above the flute length"), "holder": tr("tool holder in the material"),
                  "clamp": tr("clamp"), "rapid": tr("rapid into the material"),
                  "undrilled": tr("thread milling in a hole that is not drilled (drill it first)")}
@@ -1403,6 +1403,29 @@ class Theme(_Base):
         prefs.apply_scene_colors(nxt, force=prefs.launched_by_cam2027())  # nouveaux parcours
         refresh_icons()
         FreeCAD.Console.PrintMessage(tr("CAM2027 theme: {name}", name=tr(nxt)) + "\n")
+
+
+class Language(_Base):
+    atelier = "cmd-language"
+    text = "Language: English / Français"
+    tooltip = "Language of the interface, applied at the next start"
+
+    def Activated(self):
+        from .. import i18n
+
+        codes = list(i18n.INTERFACE_LANGUAGES)
+        labels = {"en": "English", "fr": "Français"}
+        current = codes.index(i18n.language()) if i18n.language() in codes else 0
+        label, ok = QtWidgets.QInputDialog.getItem(FreeCADGui.getMainWindow(), "CAM2027", tr("Interface language:"),
+                                                   [labels[c] for c in codes], current, False)
+        if not ok:
+            return
+        code = codes[[labels[c] for c in codes].index(label)]
+        i18n.save_interface_language(code)
+        if code != i18n.language():
+            # message dans la langue choisie : elle ne s'applique qu'au redémarrage
+            _info({"en": "Restart CAM2027 to switch the interface to English.",
+                   "fr": "Redémarrez CAM2027 pour passer l'interface en français."}[code])
 
 
 class Machine(_Base):
@@ -1625,6 +1648,7 @@ COMMANDS = [
     ("CAM2027_MaterialCheck", MaterialCheck),
     ("CAM2027_Machine", Machine),
     ("CAM2027_Theme", Theme),
+    ("CAM2027_Language", Language),
     ("CAM2027_AdvancedMode", AdvancedMode),
     ("CAM2027_ResetLayout", ResetLayout),
     ("CAM2027_About", About),
@@ -1641,7 +1665,7 @@ TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", 
            "CAM2027_Export"]
 MENU = [name for name, _cls in COMMANDS]
 #: menu « CAM2027 » en atelier dans FreeCAD complet (dans le logiciel, ces commandes vont dans Affichage / Aide)
-WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_ReportBug",
+WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_Language", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_ReportBug",
                   "CAM2027_SuggestFeature", "CAM2027_SupportProject", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (

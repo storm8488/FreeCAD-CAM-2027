@@ -53,7 +53,7 @@ def scenario_rotary_radial(h, scenario, tmp):
                 spin.setValue(ROT_R)
         return True
 
-    h["driver"].handlers[tr("Stock & fixture")] = round_bar
+    h["driver"].handlers[tr("Stock and fixture")] = round_bar
     h["run_command"](scenario, "CAM2027_StockFixture")
     proj = h["project"]()
     if not proj.has_job:

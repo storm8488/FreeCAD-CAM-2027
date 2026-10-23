@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **Interface en anglais**. Le logiciel ne force plus le français au premier lancement : la langue suit celle de
+  Windows (français sur un Windows français, anglais sinon), et **Affichage > Langue : English / Français** la change
+  (appliquée au prochain démarrage). Les 100 messages d'erreur encore écrits en français dans le code (outils,
+  projet, machine, axe A, filetage…) ont des gabarits anglais traduits par le catalogue, comme le reste ; notes du
+  profil machine par défaut traduites. Logos de l'accueil par langue (« FAO · USINAGE CNC » / « CAM · CNC
+  MACHINING »), écran de démarrage en anglais (il s'affiche avant que la langue soit connue). « & » retiré des
+  textes anglais (« Stock and fixture ») : Qt le lisait comme un raccourci clavier (« Stock _fixture »).
 - **Version alpha, retours des testeurs**. Le logiciel est marqué « alpha » (titre de la fenêtre, repère ALPHA dans
   la barre d'état, « À propos »). « Signaler un bug » et « Proposer une idée » (menu Aide et liens de la barre
   d'état) ouvrent le formulaire GitHub du dépôt dans le navigateur, versions de CAM2027, FreeCAD et Windows déjà

@@ -7,11 +7,11 @@
 
 CAM2027 est un logiciel de FAO (CAM) **libre et gratuit** pour fraiseuses CNC de loisir et d'atelier : bois,
 plastiques, aluminium, 3 axes et 4e axe. Il est construit sur le moteur CAM de **FreeCAD 1.1** (parcours,
-post-processeurs, OpenCamLib) avec une interface pensée pour l'usinage, en français, inspirée de Fusion 360 et
+post-processeurs, OpenCamLib) avec une interface pensée pour l'usinage, en français ou en anglais, inspirée de Fusion 360 et
 d'Aspire. Ce n'est pas une version officielle de FreeCAD : c'est un fork indépendant (LGPL-2.1-or-later).
 
 *English: CAM2027 is a free, open-source CAM for hobby and workshop CNC routers, built on FreeCAD 1.1's CAM engine
-with a machining-first UI (French first, English strings in the code). It is in **alpha**: bug reports and feature
+with a machining-first UI in English or French (it follows Windows; View > Language). It is in **alpha**: bug reports and feature
 ideas in English are welcome.*
 
 ## Ce qu'il sait faire
@@ -35,7 +35,7 @@ Ce qui n'est pas encore fait : [LIMITS.md](../docs/cam2027/LIMITS.md). Historiqu
 1. Téléchargez **`CAM2027-…-windows-x64.zip`** dans la
    **[dernière version](https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest)** (fichiers joints).
 2. Décompressez-le où vous voulez (évitez `Program Files`).
-3. Double-cliquez sur **`Lancer CAM2027.cmd`**. FreeCAD 1.1.4 est inclus, rien d'autre à installer. Si Windows
+3. Double-cliquez sur **`CAM2027.cmd`**. FreeCAD 1.1.4 est inclus, rien d'autre à installer. Si Windows
    affiche « Windows a protégé votre ordinateur » : *Informations complémentaires > Exécuter quand même* (le
    logiciel n'est pas signé).
 
