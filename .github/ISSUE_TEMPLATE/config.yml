@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 START HERE -- FreeCAD Forum
-    url: https://forum.freecad.org/
-    about: You are encouraged to discuss the problem you are seeing on the FreeCAD Forums before opening an issue on GitHub
+  - name: "📋 Limites connues de CAM2027 / Known limits"
+    url: https://github.com/storm8488/FreeCAD-CAM-2027/blob/cam2027/docs/cam2027/LIMITS.md
+    about: "Ce qui n'est pas encore fait : à lire avant d'ouvrir un bug."

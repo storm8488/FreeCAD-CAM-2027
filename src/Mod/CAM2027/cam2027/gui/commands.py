@@ -10,7 +10,7 @@ from .qt import QtCore, QtGui, QtWidgets, exec_dialog
 from ..i18n import tr, tr_msg
 from .labels import preset_label
 from .. import compat
-from ..version import __version__, FREECAD_PINNED_TAG
+from ..version import __version__, FREECAD_PINNED_TAG, SUPPORT_URL
 from ..project.project import Project, ExportBlocked
 from ..project.operations import STRATEGIES, DEFAULT_THREAD_TYPE, thread_names
 from ..project.importers import SUPPORTED_EXTENSIONS
@@ -1535,9 +1535,45 @@ class About(_Base):
             tr("User config: {dir}", dir=env["user_config_dir"]),
             tr("Logs: FreeCAD.log in the user config directory (launcher starts FreeCAD with -l)."),
             "",
-            tr("Not available yet: 3D surfacing in this workbench, 4th axis toolpaths, collision checks. Simulation uses the FreeCAD CAM simulator."),
+            tr("Alpha version: check every toolpath (simulation, material check, dry run above the part) before cutting."),
+            tr("Found a bug or have an idea? Help > Report a bug / Suggest a feature, or the links in the status bar."),
+            tr("Support the project: {url}", url=SUPPORT_URL),
         ])
         _info(text)
+
+
+def open_feedback(kind):
+    """Ouvre dans le navigateur le formulaire GitHub de bug ou d'idée (environnement prérempli)."""
+    from .. import feedback
+
+    QtGui.QDesktopServices.openUrl(QtCore.QUrl(feedback.issue_url(kind)))
+
+
+class ReportBug(_Base):
+    atelier = "cmd-report-bug"
+    text = "Report a bug"
+    tooltip = "Open the bug form of the CAM2027 GitHub repository (versions filled in)"
+
+    def Activated(self):
+        open_feedback("bug")
+
+
+class SuggestFeature(_Base):
+    atelier = "cmd-suggest-feature"
+    text = "Suggest a feature"
+    tooltip = "Open the idea form of the CAM2027 GitHub repository"
+
+    def Activated(self):
+        open_feedback("idea")
+
+
+class SupportProject(_Base):
+    atelier = "cmd-support"
+    text = "Support the project"
+    tooltip = "Buy the developer a coffee (Buy Me a Coffee page)"
+
+    def Activated(self):
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl(SUPPORT_URL))
 
 
 class AdvancedMode(_Base):
@@ -1592,6 +1628,9 @@ COMMANDS = [
     ("CAM2027_AdvancedMode", AdvancedMode),
     ("CAM2027_ResetLayout", ResetLayout),
     ("CAM2027_About", About),
+    ("CAM2027_ReportBug", ReportBug),
+    ("CAM2027_SuggestFeature", SuggestFeature),
+    ("CAM2027_SupportProject", SupportProject),
 ]
 from . import aspirecmds  # noqa: E402  (S5 : modèles de parcours, dessin, images, décors)
 COMMANDS += aspirecmds.COMMANDS
@@ -1602,7 +1641,8 @@ TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", 
            "CAM2027_Export"]
 MENU = [name for name, _cls in COMMANDS]
 #: menu « CAM2027 » en atelier dans FreeCAD complet (dans le logiciel, ces commandes vont dans Affichage / Aide)
-WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
+WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_ReportBug",
+                  "CAM2027_SuggestFeature", "CAM2027_SupportProject", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
 STAGE_MENUS = (
     ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",

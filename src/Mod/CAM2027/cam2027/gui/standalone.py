@@ -46,9 +46,9 @@ def load_gui_modules():
 
 
 def window_title():
-    from ..version import __version__
+    from ..version import __version__, RELEASE_STAGE
 
-    return "%s %s" % (APP_NAME, __version__)
+    return "%s %s %s" % (APP_NAME, __version__, RELEASE_STAGE)
 
 
 def _freecad_version():
@@ -57,7 +57,7 @@ def _freecad_version():
 
 
 def fix_title(title):
-    """« Projet - CAM2027 1.1.4 » -> « Projet - CAM2027 0.1.3 » (version de FreeCAD remplacée)."""
+    """« Projet - CAM2027 1.1.4 » -> « Projet - CAM2027 0.1.3 alpha » (version de FreeCAD remplacée)."""
     wrong = "%s %s" % (APP_NAME, _freecad_version())
     return title.replace(wrong, window_title()) if wrong in title else title
 
@@ -158,7 +158,10 @@ class CamOnlyManipulator(object):
             {"append": "CAM2027_Theme", "menuItem": "Std_DrawStyle"},
             {"append": "CAM2027_AdvancedMode", "menuItem": "Std_DrawStyle"},
             {"append": "CAM2027_ResetLayout", "menuItem": "Std_DrawStyle"},
-            {"append": "CAM2027_About", "menuItem": "Std_WhatsThis"},
+            {"append": "CAM2027_ReportBug", "menuItem": "Std_WhatsThis"},
+            {"append": "CAM2027_SuggestFeature", "menuItem": "CAM2027_ReportBug"},
+            {"append": "CAM2027_SupportProject", "menuItem": "CAM2027_SuggestFeature"},
+            {"append": "CAM2027_About", "menuItem": "CAM2027_SupportProject"},
         ]
         changes += [{"remove": name} for name in REMOVED_MENU_ITEMS]
         return changes

@@ -1,0 +1,77 @@
+name: "🐞 Bug CAM2027 (alpha)"
+description: "Quelque chose ne marche pas, plante ou donne un parcours faux. / Something is broken."
+title: "[Bug] "
+labels: ["bug", "alpha"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de tester CAM2027 ! Un bug précis avec ses fichiers se corrige vite.
+        *Thanks for testing CAM2027! English is welcome too.*
+
+        ⚠️ **Version alpha** : vérifiez toujours un parcours (simulation, contrôle matière, marche à vide) avant d'usiner.
+  - type: textarea
+    id: what
+    attributes:
+      label: "Que s'est-il passé ? / What happened?"
+      description: "Message d'erreur exact, état « Échec », parcours qui entaille la pièce, gel de l'interface…"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Étapes pour reproduire / Steps to reproduce"
+      placeholder: |
+        1. Nouveau projet, import de …
+        2. Brut : plaque 18 mm …
+        3. Opération V-carving, outil …
+        4. Calculer → …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Résultat attendu / Expected result"
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Partie du logiciel / Area"
+      options:
+        - "Import (STEP, STL, SVG, DXF, image)"
+        - "Brut, montage, origine / Stock, setup"
+        - "Bibliothèque d'outils / Tool library"
+        - "Opérations 2D (contour, poche, perçage…)"
+        - "Opérations 3D (ébauche, finition…)"
+        - "V-carving, gravure, incrustation / V-carve, inlay"
+        - "Dessin vectoriel, vectorisation, relief / Vectors, trace, relief"
+        - "4e axe / Rotary"
+        - "Simulation, contrôle matière / Simulation, material check"
+        - "Export G-code, post-processeur / G-code export"
+        - "Interface, panneaux, annuler / UI"
+        - "Autre / Other"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: "Versions"
+      description: "Rempli par le menu Aide > Signaler un bug. Sinon : version de CAM2027 (Aide > À propos), FreeCAD, Windows."
+      placeholder: "CAM2027 0.1.3 alpha, FreeCAD 1.1.4, Windows-11-…"
+    validations:
+      required: true
+  - type: input
+    id: machine
+    attributes:
+      label: "Machine et contrôleur (si G-code) / Machine and controller"
+      placeholder: "LUNYEE 4040 Nova, GRBL 1.1, CNCjs"
+  - type: textarea
+    id: files
+    attributes:
+      label: "Fichiers / Files"
+      description: "Glissez ici le projet (.FCStd, zippé), le modèle ou l'image importés, le G-code, une capture d'écran. Ce qui reproduit le bug fait gagner le plus de temps."
+  - type: textarea
+    id: log
+    attributes:
+      label: "Journal / Log"
+      description: "Fin du fichier FreeCAD.log (dossier indiqué dans Aide > À propos), si une erreur y apparaît."
+      render: text

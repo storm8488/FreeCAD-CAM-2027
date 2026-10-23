@@ -114,6 +114,12 @@ ICONS = {
                                                     '<circle cx="7" cy="17" r="2.1" fill="{ac}" stroke="none"/>']),
     "cmd-reset-layout": (["P:M3 4h18v16H3z M9 4v16 M9 10h12"], ["P:M19 16.5a3 3 0 1 1-1.2-2.4 M18.5 12.6v1.9h-1.9"]),
     "cmd-about": (['<circle cx="12" cy="12" r="9"/>'], ["P:M12 11v6", '<circle cx="12" cy="7.6" r="1.2" fill="{ac}" stroke="none"/>']),
+    "cmd-report-bug": (["P:M9.5 7.5a2.5 2.5 0 0 1 5 0 M8 9.5h8v4.5a4 4 0 0 1-8 0z M12 9.5V18"],
+                       ["P:M4 12.5h4 M16 12.5h4 M5 7l3 2.5 M19 7l-3 2.5 M5 19l3-2.5 M19 19l-3-2.5"]),
+    "cmd-support": (["P:M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z M16 11h1.5a2.5 2.5 0 0 1 0 5H16"],
+                    ["P:M8 3.5c-.8 1 .8 2 0 3 M12 3.5c-.8 1 .8 2 0 3"]),
+    "cmd-suggest-feature": (["P:M9.5 18h5 M10.5 21h3"],
+                            ["P:M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1V16h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"]),
 }
 # barres de FreeCAD gardées dans le logiciel (Fichier, Édition, Vue) : même style que les commandes CAM2027
 _corners = "P:M3 8V3h5 M16 3h5v5 M21 16v5h-5 M8 21H3v-5"

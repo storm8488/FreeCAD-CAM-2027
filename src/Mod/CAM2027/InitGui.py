@@ -79,6 +79,12 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         from cam2027.gui import commands
 
         QtCore.QTimer.singleShot(0, commands.refresh_icons)  # barres construites juste après Activated
+        try:
+            from cam2027.gui import alpha
+
+            alpha.install_status_badge()
+        except Exception as exc:  # jamais bloquer l'atelier pour le repère alpha
+            FreeCAD.Console.PrintWarning("CAM2027: alpha badge not installed: %s\n" % exc)
         if standalone.is_standalone():
             standalone.apply_advanced_mode()
 

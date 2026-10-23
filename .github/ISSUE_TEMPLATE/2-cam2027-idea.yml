@@ -1,0 +1,31 @@
+name: "💡 Idée ou fonction / Feature idea"
+description: "Une fonction qui manque, une étape trop longue, une idée d'amélioration. / Something missing or tedious."
+title: "[Idée] "
+labels: ["idée", "alpha"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Toutes les idées sont bienvenues, surtout celles qui viennent d'un vrai usinage.
+        *All ideas welcome, English too.*
+  - type: textarea
+    id: need
+    attributes:
+      label: "Qu'aimeriez-vous faire ? / What do you want to do?"
+      description: "Le besoin d'atelier d'abord (la pièce, la machine, ce qui bloque aujourd'hui)."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Comment le logiciel pourrait-il le faire ? / Proposed solution"
+  - type: textarea
+    id: elsewhere
+    attributes:
+      label: "Ailleurs ? / Seen elsewhere?"
+      description: "Fusion 360, Aspire / VCarve, Carbide Create, Estlcam… : comment ils le font (captures bienvenues)."
+  - type: input
+    id: environment
+    attributes:
+      label: "Versions"
+      placeholder: "CAM2027 0.1.3 alpha, FreeCAD 1.1.4, Windows-11-…"

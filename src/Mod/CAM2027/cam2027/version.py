@@ -2,6 +2,12 @@
 """Version de l'atelier CAM2027 et des formats de données."""
 
 __version__ = "0.1.3"
+#: phase de test : affichée dans le titre de la fenêtre, la barre d'état et « À propos »
+RELEASE_STAGE = "alpha"
+#: dépôt public : formulaires de bug et d'idée (``cam2027.feedback``)
+REPOSITORY_URL = "https://github.com/storm8488/FreeCAD-CAM-2027"
+#: soutien du projet (menu Aide > Soutenir le projet)
+SUPPORT_URL = "https://buymeacoffee.com/damouse8482"
 
 # Version du schéma JSON (bibliothèque d'outils, instantané de projet, profil machine).
 # Toute modification incompatible incrémente ce nombre et ajoute une migration

@@ -1549,5 +1549,14 @@
   "Downloading the AI model...": "Téléchargement du modèle d'IA...",
   "onnxruntime could not be installed: {error}": "onnxruntime n'a pas pu être installé : {error}",
   "the AI depth model is not usable after installation": "le modèle de profondeur n'est pas utilisable après l'installation",
-  "the AI depth model is not installed": "le modèle de profondeur par IA n'est pas installé"
+  "the AI depth model is not installed": "le modèle de profondeur par IA n'est pas installé",
+  "Report a bug": "Signaler un bug",
+  "Suggest a feature": "Proposer une idée",
+  "Open the bug form of the CAM2027 GitHub repository (versions filled in)": "Ouvre le formulaire de bug du dépôt GitHub de CAM2027 (versions déjà remplies)",
+  "Open the idea form of the CAM2027 GitHub repository": "Ouvre le formulaire d'idée du dépôt GitHub de CAM2027",
+  "Alpha version: check every toolpath (simulation, material check, dry run above the part) before cutting.": "Version alpha : vérifiez chaque parcours (simulation, contrôle matière, marche à vide au-dessus de la pièce) avant d'usiner.",
+  "Found a bug or have an idea? Help > Report a bug / Suggest a feature, or the links in the status bar.": "Un bug, une idée ? Aide > Signaler un bug / Proposer une idée, ou les liens de la barre d'état.",
+  "Support the project": "Soutenir le projet",
+  "Buy the developer a coffee (Buy Me a Coffee page)": "Offrir un café au développeur (page Buy Me a Coffee)",
+  "Support the project: {url}": "Soutenir le projet : {url}"
 }

@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **Version alpha, retours des testeurs**. Le logiciel est marqué « alpha » (titre de la fenêtre, repère ALPHA dans
+  la barre d'état, « À propos »). « Signaler un bug » et « Proposer une idée » (menu Aide et liens de la barre
+  d'état) ouvrent le formulaire GitHub du dépôt dans le navigateur, versions de CAM2027, FreeCAD et Windows déjà
+  remplies ; rien n'est envoyé par le logiciel. Formulaires `.github/ISSUE_TEMPLATE` (bug : étapes, partie du
+  logiciel, fichiers, journal ; idée : besoin, proposition, ailleurs) à la place de ceux de FreeCAD, page
+  d'accueil du dépôt `.github/README.md` (présentation, installation dans FreeCAD 1.1, retours). « À propos » ne dit
+  plus « pas encore disponible : surfaçage 3D, 4e axe, collisions » (fait depuis). « Soutenir le projet » (menu Aide,
+  « À propos », page du dépôt, bouton Sponsor de GitHub) mène à https://buymeacoffee.com/damouse8482.
 - **V-carving : 25 min -> 20 s sur un dessin vectorisé, et plus de morsure dans les coins**. FreeCAD classe chaque
   sommet du diagramme de Voronoï (dedans / dehors) en reconstruisant son classificateur à chaque appel : 56 ms par
   sommet, 1 505 s pour le dragon vectorisé. Classement refait sur les segments mêmes du diagramme (numpy), G-code
