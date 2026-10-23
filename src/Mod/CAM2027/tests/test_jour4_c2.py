@@ -293,6 +293,135 @@ def _dense_clamp_contacts(p0, p1, envelope, boxes, step=0.0005):
     return out
 
 
+def _old_refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=sim.MODEL_DEFLECTION,
+                       max_cells=4000):
+    """``refine_gouges`` de 25562b8 (boucle colonne par colonne, les ``max_cells`` plus profondes)."""
+    np = sim._np()
+    gh = np.array(gouge_heights, dtype=float, copy=True)
+    vertical = np.where(np.isfinite(gh), gh - zmap.top, -np.inf)
+    cand = np.argwhere(vertical > tolerance)
+    if not len(cand):
+        return gh
+    order = np.argsort(-vertical[cand[:, 0], cand[:, 1]])[:max_cells]
+    cand = cand[order]
+    A, B, C = sim._triangles(shapes, deflection)
+    if not len(A):
+        return gh
+    lo = np.minimum(np.minimum(A, B), C)
+    hi = np.maximum(np.maximum(A, B), C)
+    # casiers de 2 mm sur XY : triangle -> casiers couverts par sa boîte
+    bx0 = np.floor((lo[:, 0] - zmap.x0) / 2.0).astype(int)
+    bx1 = np.floor((hi[:, 0] - zmap.x0) / 2.0).astype(int)
+    by0 = np.floor((lo[:, 1] - zmap.y0) / 2.0).astype(int)
+    by1 = np.floor((hi[:, 1] - zmap.y0) / 2.0).astype(int)
+    buckets = {}
+    for k in range(len(A)):
+        for bx in range(bx0[k], bx1[k] + 1):
+            for by in range(by0[k], by1[k] + 1):
+                buckets.setdefault((bx, by), []).append(k)
+
+    def near(x, y, reach):
+        out = set()
+        for bx in range(int(math.floor((x - reach - zmap.x0) / 2.0)), int(math.floor((x + reach - zmap.x0) / 2.0)) + 1):
+            for by in range(int(math.floor((y - reach - zmap.y0) / 2.0)), int(math.floor((y + reach - zmap.y0) / 2.0)) + 1):
+                out.update(buckets.get((bx, by), ()))
+        return np.fromiter(out, dtype=int) if out else np.zeros(0, dtype=int)
+
+    for i, j in cand:
+        x, y, z = float(zmap.xs[i]), float(zmap.ys[j]), float(zmap.top[i, j])
+        v = float(vertical[i, j])
+        reach = min(v, sim.REFINE_REACH) + 0.05
+        idx = near(x, y, reach)
+        if not len(idx):
+            continue
+        a, b, c = A[idx], B[idx], C[idx]
+        # dedans / dehors : parité des traversées de la verticale au-dessus du point (légèrement décalée pour
+        # ne pas tomber sur une arête)
+        px, py = x + 1.3e-5, y + 0.7e-5
+        det = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
+        okd = np.abs(det) > 1e-15
+        dets = np.where(okd, det, 1.0)
+        l1 = ((b[:, 1] - c[:, 1]) * (px - c[:, 0]) + (c[:, 0] - b[:, 0]) * (py - c[:, 1])) / dets
+        l2 = ((c[:, 1] - a[:, 1]) * (px - c[:, 0]) + (a[:, 0] - c[:, 0]) * (py - c[:, 1])) / dets
+        l3 = 1.0 - l1 - l2
+        crosses = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
+        zc = l1 * a[:, 2] + l2 * b[:, 2] + l3 * c[:, 2]
+        over = np.sort(zc[crosses & (zc > z)])
+        probe = z
+        if len(over) % 2 == 0:
+            # point coupé hors de la pièce, pièce au-dessus (surplomb) : le corps de la fraise, vertical au-dessus
+            # de sa pointe, traverse la pièce. Pénétration prise au milieu de la première traversée.
+            if not len(over):
+                gh[i, j] = z
+                continue
+            probe = 0.5 * (over[0] + (over[1] if len(over) > 1 else over[0]))
+        d = float(sim._point_triangle_distance(np.array([x, y, probe]), a, b, c).min())
+        if d < reach:
+            gh[i, j] = z + min(d, v)
+    return gh
+
+
+def _trays_with_wall_gouges(res=0.5):
+    """Plaque 190 x 160 x 12 à 6 x 5 alvéoles de 20 x 20 x 6, chacune vidée par une fraise plate de 6 dont le
+    contour passe 0,5 mm trop près des parois : entaille réelle 0,5 mm, hauteur de paroi 6 mm."""
+    part = Part.makeBox(190, 160, 12)
+    pockets = [(10 + i * 30, 10 + j * 30) for i in range(6) for j in range(5)]
+    for x0, y0 in pockets:
+        part = part.cut(Part.makeBox(20, 20, 6, V(x0, y0, 6)))
+    z = sim.ZMap(0, 0, 190, 160, 13.0, res)
+    flat = sim.ToolProfile("flat", 6.0)
+    z.sweep((-5, -5, 12.0), (195, -5, 12.0), flat)
+    for x0, y0 in pockets:
+        a, b = 2.5, 17.5  # centre à 2,5 mm des parois au lieu de 3
+        pts = [(x0 + a, y0 + a), (x0 + b, y0 + a), (x0 + b, y0 + b), (x0 + a, y0 + b), (x0 + a, y0 + a)]
+        for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
+            z.sweep((xa, ya, 6.0), (xb, yb, 6.0), flat)
+        z.sweep((x0 + 10, y0 + 5, 6.0), (x0 + 10, y0 + 15, 6.0), flat)
+    return part, z
+
+
+class TestRefineAllColumns(unittest.TestCase):
+    """Entailles vérifiées en 3D sur toutes les colonnes signalées (avant : les 4 000 plus profondes, les suivantes
+    gardaient leur hauteur de paroi)."""
+
+    def _case_step_overhang(self):
+        part = Part.makeBox(10, 20, 10).fuse(Part.makeBox(30, 20, 2)).fuse(Part.makeBox(10, 20, 2, V(30, 0, 4)))
+        z = sim.ZMap(0, 0, 50, 20, 12.0, 0.5)
+        flat = sim.ToolProfile("flat", 6.0)
+        z.sweep((13.05, 2, 3.0), (13.05, 18, 3.0), flat)
+        z.sweep((12.95, 2, 3.0), (12.95, 18, 3.0), flat)
+        z.sweep((35, 2, 3.0), (35, 18, 3.0), flat)
+        z.sweep((5, 10, 8.0), (5, 10, 8.0), flat)
+        z.sweep((20, 1, 1.5), (48, 19, 1.0), sim.ToolProfile("ball", 4.0))  # en biais, sous le surplomb
+        return part, z
+
+    def _same(self, a, b):
+        import numpy as np
+
+        self.assertTrue(np.array_equal(np.isfinite(a), np.isfinite(b)))
+        fin = np.isfinite(a)
+        self.assertLess(float(np.abs(a[fin] - b[fin]).max()), 1e-9)
+
+    def test_identical_to_the_column_loop(self):
+        for part, z in (self._case_step_overhang(), _trays_with_wall_gouges(1.0)):
+            _h, low = sim.model_heights(z, [part], lateral=sim.WALL_TOLERANCE)
+            self._same(sim.refine_gouges(z, [part], low), _old_refine_gouges(z, [part], low, max_cells=10 ** 9))
+
+    def test_beyond_4000_columns(self):
+        part, z = _trays_with_wall_gouges(0.5)
+        h, low = sim.model_heights(z, [part], lateral=sim.WALL_TOLERANCE)
+        self.assertGreater(int(((low - z.top) > 0.02).sum()), 4000)
+        t0 = time.perf_counter()
+        old = sim.compare(z, h, gouge_heights=_old_refine_gouges(z, [part], low))
+        t1 = time.perf_counter()
+        new = sim.compare(z, h, gouge_heights=sim.refine_gouges(z, [part], low))
+        t2 = time.perf_counter()
+        self.assertGreater(old["gouge_max"], 5.0)  # 25562b8 : hauteur de paroi au-delà des 4 000
+        self.assertGreater(new["gouge_max"], 0.2)  # centres de colonnes à 0,25 mm dans la paroi (grille 0,5)
+        self.assertLess(new["gouge_max"], 0.55)
+        self.assertLess(t2 - t1, 1.1 * (t1 - t0), (t1 - t0, t2 - t1))  # tout vérifié, pas plus lent
+
+
 class TestClampContacts(unittest.TestCase):
     """Brides : contact exact segment / boîte (avant : échantillonnage tous les 1 mm)."""
 

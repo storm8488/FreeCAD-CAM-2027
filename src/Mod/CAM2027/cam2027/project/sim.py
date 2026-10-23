@@ -1026,12 +1026,16 @@ def display_mesh(zmap, max_facets, tolerance=0.01, reduction=0.9, in_process=Non
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-#: entailles vérifiées en 3D (distance exacte à la pièce) : les plus profondes d'abord, au plus tant de colonnes
-REFINE_MAX_CELLS = 4000
 #: portée de la recherche de la surface autour d'une colonne entaillée (mm) ; au-delà, l'entaille verticale
 #: est gardée
 REFINE_REACH = 10.0
-_BUCKET_MM = 2.0
+#: portées croissantes de la recherche (mm) : la plupart des colonnes trouvent la surface tout près
+REFINE_PASSES = (0.5, 2.0)
+#: triangles dont la boîte (élargie de la portée) couvre plus de tant de cases de la grille des colonnes : traités
+#: un par un (grandes faces planes en longues lamelles : l'énumération des cases coûterait plus)
+_BIG_TRIANGLE_CELLS = 256
+#: paires (triangle, colonne) traitées d'un coup (mémoire bornée)
+_PAIR_CHUNK = 1_000_000
 
 
 def _triangles(shapes, deflection):
@@ -1082,6 +1086,69 @@ def _point_triangle_distance(p, A, B, C):
     return np.minimum.reduce([face, seg(A, B), seg(B, C), seg(C, A)])
 
 
+def _triangle_point_pairs(lo, hi, px, py, reach, cell):
+    """Paires ``(triangle, point)`` où le point ``(px, py)`` est dans la boîte XY du triangle élargie de ``reach`` :
+    tableaux d'indices, par paquets d'au plus ``_PAIR_CHUNK`` paires environ (générateur). Points rangés dans une
+    grille de pas ``cell`` ; chaque petit triangle énumère les cases de sa boîte, les grands parcourent les points
+    triés en X."""
+    np = _np()
+    if not len(px) or not len(lo):
+        return
+    gx0, gy0 = float(px.min()), float(py.min())
+    nx = int((float(px.max()) - gx0) / cell) + 1
+    ny = int((float(py.max()) - gy0) / cell) + 1
+    ci = np.minimum(((px - gx0) / cell).astype(np.int64), nx - 1)
+    cj = np.minimum(((py - gy0) / cell).astype(np.int64), ny - 1)
+    key = ci * ny + cj
+    order = np.argsort(key, kind="stable")
+    starts = np.searchsorted(key[order], np.arange(nx * ny + 1))
+    xl, xh = lo[:, 0] - reach, hi[:, 0] + reach
+    yl, yh = lo[:, 1] - reach, hi[:, 1] + reach
+    outside = (xh < gx0) | (yh < gy0) | (xl > gx0 + nx * cell) | (yl > gy0 + ny * cell)
+    i0 = np.clip(np.floor((xl - gx0) / cell), 0, nx - 1).astype(np.int64)
+    i1 = np.clip(np.floor((xh - gx0) / cell), 0, nx - 1).astype(np.int64)
+    j0 = np.clip(np.floor((yl - gy0) / cell), 0, ny - 1).astype(np.int64)
+    j1 = np.clip(np.floor((yh - gy0) / cell), 0, ny - 1).astype(np.int64)
+    nj = j1 - j0 + 1
+    ncell = np.where(outside, 0, (i1 - i0 + 1) * nj)
+    small = np.nonzero((ncell > 0) & (ncell <= _BIG_TRIANGLE_CELLS))[0]
+    big = np.nonzero(ncell > _BIG_TRIANGLE_CELLS)[0]
+    # petits triangles : (triangle, case) puis (triangle, point), par paquets de triangles
+    step = max(1, _PAIR_CHUNK // 64)
+    for k in range(0, len(small), step):
+        tri = small[k:k + step]
+        reps = ncell[tri]
+        t = np.repeat(tri, reps)
+        local = np.arange(len(t)) - np.repeat(np.cumsum(reps) - reps, reps)
+        cells = (i0[t] + local // nj[t]) * ny + (j0[t] + local % nj[t])
+        cnt = starts[cells + 1] - starts[cells]
+        t = np.repeat(t, cnt)
+        pts = order[np.repeat(starts[cells], cnt) + (np.arange(len(t)) - np.repeat(np.cumsum(cnt) - cnt, cnt))]
+        ok = (px[pts] >= xl[t]) & (px[pts] <= xh[t]) & (py[pts] >= yl[t]) & (py[pts] <= yh[t])
+        if ok.any():
+            yield t[ok], pts[ok]
+    # grands triangles : points triés en X, tranche de la boîte
+    if len(big):
+        xo = np.argsort(px, kind="stable")
+        xs = px[xo]
+        bt, bp, size = [], [], 0
+        for tr in big.tolist():
+            a, b = np.searchsorted(xs, xl[tr], "left"), np.searchsorted(xs, xh[tr], "right")
+            if a >= b:
+                continue
+            cand = xo[a:b]
+            cand = cand[(py[cand] >= yl[tr]) & (py[cand] <= yh[tr])]
+            if len(cand):
+                bt.append(np.full(len(cand), tr, dtype=np.int64))
+                bp.append(cand)
+                size += len(cand)
+            if size >= _PAIR_CHUNK:
+                yield np.concatenate(bt), np.concatenate(bp)
+                bt, bp, size = [], [], 0
+        if bt:
+            yield np.concatenate(bt), np.concatenate(bp)
+
+
 def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_DEFLECTION):
     """Vérifie en 3D les colonnes que la carte de hauteur dit entaillées et remplace leur entaille verticale
     par la vraie pénétration : distance du point coupé ``(x, y, matière restante)`` à la surface de la pièce ;
@@ -1089,70 +1156,75 @@ def refine_gouges(zmap, shapes, gouge_heights, tolerance=0.02, deflection=MODEL_
     du milieu de la première traversée de la pièce au-dessus du point.
 
     Près d'une paroi raide, une fraise qui entre de 0,05 mm sur le côté abaisse la colonne de toute la hauteur
-    de la paroi (1,85 mm signalés sur le casse-noix de l'utilisateur pour 0,05 mm réels). Retourne les
-    hauteurs d'entaille corrigées (copie)."""
+    de la paroi (1,85 mm signalés sur le casse-noix de l'utilisateur pour 0,05 mm réels). Toutes les colonnes
+    signalées sont vérifiées (jour 3 : les 4 000 plus profondes, les suivantes gardaient leur hauteur de paroi),
+    par paires (triangle, colonne) vectorisées : traversées de la verticale de chaque colonne, puis distance à la
+    surface par portées croissantes (``REFINE_PASSES``, puis la portée de la colonne). Retourne les hauteurs
+    d'entaille corrigées (copie)."""
     np = _np()
     gh = np.array(gouge_heights, dtype=float, copy=True)
     vertical = np.where(np.isfinite(gh), gh - zmap.top, -np.inf)
     cand = np.argwhere(vertical > tolerance)
     if not len(cand):
         return gh
-    order = np.argsort(-vertical[cand[:, 0], cand[:, 1]])[:REFINE_MAX_CELLS]
-    cand = cand[order]
     A, B, C = _triangles(shapes, deflection)
     if not len(A):
         return gh
     lo = np.minimum(np.minimum(A, B), C)
     hi = np.maximum(np.maximum(A, B), C)
-    # casiers de 2 mm sur XY : triangle -> casiers couverts par sa boîte
-    bx0 = np.floor((lo[:, 0] - zmap.x0) / _BUCKET_MM).astype(int)
-    bx1 = np.floor((hi[:, 0] - zmap.x0) / _BUCKET_MM).astype(int)
-    by0 = np.floor((lo[:, 1] - zmap.y0) / _BUCKET_MM).astype(int)
-    by1 = np.floor((hi[:, 1] - zmap.y0) / _BUCKET_MM).astype(int)
-    buckets = {}
-    for k in range(len(A)):
-        for bx in range(bx0[k], bx1[k] + 1):
-            for by in range(by0[k], by1[k] + 1):
-                buckets.setdefault((bx, by), []).append(k)
-
-    def near(x, y, reach):
-        out = set()
-        for bx in range(int(math.floor((x - reach - zmap.x0) / _BUCKET_MM)), int(math.floor((x + reach - zmap.x0) / _BUCKET_MM)) + 1):
-            for by in range(int(math.floor((y - reach - zmap.y0) / _BUCKET_MM)), int(math.floor((y + reach - zmap.y0) / _BUCKET_MM)) + 1):
-                out.update(buckets.get((bx, by), ()))
-        return np.fromiter(out, dtype=int) if out else np.zeros(0, dtype=int)
-
-    for i, j in cand:
-        x, y, z = float(zmap.xs[i]), float(zmap.ys[j]), float(zmap.top[i, j])
-        v = float(vertical[i, j])
-        reach = min(v, REFINE_REACH) + 0.05
-        idx = near(x, y, reach)
-        if not len(idx):
-            continue
-        a, b, c = A[idx], B[idx], C[idx]
-        # dedans / dehors : parité des traversées de la verticale au-dessus du point (légèrement décalée pour
-        # ne pas tomber sur une arête)
-        px, py = x + 1.3e-5, y + 0.7e-5
+    ci, cj = cand[:, 0], cand[:, 1]
+    x, y, z = zmap.xs[ci].astype(float), zmap.ys[cj].astype(float), zmap.top[ci, cj].astype(float)
+    v = vertical[ci, cj]
+    reach = np.minimum(v, REFINE_REACH) + 0.05
+    cell = max(2.0, 4.0 * zmap.res)
+    # dedans / dehors : traversées de la verticale au-dessus du point (légèrement décalée pour ne pas tomber sur
+    # une arête) ; les deux plus basses sont gardées
+    qx, qy = x + 1.3e-5, y + 0.7e-5
+    hits_p, hits_z = [], []
+    for t, p in _triangle_point_pairs(lo, hi, qx, qy, 0.0, cell):
+        a, b, c = A[t], B[t], C[t]
         det = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
         okd = np.abs(det) > 1e-15
         dets = np.where(okd, det, 1.0)
-        l1 = ((b[:, 1] - c[:, 1]) * (px - c[:, 0]) + (c[:, 0] - b[:, 0]) * (py - c[:, 1])) / dets
-        l2 = ((c[:, 1] - a[:, 1]) * (px - c[:, 0]) + (a[:, 0] - c[:, 0]) * (py - c[:, 1])) / dets
+        l1 = ((b[:, 1] - c[:, 1]) * (qx[p] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (qy[p] - c[:, 1])) / dets
+        l2 = ((c[:, 1] - a[:, 1]) * (qx[p] - c[:, 0]) + (a[:, 0] - c[:, 0]) * (qy[p] - c[:, 1])) / dets
         l3 = 1.0 - l1 - l2
-        crosses = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
         zc = l1 * a[:, 2] + l2 * b[:, 2] + l3 * c[:, 2]
-        over = np.sort(zc[crosses & (zc > z)])
-        probe = z
-        if len(over) % 2 == 0:
-            # point coupé hors de la pièce, pièce au-dessus (surplomb) : le corps de la fraise, vertical au-dessus
-            # de sa pointe, traverse la pièce. Pénétration prise au milieu de la première traversée.
-            if not len(over):
-                gh[i, j] = z
-                continue
-            probe = 0.5 * (over[0] + (over[1] if len(over) > 1 else over[0]))
-        d = float(_point_triangle_distance(np.array([x, y, probe]), a, b, c).min())
-        if d < reach:
-            gh[i, j] = z + min(d, v)
+        ok = okd & (l1 >= 0) & (l2 >= 0) & (l3 >= 0) & (zc > z[p])
+        hits_p.append(p[ok])
+        hits_z.append(zc[ok])
+    hp = np.concatenate(hits_p) if hits_p else np.zeros(0, dtype=np.int64)
+    hz = np.concatenate(hits_z) if hits_z else np.zeros(0)
+    srt = np.lexsort((hz, hp))
+    hp, hz = hp[srt], hz[srt]
+    count = np.bincount(hp, minlength=len(x))
+    start = np.cumsum(count) - count
+    pad = np.append(hz, [np.nan, np.nan])
+    first = np.where(count > 0, pad[np.minimum(start, len(hz))], np.nan)
+    second = np.where(count > 1, pad[np.minimum(start + 1, len(hz))], first)
+    even = count % 2 == 0
+    # point coupé hors de la pièce, pièce au-dessus (surplomb) : le corps de la fraise, vertical au-dessus de sa
+    # pointe, traverse la pièce. Pénétration prise au milieu de la première traversée.
+    probe = np.where(even & (count > 0), 0.5 * (first + second), z)
+    free = even & (count == 0)  # rien au-dessus : hors de la pièce, pas d'entaille
+    # distance à la surface : portées croissantes, chaque colonne réglée dès que la surface est à sa portée
+    d = np.full(len(x), np.inf)
+    todo = ~free
+    P = np.stack([x, y, probe], axis=1)
+    for radius in REFINE_PASSES + (None,):
+        idx = np.nonzero(todo)[0]
+        if not len(idx):
+            break
+        r = reach[idx] if radius is None else np.minimum(reach[idx], radius)
+        rmax = float(r.max())
+        dd = np.full(len(idx), np.inf)
+        for t, p in _triangle_point_pairs(lo, hi, x[idx], y[idx], rmax, max(cell, rmax)):
+            np.minimum.at(dd, p, _point_triangle_distance(P[idx[p]], A[t], B[t], C[t]))
+        d[idx] = dd
+        todo[idx] = (dd > r) & (r < reach[idx])  # pas encore réglée : rien dans ce passage, portée pas atteinte
+    near = ~free & (d < reach)
+    gh[ci[free], cj[free]] = z[free]
+    gh[ci[near], cj[near]] = z[near] + np.minimum(d[near], v[near])
     return gh
 
 

@@ -26,6 +26,11 @@
   0,17 mm de pénétration manqués dans le test). La pénétration donnée est la plus grande du mouvement (avant : celle
   du premier point, 0,022 mm au lieu de 0,749 mm sur le plateau). Plateau avec 2 brides : mêmes événements, contrôle
   complet 1,89 → 1,15 s.
+- **[C2]** Contrôle matière : **toutes les colonnes signalées sont vérifiées en 3D** (avant : les 4 000 plus
+  profondes, les suivantes gardaient la hauteur de paroi comme entaille). Plateau avec une poche 0,5 mm trop large
+  (10 194 colonnes) : entaille annoncée 25,2 mm → 0,500 mm (la vraie). Calcul vectorisé par paires (triangle,
+  colonne) sur une grille, portées croissantes : mêmes valeurs que la boucle colonne par colonne (écart < 1e-9),
+  vérification 1,4-1,6 → 0,3 s, contrôle complet 2,5 → 1,4 s.
 
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
