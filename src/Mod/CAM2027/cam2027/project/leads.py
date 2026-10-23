@@ -57,7 +57,67 @@ def create(doc, job, current, name):
     else:
         dbo.setup(obj)
         obj.IncludeLayers = True  # une entrée à chaque passe de profondeur, comme 1.1
+    import FreeCAD
+
+    if FreeCAD.GuiUp and obj.ViewObject is not None and is_v11(obj):
+        ViewProviderLeads(obj.ViewObject)
     return obj
+
+
+class ViewProviderLeads(object):
+    """Fournisseur de vue de l'habillage (FreeCAD 1.1) : page de tâches de FreeCAD au double-clic, gardée dans
+    ``panel``. Celui de FreeCAD (``ViewProviderDressup``) ouvre sa page dès sa création, dans la transaction de
+    l'éditeur CAM2027, et ne garde pas la page ouverte (Annuler introuvable après réouverture du projet)."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.obj = vobj.Object
+        self.panel = None
+
+    def claimChildren(self):
+        base = getattr(self.obj, "Base", None)
+        return [base] if base is not None else []
+
+    def setEdit(self, vobj, mode=0):
+        import FreeCADGui
+        from Path.Dressup.Gui.LeadInOut import TaskDressupLeadInOut
+
+        FreeCADGui.Control.closeDialog()
+        self.panel = TaskDressupLeadInOut(vobj.Object, self)
+        FreeCADGui.Control.showDialog(self.panel)
+        return True
+
+    def unsetEdit(self, vobj, mode=0):
+        if self.panel:
+            self.panel.abort()
+
+    def clearTaskPanel(self):
+        self.panel = None
+
+    def onDelete(self, vobj, args=None):
+        """Comme FreeCAD : l'opération enveloppée reprend sa place dans le job et redevient visible."""
+        import PathScripts.PathUtils as PathUtils
+
+        base = vobj.Object.Base
+        if base is not None:
+            if base.ViewObject is not None:
+                base.ViewObject.Visibility = True
+            job = PathUtils.findParentJob(vobj.Object)
+            if job is not None:
+                job.Proxy.addOperation(base, vobj.Object)
+            vobj.Object.Base = None
+        return True
+
+    def getIcon(self):
+        return ":/icons/CAM_Dressup.svg"
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
 
 
 def set_params(obj, params):

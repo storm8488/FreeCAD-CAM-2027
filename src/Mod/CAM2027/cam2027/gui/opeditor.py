@@ -387,7 +387,8 @@ class OperationEditor(QtWidgets.QDialog):
                 continue
             if key == "leads" and self.kind not in ("profile", "slot"):
                 continue
-            if key == "dogbone" and self.kind not in ("profile", "pocket", "adaptive"):
+            if key == "dogbone" and (self.kind not in ("profile", "pocket", "adaptive")
+                                     or not dressupmod.dogbone_possible(self.op)):
                 continue
             meta = dressupmod.DRESSUPS[key]
             box = QtWidgets.QGroupBox(tr(meta["label"]))

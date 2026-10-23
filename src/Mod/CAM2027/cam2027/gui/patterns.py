@@ -81,6 +81,27 @@ class PatternDialog(QtWidgets.QDialog):
         form.addRow(bb)
         self.kind.currentIndexChanged.connect(self._show_kind)
         self._show_kind()
+        # pas proposé : emprise de la coupe + un diamètre d'outil (copies hors de la pièce), tant que l'utilisateur
+        # ne l'a pas saisi
+        self._auto_steps = True
+        self._suggested = None
+        for spin in (self.step_x, self.step_y):
+            spin.editingFinished.connect(self._steps_typed)
+        self.ops.itemChanged.connect(self._suggest_steps)
+        self._suggest_steps()
+
+    def _steps_typed(self):
+        if (self.step_x.value(), self.step_y.value()) != self._suggested:
+            self._auto_steps = False
+
+    def _suggest_steps(self, *_args):
+        steps = [patterns.default_steps(dressupmod.top_of(self.proj.job, o)) for o in self.checked_operations()]
+        steps = [s for s in steps if s]
+        if not self._auto_steps or not steps:
+            return
+        self.step_x.setValue(max(s[0] for s in steps))
+        self.step_y.setValue(max(s[1] for s in steps))
+        self._suggested = (self.step_x.value(), self.step_y.value())
 
     def _show_kind(self, *_args):
         grid = self.kind.currentData() == "Grid"
@@ -108,6 +129,7 @@ class PatternDialog(QtWidgets.QDialog):
             if not self.checked_operations():
                 raise patterns.PatternError("Select one or more operations to repeat.")
             patterns.offsets(self.params())
+            patterns.check_ops(self.proj, self.checked_operations(), self.params())
         except Exception as exc:
             self.status.setText("<span style='color:%s'>%s</span>" % (theme.status_color("error"), tr_msg(exc)))
             return

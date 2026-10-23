@@ -72,6 +72,21 @@ DOGBONE_POCKETS = ("Path.Op.Pocket", "Path.Op.PocketShape")
 DOGBONE_BAD_PATTERNS = ("ZigZag", "ZigZagOffset")
 
 
+def dogbone_refused(strategy, pattern=None):
+    """Dogbones refusés (FreeCAD plante les os dans les parois) pour la stratégie FreeCAD ``strategy`` (module de
+    l'opération) et le motif de vidage ``pattern`` : adaptative toujours, poches en zigzag."""
+    return strategy == "Path.Op.Adaptive" or (strategy in DOGBONE_POCKETS and pattern in DOGBONE_BAD_PATTERNS)
+
+
+def dogbone_possible(base):
+    """Un motif au moins de l'opération ``base`` accepte les dogbones (déduit de ``dogbone_refused``) : sinon
+    l'éditeur ne propose pas la case, qui échouerait toujours."""
+    strategy = type(getattr(base, "Proxy", None)).__module__
+    prop = next((p for p in ("ClearingPattern", "OffsetPattern") if p in base.PropertiesList), None)
+    choices = base.getEnumerationsOfProperty(prop) if prop else [None]
+    return any(not dogbone_refused(strategy, p) for p in choices or [None])
+
+
 def is_dressup(obj):
     return "Dressup" in obj.Name and hasattr(obj, "Base")
 
@@ -145,7 +160,7 @@ def add_dressup(job, op, kind, params=None, count=None):
             base = base_operation(current)
             strategy = type(getattr(base, "Proxy", None)).__module__
             pattern = getattr(base, "ClearingPattern", getattr(base, "OffsetPattern", None))
-            if strategy == "Path.Op.Adaptive" or (strategy in DOGBONE_POCKETS and pattern in DOGBONE_BAD_PATTERNS):
+            if dogbone_refused(strategy, pattern):
                 from ..i18n import UserError
 
                 if strategy == "Path.Op.Adaptive":
@@ -189,7 +204,7 @@ def add_dressup(job, op, kind, params=None, count=None):
                 import Path.Dressup.Gui.Tags as TagsGui
 
                 obj.ViewObject.Proxy = TagsGui.PathDressupTagViewProvider(obj.ViewObject)
-            elif kind == "pattern":
+            elif kind in ("pattern", "leads") and type(getattr(obj.ViewObject, "Proxy", None)).__module__.startswith("cam2027"):
                 pass  # fournisseur de vue posé à la création
             elif kind == "dogbone":
                 import Path.Dressup.Gui.DogboneII as DogboneGui

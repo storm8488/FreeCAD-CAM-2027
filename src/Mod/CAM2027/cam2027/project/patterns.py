@@ -168,9 +168,189 @@ def placements(obj):
     return out
 
 
+def footprint(base):
+    """Emprise XY de la coupe de ``base`` (parcours d'avance élargi du rayon de l'outil) : (xmin, ymin, xmax,
+    ymax), ``None`` sans mouvement de coupe. Un arc compte pour son cercle entier (prudent)."""
+    import Path.Dressup.Utils as DressupUtils
+    import PathScripts.PathUtils as PathUtils
+
+    if base is None or not base.isDerivedFrom("Path::Feature") or not base.Path.Commands:
+        return None
+    xs, ys = [], []
+    pos = [0.0, 0.0]
+    for c in PathUtils.getPathWithPlacement(base).Commands:
+        p = c.Parameters
+        new = [p.get("X", pos[0]), p.get("Y", pos[1])]
+        name = c.Name.replace("G0", "G") if c.Name in ("G01", "G02", "G03") else c.Name
+        if name in ("G1", "G2", "G3"):
+            xs += [pos[0], new[0]]
+            ys += [pos[1], new[1]]
+            if name != "G1" and ("I" in p or "J" in p):
+                cx, cy = pos[0] + p.get("I", 0.0), pos[1] + p.get("J", 0.0)
+                r = math.hypot(pos[0] - cx, pos[1] - cy)
+                xs += [cx - r, cx + r]
+                ys += [cy - r, cy + r]
+        pos = new
+    if not xs:
+        return None
+    tc = DressupUtils.toolController(base)
+    r = 0.5 * float(tc.Tool.Diameter) if tc is not None else 0.0
+    return (min(xs) - r, min(ys) - r, max(xs) + r, max(ys) + r)
+
+
+def default_steps(base):
+    """Pas X / Y par défaut : emprise de la coupe plus un diamètre d'outil de matière entre deux copies (copies
+    côte à côte qui ne se touchent pas) ; ``None`` sans parcours. Avant : 50 mm, des copies dans la pièce (45 mm
+    d'entaille sur le chauffage Vz330, 4 mm sur le plateau)."""
+    import Path.Dressup.Utils as DressupUtils
+
+    fp = footprint(base)
+    if fp is None:
+        return None
+    tc = DressupUtils.toolController(base)
+    gap = float(tc.Tool.Diameter) if tc is not None else 1.0
+    return tuple(math.ceil((hi - lo + gap) * 10.0 - 1e-6) / 10.0 for lo, hi in ((fp[0], fp[2]), (fp[1], fp[3])))
+
+
+def _copy_boxes(params, fp, centre):
+    """Emprises des copies (même ordre que ``offsets``) ; cercle : boîte des 4 coins tournés."""
+    out = []
+    for dx, dy, ang in offsets(params):
+        corners = [(fp[0], fp[1]), (fp[2], fp[1]), (fp[2], fp[3]), (fp[0], fp[3])]
+        if ang:
+            a = math.radians(ang)
+            ca, sa = math.cos(a), math.sin(a)
+            corners = [(centre[0] + ca * (x - centre[0]) - sa * (y - centre[1]),
+                        centre[1] + sa * (x - centre[0]) + ca * (y - centre[1])) for x, y in corners]
+        out.append((min(x for x, _y in corners) + dx, min(y for _x, y in corners) + dy,
+                    max(x for x, _y in corners) + dx, max(y for _x, y in corners) + dy))
+    return out
+
+
+def _cut_points(base):
+    """Points XY du parcours de coupe de ``base`` (centre de la fraise, tous les quarts de rayon au plus 1 mm,
+    sans doublon) et rayon de l'outil."""
+    import Path.Dressup.Utils as DressupUtils
+    import PathScripts.PathUtils as PathUtils
+    from . import leads, sim
+
+    np = sim._np()
+    tc = DressupUtils.toolController(base)
+    r = 0.5 * float(tc.Tool.Diameter) if tc is not None else 0.0
+    step = max(0.05, min(1.0, 0.25 * r))
+    pts = [q[:2] for m in leads._moves(PathUtils.getPathWithPlacement(base).Commands) for q in leads._samples(m, step)]
+    P = np.array(pts, dtype=float).reshape(-1, 2)
+    if len(P):
+        P = np.unique(np.round(P / (0.5 * step)), axis=0) * (0.5 * step)
+    return P, r
+
+
+def _moved(P, offset, centre):
+    """Points ``P`` d'une copie (décalage de ``offsets``)."""
+    from . import sim
+
+    dx, dy, ang = offset
+    if ang:
+        a = math.radians(ang)
+        ca, sa = math.cos(a), math.sin(a)
+        x, y = P[:, 0] - centre[0], P[:, 1] - centre[1]
+        return sim._np().stack([centre[0] + ca * x - sa * y, centre[1] + sa * x + ca * y], axis=1)
+    return P + (dx, dy)
+
+
+def _close(A, B, d):
+    """Un point de ``A`` à moins de ``d`` d'un point de ``B`` : casiers de côté ``d`` (numpy), distance exacte pour
+    les seuls points de ``A`` dont un casier voisin contient un point de ``B``."""
+    from . import sim
+
+    np = sim._np()
+    if d <= 0 or not len(A) or not len(B):
+        return False
+    lo = np.minimum(A.min(axis=0), B.min(axis=0))
+    ia, ib = np.floor((A - lo) / d).astype(np.int64) + 1, np.floor((B - lo) / d).astype(np.int64) + 1
+    width = int(max(ia[:, 1].max(), ib[:, 1].max())) + 2
+    kb = ib[:, 0] * width + ib[:, 1]
+    order = np.argsort(kb, kind="stable")
+    kb = kb[order]
+    for ox in (-1, 0, 1):
+        for oy in (-1, 0, 1):
+            ka = (ia[:, 0] + ox) * width + ia[:, 1] + oy
+            left = np.searchsorted(kb, ka, "left")
+            right = np.searchsorted(kb, ka, "right")
+            for i in np.nonzero(right > left)[0]:
+                near = B[order[left[i]:right[i]]]
+                if (((near - A[i]) ** 2).sum(axis=1) < d * d).any():
+                    return True
+    return False
+
+
+def check_copies(base, params, stock=None, centre=(0.0, 0.0), tol=1e-3):
+    """Refus clair (``PatternError``) si deux copies de la coupe de ``base`` se recouvrent (la fraise d'une copie
+    passe à moins d'un diamètre de celle d'une autre) ou si une copie sort du brut ``stock`` (boîte englobante
+    FreeCAD) plus que l'original n'en sort déjà (un contour déborde du brut de son rayon d'outil). Rien à contrôler
+    sans parcours calculé."""
+    fp = footprint(base)
+    if fp is None:
+        return
+    boxes = _copy_boxes(params, fp, centre)
+    points, radius = None, 0.0
+    for i, a in enumerate(boxes):
+        for j in range(i + 1, len(boxes)):
+            b = boxes[j]
+            if not (a[0] < b[2] - tol and b[0] < a[2] - tol and a[1] < b[3] - tol and b[1] < a[3] - tol):
+                continue
+            if points is None:
+                points, radius = _cut_points(base)
+                moved = [_moved(points, off, centre) for off in offsets(params)]
+            # emprises qui se croisent : la fraise d'une copie passe-t-elle à moins d'un diamètre de l'autre ?
+            # (deux poches d'une même opération, copies intercalées : pas de recouvrement réel)
+            if _close(moved[i], moved[j], 2.0 * radius - tol):
+                if params.get("Kind", "Grid") == "Grid":
+                    steps = default_steps(base)
+                    raise PatternError("Copies {a} and {b} of the pattern overlap: the distance between copies must be "
+                                       "at least the size of the cut ({w:.1f} x {h:.1f} mm), {sx:.1f} x {sy:.1f} mm "
+                                       "with a tool diameter of material between them.", a=i + 1, b=j + 1,
+                                       w=fp[2] - fp[0], h=fp[3] - fp[1], sx=steps[0], sy=steps[1])
+                raise PatternError("Copies {a} and {b} of the pattern overlap: fewer copies, a smaller angle or a centre "
+                                   "farther from the toolpath.", a=i + 1, b=j + 1)
+    if stock is None:
+        return
+    # débordement admis de chaque côté : celui de l'original
+    allowed = (min(stock.XMin, fp[0]) - tol, min(stock.YMin, fp[1]) - tol,
+               max(stock.XMax, fp[2]) + tol, max(stock.YMax, fp[3]) + tol)
+    for i, b in enumerate(boxes):
+        out = max(allowed[0] - b[0], allowed[1] - b[1], b[2] - allowed[2], b[3] - allowed[3])
+        if out > 0:
+            raise PatternError("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & "
+                               "fixture) or use fewer copies.", n=i + 1, d=out + tol)
+
+
+def check_ops(proj, ops, params):
+    """``check_copies`` pour chaque opération (son habillage le plus haut, celui que le motif enveloppera)."""
+    from . import dressups
+
+    stock = getattr(getattr(proj.job, "Stock", None), "Shape", None)
+    centre = tuple(params.get("Centre") or (0.0, 0.0))[:2]
+    for op in ops:
+        check_copies(dressups.top_of(proj.job, dressups.base_operation(op)), params,
+                     stock.BoundBox if stock is not None and not stock.isNull() else None, centre=centre)
+
+
+def _stock_box(obj):
+    import PathScripts.PathUtils as PathUtils
+
+    job = PathUtils.findParentJob(obj)
+    stock = getattr(job, "Stock", None)
+    shape = getattr(stock, "Shape", None)
+    return shape.BoundBox if shape is not None and not shape.isNull() else None
+
+
 def create(doc, job, current, name):
     obj = doc.addObject("Path::FeaturePython", name)
     ObjectPattern(obj, current)
+    steps = default_steps(current)
+    if steps:
+        obj.StepX, obj.StepY = steps
     job.Proxy.addOperation(obj, current)
     if FreeCAD.GuiUp and obj.ViewObject is not None:
         ViewProviderPattern(obj.ViewObject)
@@ -185,6 +365,8 @@ def set_params(obj, params):
     current = {k: (float(v) if hasattr(v, "Value") else v) for k, v in current.items()}
     current.update({k: v for k, v in (params or {}).items() if k != "Centre"})
     offsets(current)
+    centre = (params or {}).get("Centre") or (obj.Centre.x, obj.Centre.y)
+    check_copies(obj.Base, current, _stock_box(obj), centre=tuple(centre)[:2])
     return set_native(obj, params or {})
 
 
@@ -238,6 +420,7 @@ def add_pattern(proj, ops, params, minimize=True):
     if not ops:
         raise PatternError("Select one or more operations to repeat.")
     offsets(params)
+    check_ops(proj, ops, params)
     created = []
     for op in ops:
         obj, _ignored = proj.add_dressup(op, "pattern", params=params)

@@ -2,6 +2,30 @@
 
 ## Non publié
 
+- **[C1]** Motif (Usiner > Motif, habillage « motif ») : avec les réglages par défaut (pas de 50 mm), la copie
+  d'un contour recoupait la pièce (entaille de 45 mm sur le chauffage Vz330, 4 mm sur le plateau). Le pas proposé
+  vaut maintenant l'emprise de la coupe plus un diamètre de fraise (chauffage : 330,6 mm ; plateau : 232,1 mm), et
+  le motif est refusé avec la raison quand deux copies se recouvrent (la fraise d'une copie à moins d'un diamètre
+  de celle d'une autre : copies intercalées admises) ou quand une copie sort du brut plus que l'original
+  (`patterns.check_copies`). Brut par défaut : refus « la copie 2 sort du brut » ; brut agrandi : aucune entaille
+  ajoutée par le motif. Deux tests existants ajustés (copie qui recoupait un fond, copies hors du brut).
+- **[C1]** Palpage de l'origine : le parcours changeait à la réouverture du projet (coin : 29 commandes, 28 après
+  enregistrement). FreeCAD relit le parcours enregistré comme du G-code et y efface `G21` ; le libellé « Palper
+  l'origine (coin) » donnait aussi un commentaire à parenthèses imbriquées, relu autrement. L'opération ne porte
+  plus `G21` (le postprocesseur l'écrit en tête du programme) et s'appelle « Palper l'origine : coin ».
+- **[C1]** Hélice sans sélection refusée (disque WobbleRing, plateau STL, fraise de 6 mm) : au lieu du message
+  générique « aucun parcours sur la pièce entière », Ajouter une opération dit « trous plus petits que la fraise
+  de 6 mm (plus grand : 4,5 mm) » ou, sur un maillage STL, qu'aucun trou rond vertical n'existe
+  (`commands.helix_refusal`, trous vus par FreeCAD).
+- **[C1]** Éditeur d'opération : la case « Dogbones » n'est plus proposée pour l'ébauche adaptative, où l'ajout
+  est toujours refusé (os dans les parois) ; la case suit la règle du refus (`dressups.dogbone_possible`) et reste
+  pour les contours et les poches (refusée en zigzag avec un message clair).
+- **[C1]** Entrées / sorties : le fournisseur de vue de FreeCAD ouvrait sa page de tâches dès la création de
+  l'habillage (dans la transaction de l'éditeur CAM2027) et ne gardait pas la page ouverte : après réouverture du
+  projet, le double-clic dans l'arbre donnait une page qu'on ne pouvait pas annuler par programme (audit B3 :
+  « no task page »). Fournisseur de vue CAM2027 (`leads.ViewProviderLeads`) : page de FreeCAD au double-clic
+  seulement, avant comme après réouverture. Scénarios `c1-leads-task-page`, `c1-dogbone-editor`,
+  `c1-helix-message`.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule
