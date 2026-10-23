@@ -61,7 +61,7 @@ class TestKeepOutPattern(unittest.TestCase):
             FreeCAD.closeDocument(name)
 
     def test_pattern_copies_hop_over_zone(self):
-        """Poche sur deux fonds (rapide de l'un à l'autre), copiée 60 mm plus loin : le rapide de la copie traverse une
+        """Poche sur deux fonds (rapide de l'un à l'autre), copiée 40 mm plus loin : le rapide de la copie traverse une
         zone interdite que celui de l'original ne touche pas. Il doit passer au-dessus comme ceux des opérations.
         Avant : le motif recopiait le parcours de l'original sans la correction des rapides."""
         import os
@@ -84,7 +84,8 @@ class TestKeepOutPattern(unittest.TestCase):
                                     base=[(clone, floor)], params={"StepDown": 2.0})
         self.assertEqual(len(floor), 2)
         zone = keepout.add_zone(proj.doc, 110.0, -20.0, 114.0, 60.0, 30.0, 10.0, label="Zone")
-        patterns.add_pattern(proj, [op], {"Kind": "Grid", "Columns": 2, "Rows": 1, "StepX": 60.0, "StepY": 0.0})
+        # 40 mm (60 avant C1 : la copie du premier fond recoupait le second, refusé maintenant)
+        patterns.add_pattern(proj, [op], {"Kind": "Grid", "Columns": 2, "Rows": 1, "StepX": 40.0, "StepY": 0.0})
         proj.compute()
         boxes = [(zone.Label, zone.Shape.BoundBox)]
         crossing = []

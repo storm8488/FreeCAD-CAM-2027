@@ -142,10 +142,63 @@ def scenario_helix_message(h, scenario, tmp):
     h["pump"](0.3)
 
 
+def scenario_pattern_default(h, scenario, files):
+    """Contour du plateau, Usiner > Motif sans rien changer : pas proposé = taille de la coupe + un diamètre
+    d'outil (avant : 50 mm, copie dans la pièce) ; OK refusé avec la raison tant que le brut est trop petit, puis
+    accepté sur un brut agrandi, contrôle matière sans entaille."""
+    import FreeCAD
+    from cam2027.gui import patterns as patgui
+    from cam2027.project import patterns as patmod
+
+    proj = _project_with(h, scenario, "C1 pattern", files["step"])
+    _add(h, scenario, "profile")
+    proj = h["project"]()
+    op = proj.base_operation(proj.operations()[0])
+    expected = patmod.default_steps(proj.operations()[0])
+    seen = []
+
+    def fill(dlg):
+        if not isinstance(dlg, patgui.PatternDialog):
+            return False
+        item = dlg.ops.item(0)
+        item.setCheckState(patgui.theme_checked(True))
+        h["pump"](0.1)
+        steps = (dlg.step_x.value(), dlg.step_y.value())
+        dlg._check_and_accept()  # bouton OK
+        seen.append((steps, dlg.result() == 1, dlg.status.text()))
+        dlg.grab().save(os.path.join(h["OUT"], "dialogs", "c1-pattern-%d.png" % len(seen)))
+        return seen[-1][1]
+
+    h["driver"].handlers[h["tr"]("Toolpath pattern")] = fill
+    h["run_command"](scenario, "CAM2027_Pattern")
+    proj.job.Stock.ExtXpos = 150.0  # brut agrandi vers +X (place pour la copie)
+    proj.doc.recompute()
+    h["driver"].handlers[h["tr"]("Toolpath pattern")] = fill
+    h["run_command"](scenario, "CAM2027_Pattern")
+    h["log"]("  pattern dialog: expected steps %s, seen %s" % (expected, [(s, ok, t[-120:]) for s, ok, t in seen]))
+    stock_word = h["tr"]("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & fixture) or use fewer copies.",
+                         n=2, d=0.0).split(":")[0][:12]
+    if len(seen) != 2 or any(abs(a - b) > 1e-6 for a, b in zip(seen[0][0], expected)) or seen[0][1] \
+            or stock_word not in seen[0][2] or not seen[1][1]:
+        h["problem"](scenario, "pattern dialog: expected steps %s, seen %s" % (expected, seen))
+        return
+    chain = proj.dressups(op)
+    if not chain or chain[0].Name.find("Pattern") < 0:
+        h["problem"](scenario, "no pattern dressup: %s" % [d.Name for d in chain])
+        return
+    gouge = proj.material_check()["gouge_max"] or 0.0
+    h["log"]("  pattern step %.1f, gouge %.3f" % (float(chain[0].StepX), gouge))
+    if gouge > 0.0:
+        h["problem"](scenario, "pattern copies gouge the part: %.3f mm" % gouge)
+    FreeCAD.closeDocument(proj.doc.Name)
+    h["pump"](0.3)
+
+
 def scenarios(h, files, tmp):
     """(nom, fonction) des scénarios C1, dans l'ordre."""
     return (
         ("c1-dogbone-editor", lambda: scenario_dogbone_editor(h, "c1-dogbone-editor", files)),
         ("c1-leads-task-page", lambda: scenario_leads_task_page(h, "c1-leads-task-page", files, tmp)),
         ("c1-helix-message", lambda: scenario_helix_message(h, "c1-helix-message", tmp)),
+        ("c1-pattern-default", lambda: scenario_pattern_default(h, "c1-pattern-default", files)),
     )

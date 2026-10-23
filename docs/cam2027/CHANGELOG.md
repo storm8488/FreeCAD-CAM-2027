@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **[C1]** Motif (Usiner > Motif, habillage « motif ») : avec les réglages par défaut (pas de 50 mm), la copie
+  d'un contour recoupait la pièce (entaille de 45 mm sur le chauffage Vz330, 4 mm sur le plateau). Le pas proposé
+  vaut maintenant l'emprise de la coupe plus un diamètre de fraise (chauffage : 330,6 mm ; plateau : 232,1 mm), et
+  le motif est refusé avec la raison quand deux copies se recouvrent (la fraise d'une copie à moins d'un diamètre
+  de celle d'une autre : copies intercalées admises) ou quand une copie sort du brut plus que l'original
+  (`patterns.check_copies`). Brut par défaut : refus « la copie 2 sort du brut » ; brut agrandi : aucune entaille
+  ajoutée par le motif. Deux tests existants ajustés (copie qui recoupait un fond, copies hors du brut).
 - **[C1]** Palpage de l'origine : le parcours changeait à la réouverture du projet (coin : 29 commandes, 28 après
   enregistrement). FreeCAD relit le parcours enregistré comme du G-code et y efface `G21` ; le libellé « Palper
   l'origine (coin) » donnait aussi un commentaire à parenthèses imbriquées, relu autrement. L'opération ne porte

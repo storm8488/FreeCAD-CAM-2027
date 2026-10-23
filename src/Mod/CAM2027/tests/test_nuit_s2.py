@@ -285,6 +285,7 @@ class TestPatterns(unittest.TestCase):
         from cam2027.project import patterns
 
         proj, lib, clone = self.project("Pattern circle")
+        proj.job.Stock.ExtYneg = proj.job.Stock.ExtYpos = 12.0  # copies à 90° et 270° : jusqu'à 10 mm hors de la plaque (C1)
         op = self.pocket(proj, lib, clone)
         proj.compute()
         base = feed_moves(op.Path)

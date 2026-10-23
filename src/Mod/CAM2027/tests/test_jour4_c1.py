@@ -155,5 +155,60 @@ class TestDogboneChoice(_PartCase):
         self.assertFalse(dressups.dogbone_refused(type(ops["pocket"].Proxy).__module__, "Offset"))
 
 
+class TestPatternDefaults(_PartCase):
+    """Contour + motif avec les réglages par défaut : pas de 50 mm, la copie recoupait la pièce (45 mm d'entaille
+    sur le chauffage Vz330, 4 mm sur le plateau). Pas par défaut = emprise de la coupe + un diamètre d'outil ;
+    refus clair si deux copies se recouvrent ou si une copie sort du brut."""
+
+    def contour(self, proj, lib, clone):
+        a6, p6 = self.tool(lib, "6 mm flat end mill")
+        op, _rec = proj.add_operation("profile", "Contour", a6, p6, base=[(clone, [])],
+                                      params={"FinalDepth": 0.0, "StepDown": 5.0, "Side": "Outside"})
+        proj.compute()
+        return op
+
+    def test_default_step_clears_the_part(self):
+        from cam2027.project import dressups, patterns
+
+        proj, lib, clone = self.project("Pattern default")
+        op = self.contour(proj, lib, clone)
+        # brut par défaut (2 mm de marge) : la copie n'y tient pas, refus qui dit pourquoi
+        with self.assertRaises(patterns.PatternError) as ctx:
+            proj.add_dressup(op, "pattern")
+        self.assertIn("leaves the stock", str(ctx.exception))
+        self.assertEqual(proj.dressups(op), [])
+        # brut agrandi vers +X : pas par défaut = 60 + 4 x 3 (emprise de la coupe) + 6 (matière entre les copies)
+        proj.job.Stock.ExtXpos = 100.0
+        proj.doc.recompute()
+        pat, _ignored = proj.add_dressup(op, "pattern")
+        self.assertAlmostEqual(float(pat.StepX), 78.0, places=3)
+        self.assertAlmostEqual(float(pat.StepY), 58.0, places=3)
+        proj.compute()
+        rep = proj.material_check()
+        self.assertEqual(rep["gouge_max"] or 0.0, 0.0, rep)
+        # pas de 50 mm (ancien défaut) : les deux coupes se recouvrent, refusé à la modification
+        with self.assertRaises(patterns.PatternError) as ctx:
+            dressups.set_dressup_params(pat, {"StepX": 50.0})
+        self.assertIn("overlap", str(ctx.exception))
+        self.assertAlmostEqual(float(pat.StepX), 78.0, places=3)  # rien appliqué
+
+    def test_circular_copies_overlap(self):
+        from cam2027.project import patterns
+
+        proj, lib, clone = self.project("Pattern circle", stock={"kind": "box_margins", "xy": 200.0, "z_top": 1.0,
+                                                                "z_bottom": 0.0})
+        op = self.contour(proj, lib, clone)
+        with self.assertRaises(patterns.PatternError) as ctx:
+            patterns.add_pattern(proj, [op], {"Kind": "Circular", "Count": 4, "Centre": (30.0, 20.0, 0.0),
+                                              "Angle": 360.0})
+        self.assertIn("overlap", str(ctx.exception))
+        # autour d'un centre éloigné : 4 contours séparés, acceptés, sans entaille
+        made = patterns.add_pattern(proj, [op], {"Kind": "Circular", "Count": 4, "Centre": (30.0, 90.0, 0.0),
+                                                 "Angle": 360.0})
+        self.assertEqual(len(made), 1)
+        proj.compute()
+        self.assertEqual(proj.material_check()["gouge_max"] or 0.0, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
