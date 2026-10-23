@@ -10,6 +10,9 @@
   générique « aucun parcours sur la pièce entière », Ajouter une opération dit « trous plus petits que la fraise
   de 6 mm (plus grand : 4,5 mm) » ou, sur un maillage STL, qu'aucun trou rond vertical n'existe
   (`commands.helix_refusal`, trous vus par FreeCAD).
+- **[C1]** Éditeur d'opération : la case « Dogbones » n'est plus proposée pour l'ébauche adaptative, où l'ajout
+  est toujours refusé (os dans les parois) ; la case suit la règle du refus (`dressups.dogbone_possible`) et reste
+  pour les contours et les poches (refusée en zigzag avec un message clair).
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

@@ -129,5 +129,31 @@ class TestHelixRefusal(_PartCase):
         self.assertIn("no round vertical hole", msg)
 
 
+class TestDogboneChoice(_PartCase):
+    """L'éditeur proposait la case « Dogbones » pour l'adaptative, que l'ajout refuse toujours (os dans les parois,
+    B1). La case suit maintenant le refus : absente là où aucun réglage ne l'accepterait."""
+
+    @classmethod
+    def make(cls):
+        return Part.makeBox(60, 40, 10).cut(Part.makeBox(30, 20, 6, V(15, 10, 5)))
+
+    def test_choice_follows_the_refusal(self):
+        from cam2027.project import dressups
+
+        proj, lib, clone = self.project("Dogbone choice")
+        a6, p6 = self.tool(lib, "6 mm flat end mill")
+        floor = [(clone, [n for n, f in zip(("Face%d" % i for i in range(1, 99)), clone.Shape.Faces)
+                          if abs(f.BoundBox.ZMax - 5.0) < 1e-6 and f.BoundBox.ZLength < 1e-6])]
+        ops = {k: proj.add_operation(k, k, a6, p6, base=[(clone, [])] if k == "profile" else floor,
+                                     params={"StepDown": 3.0})[0] for k in ("profile", "pocket", "adaptive")}
+        possible = {k: dressups.dogbone_possible(op) for k, op in ops.items()}
+        self.assertEqual(possible, {"profile": True, "pocket": True, "adaptive": False})
+        # même règle que l'ajout : adaptative refusée, poche refusée en zigzag seulement
+        with self.assertRaises(Exception):
+            proj.add_dressup(ops["adaptive"], "dogbone")
+        self.assertTrue(dressups.dogbone_refused(type(ops["pocket"].Proxy).__module__, "ZigZag"))
+        self.assertFalse(dressups.dogbone_refused(type(ops["pocket"].Proxy).__module__, "Offset"))
+
+
 if __name__ == "__main__":
     unittest.main()
