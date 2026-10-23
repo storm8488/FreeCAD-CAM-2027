@@ -412,7 +412,7 @@ def _run(dlg_cls, hide_source=False):
 
 
 class DrawText(base._Base):
-    atelier = "engrave"
+    atelier = "cmd-draw-text"
     text = "Text"
     tooltip = "Draw a text (font, height), straight, on an arc or along a vector"
 
@@ -422,7 +422,7 @@ class DrawText(base._Base):
 
 
 class OffsetVector(base._Base):
-    atelier = "contour"
+    atelier = "cmd-offset-vector"
     text = "Offset vector"
     tooltip = "Offset a closed vector outwards or inwards (overlapping shapes are welded)"
 
@@ -432,7 +432,7 @@ class OffsetVector(base._Base):
 
 
 class CombineVectors(base._Base):
-    atelier = "pocket"
+    atelier = "cmd-combine-vectors"
     text = "Combine vectors"
     tooltip = "Union, subtraction or intersection of two closed vectors"
 
@@ -442,7 +442,7 @@ class CombineVectors(base._Base):
 
 
 class MirrorVector(base._Base):
-    atelier = "measure"
+    atelier = "cmd-mirror-vector"
     text = "Mirror vector"
     tooltip = "Mirror copy of a vector (left - right or top - bottom)"
 
@@ -452,7 +452,7 @@ class MirrorVector(base._Base):
 
 
 class CircularCopies(base._Base):
-    atelier = "drill"
+    atelier = "cmd-circular-copies"
     text = "Circular copies"
     tooltip = "Copies of a vector rotated around a centre"
 
@@ -462,7 +462,7 @@ class CircularCopies(base._Base):
 
 
 class DrawRectangle(base._Base):
-    atelier = "contour"
+    atelier = "cmd-draw-rectangle"
     text = "Rectangle"
     tooltip = "Draw a rectangle (centre, size, rounded corners, rotation); editable afterwards"
 
@@ -472,7 +472,7 @@ class DrawRectangle(base._Base):
 
 
 class DrawCircle(base._Base):
-    atelier = "drill"
+    atelier = "cmd-draw-circle"
     text = "Circle"
     tooltip = "Draw a circle (centre, radius); editable afterwards"
 
@@ -482,7 +482,7 @@ class DrawCircle(base._Base):
 
 
 class DrawPolygon(base._Base):
-    atelier = "contour"
+    atelier = "cmd-draw-polygon"
     text = "Polygon"
     tooltip = "Draw a regular polygon (centre, radius to the corners, sides); editable afterwards"
 
@@ -504,7 +504,7 @@ def _selected_parametric():
 
 
 class EditVector(base._Base):
-    atelier = "engrave"
+    atelier = "cmd-edit-vector"
     text = "Edit vector"
     tooltip = "Change the selected text or shape (text, font, size, position...): the operations that machine it are recomputed"
 
@@ -516,7 +516,7 @@ class EditVector(base._Base):
 
 
 class EditNodes(base._Base):
-    atelier = "contour"
+    atelier = "cmd-edit-nodes"
     text = "Edit nodes"
     tooltip = "Move or delete the nodes of the selected straight-sided shape (a rectangle or polygon becomes a free shape)"
 

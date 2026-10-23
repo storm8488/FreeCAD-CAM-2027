@@ -2,6 +2,15 @@
 
 ## Non publié
 
+- **Icônes des barres d'outils refaites** : une icône par commande (55, thèmes sombre et clair), au trait comme la
+  direction « Atelier », en deux tons : la couleur du texte pour la pièce ou le support, la couleur d'accent pour ce
+  que fait la commande (la fraise, la flèche, le résultat). Avant, plusieurs commandes partageaient « poche »,
+  « perçage » ou « contour » (texte, rectangle, décalage… dans la barre Dessin). Les icônes de FreeCAD gardées dans le
+  logiciel (ouvrir, enregistrer, annuler, rétablir, recalculer, cadrages, vues) prennent le même style. Barre CAM2027
+  regroupée par étape (projet | brut, outils, machine | opérations | simulation | export) ; bouton « Style de
+  représentation » retiré de la barre (reste dans Affichage). Les icônes suivent le fond réel des barres (le thème
+  des panneaux CAM2027 peut être clair dans une fenêtre sombre) et changent avec le thème. Générées par
+  `scripts/make-command-icons.py`.
 - **[C1]** Motif (Usiner > Motif, habillage « motif ») : avec les réglages par défaut (pas de 50 mm), la copie
   d'un contour recoupait la pièce (entaille de 45 mm sur le chauffage Vz330, 4 mm sur le plateau). Le pas proposé
   vaut maintenant l'emprise de la coupe plus un diamètre de fraise (chauffage : 330,6 mm ; plateau : 232,1 mm), et

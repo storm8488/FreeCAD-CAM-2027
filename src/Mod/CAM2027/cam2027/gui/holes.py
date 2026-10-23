@@ -99,7 +99,7 @@ class HoleDialog(QtWidgets.QDialog):
 class HoleCommand(object):
     icon = "CAM2027.svg"
     accel = ""
-    atelier = "drill"
+    atelier = "cmd-holes"
     text = "Hole recognition and drilling"
     tooltip = "Find the holes of the part and add spot drilling, drilling, chamfer and thread milling for each size"
 

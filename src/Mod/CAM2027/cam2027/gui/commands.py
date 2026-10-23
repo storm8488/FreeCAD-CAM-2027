@@ -164,7 +164,7 @@ class _Base(object):
 
 class NewProject(_Base):
     icon = "cam2027-new-project.svg"
-    atelier = "new-project"
+    atelier = "cmd-new-project"
     accel = "Ctrl+Shift+N"
     text = "New project"
     tooltip = "Create a CAM2027 project document with a frozen copy of the tool library"
@@ -183,7 +183,7 @@ class NewProject(_Base):
 
 class ImportModel(_Base):
     icon = "cam2027-import.svg"
-    atelier = "open-project"
+    atelier = "cmd-import-model"
     accel = "Ctrl+Shift+I"
     text = "Import model / drawing"
     tooltip = "Import STEP, STL, OBJ, SVG or DXF into the project"
@@ -246,7 +246,7 @@ def import_relief_dialog(proj, path=""):
 
 
 class ImportRelief(_Base):
-    atelier = "surface"
+    atelier = "cmd-import-relief"
     text = "Relief from image"
     tooltip = "Build a 3D relief from a grey-level image (PNG, JPG, BMP): light = high"
 
@@ -260,7 +260,7 @@ class ImportRelief(_Base):
 
 class ToolLibrary(_Base):
     icon = "cam2027-tool-library.svg"
-    atelier = "tool-library"
+    atelier = "cmd-tool-library"
     accel = "Ctrl+Shift+T"
     text = "Tool library"
     tooltip = "Tools, holders, assemblies and cutting presets"
@@ -275,7 +275,7 @@ MERGE_MAX_FACES = 20000
 
 class StockFixture(_Base):
     icon = "cam2027-stock.svg"
-    atelier = "stock"
+    atelier = "cmd-stock"
     accel = "Ctrl+Shift+B"
     text = "Stock & fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
@@ -433,7 +433,7 @@ class StockFixture(_Base):
 
 class AddOperation(_Base):
     icon = "cam2027-add-operation.svg"
-    atelier = "contour"
+    atelier = "cmd-add-operation"
     accel = "Ctrl+Shift+O"
     text = "Add operation"
     tooltip = "Add a machining operation using a tool assembly and a cutting preset"
@@ -653,7 +653,7 @@ class AddOperation(_Base):
 
 
 class WrapEngrave(_Base):
-    atelier = "axis-a"
+    atelier = "cmd-wrap-engrave"
     text = "Wrapped engraving (A axis)"
     tooltip = "Engrave an unrolled drawing around the round stock: X, Z and A move together (continuous 4th axis, G93)"
 
@@ -669,7 +669,7 @@ class WrapEngrave(_Base):
 
 
 class RotaryMachining(_Base):
-    atelier = "axis-a"
+    atelier = "cmd-rotary"
     text = "Rotary machining (A axis)"
     tooltip = "Wrapped contour or pocket of an unrolled drawing, or rotary 3D finishing of the part: X, Z and A move together (continuous 4th axis, G93)"
 
@@ -685,7 +685,7 @@ class RotaryMachining(_Base):
 
 
 class ProjectOnPart(_Base):
-    atelier = "surface"
+    atelier = "cmd-project-on-part"
     text = "Project on the part"
     tooltip = "Carry an engraving, contour or V-carving computed flat onto the 3D part surface, at the same depth below it"
 
@@ -770,7 +770,7 @@ def _sheet_dialog(proj, dlg_cls, **kw):
 
 
 class FlatDepth(_Base):
-    atelier = "pocket"
+    atelier = "cmd-flat-depth"
     text = "Flat depth clearing (V-carve)"
     tooltip = "Clear the wide areas of a limited-depth V-carve with a flat end mill, with V-bit outline and sharp corners"
 
@@ -784,7 +784,7 @@ class FlatDepth(_Base):
 
 
 class Inlay(_Base):
-    atelier = "engrave"
+    atelier = "cmd-inlay"
     text = "V inlay (male / female)"
     tooltip = "Female V pocket in this project and mirrored male plug in a new project, with glue gap"
 
@@ -820,7 +820,7 @@ class Inlay(_Base):
 
 
 class Nest(_Base):
-    atelier = "measure"
+    atelier = "cmd-nest"
     text = "Nest parts on a sheet"
     tooltip = "Place the 2D drawings on sheets of a given size (true shape or bounding rectangles, rotations, copies)"
 
@@ -906,7 +906,7 @@ def default_params(kind, tool, values):
 
 
 class TwoSided(_Base):
-    atelier = "stock"
+    atelier = "cmd-two-sided"
     text = "Two-sided machining"
     tooltip = "Machine the part on both sides: side B is the part turned over (flip about X or Y), with dowel pins or the same corner"
 
@@ -933,7 +933,7 @@ class TwoSided(_Base):
 
 
 class KeepOut(_Base):
-    atelier = "stop"
+    atelier = "cmd-keep-out"
     text = "Keep-out zones"
     tooltip = "Boxes the rapid moves go over (clamps, drawn zones); a cut entering a zone blocks the export"
 
@@ -962,7 +962,7 @@ class KeepOut(_Base):
 
 
 class BulkEdit(_Base):
-    atelier = "settings"
+    atelier = "cmd-bulk-edit"
     text = "Compare and edit operations"
     tooltip = "Table of the parameters shared by several operations: show the differences, change a value on all of them at once"
 
@@ -1001,7 +1001,7 @@ class BulkEdit(_Base):
 
 class Compute(_Base):
     icon = "cam2027-compute.svg"
-    atelier = "recalculate"
+    atelier = "cmd-compute"
     accel = "Ctrl+Shift+R"
     text = "Recompute toolpaths"
     tooltip = "Recompute every operation and refresh the summary"
@@ -1026,7 +1026,7 @@ class Compute(_Base):
 
 class Export(_Base):
     icon = "cam2027-export.svg"
-    atelier = "export-gcode"
+    atelier = "cmd-export"
     accel = "Ctrl+Shift+E"
     text = "Export G-code"
     tooltip = "Post-process, check and write the G-code and the setup sheet"
@@ -1171,7 +1171,7 @@ def _format_checks(analysis, issues):
 
 class Simulate(_Base):
     icon = "cam2027-simulate.svg"
-    atelier = "play"
+    atelier = "cmd-simulate"
     accel = "Ctrl+Shift+S"
     text = "Simulate"
     tooltip = "Simulate material removal with the FreeCAD CAM simulator"
@@ -1266,7 +1266,7 @@ def start_simulator(proj, play=True):
 
 
 class MaterialCheck(_Base):
-    atelier = "measure"
+    atelier = "cmd-material-check"
     text = "Material and collision check"
     tooltip = "Simulate material removal on a height map: gouges, stock left, flute length, tool holder and clamp collisions, rapids in the material"
 
@@ -1388,7 +1388,7 @@ def material_report_text(rep):
 
 class Theme(_Base):
     icon = "CAM2027.svg"
-    atelier = "visibility"
+    atelier = "cmd-theme"
     text = "Theme: system / dark / light"
     tooltip = "Cycle the CAM2027 panel theme (follows FreeCAD by default)"
 
@@ -1401,12 +1401,13 @@ class Theme(_Base):
         from . import prefs
 
         prefs.apply_scene_colors(nxt, force=prefs.launched_by_cam2027())  # nouveaux parcours
+        refresh_icons()
         FreeCAD.Console.PrintMessage(tr("CAM2027 theme: {name}", name=tr(nxt)) + "\n")
 
 
 class Machine(_Base):
     icon = "cam2027-machine.svg"
-    atelier = "settings"
+    atelier = "cmd-machine"
     accel = "Ctrl+Shift+M"
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
@@ -1521,6 +1522,7 @@ class Machine(_Base):
 class About(_Base):
     icon = "cam2027-about.svg"
     text = "About CAM2027"
+    atelier = "cmd-about"
     tooltip = "Version, environment and limits"
 
     def Activated(self):
@@ -1539,7 +1541,7 @@ class About(_Base):
 
 
 class AdvancedMode(_Base):
-    atelier = "settings"
+    atelier = "cmd-advanced"
     text = "Advanced mode (property editor)"
     tooltip = "Show the FreeCAD property editor under the model tree"
 
@@ -1554,7 +1556,7 @@ class AdvancedMode(_Base):
 
 
 class ResetLayout(_Base):
-    atelier = "origin"
+    atelier = "cmd-reset-layout"
     text = "Default layout"
     tooltip = "Put the CAM2027 panels and toolbars back in their default places"
 
@@ -1594,9 +1596,10 @@ COMMANDS = [
 from . import aspirecmds  # noqa: E402  (S5 : modèles de parcours, dessin, images, décors)
 COMMANDS += aspirecmds.COMMANDS
 #: barre d'outils groupée par étape (séparateurs) ; À propos et thème restent dans les menus
-TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_ToolLibrary", "CAM2027_StockFixture", "Separator",
-           "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator", "CAM2027_Export",
-           "Separator", "CAM2027_Machine"]
+TOOLBAR = ["CAM2027_NewProject", "CAM2027_ImportModel", "CAM2027_ImportRelief", "Separator",
+           "CAM2027_StockFixture", "CAM2027_ToolLibrary", "CAM2027_Machine", "Separator",
+           "CAM2027_AddOperation", "CAM2027_Compute", "Separator", "CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator",
+           "CAM2027_Export"]
 MENU = [name for name, _cls in COMMANDS]
 #: menu « CAM2027 » en atelier dans FreeCAD complet (dans le logiciel, ces commandes vont dans Affichage / Aide)
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_About"]
@@ -1610,6 +1613,35 @@ STAGE_MENUS = (
     ("Export", ["CAM2027_Export"] + aspirecmds.EXPORT_MENU),
 )
 STAGE_MENUS = STAGE_MENUS[:1] + (("Drawing", aspirecmds.DRAWING_MENU),) + STAGE_MENUS[1:]  # S5 : dessin vectoriel
+
+#: commandes FreeCAD gardées dans les barres du logiciel -> icône « Atelier » (même style que CAM2027)
+STD_ICONS = {
+    "Std_Open": "std-open", "Std_Save": "std-save", "Std_Undo": "std-undo", "Std_Redo": "std-redo",
+    "Std_Refresh": "std-refresh", "Std_ViewFitAll": "std-fit-all", "Std_ViewFitSelection": "std-fit-selection",
+    "Std_ViewGroup": "std-views", "Std_AlignToSelection": "std-align",
+}
+
+
+def refresh_icons():
+    """Icônes accordées au fond réel des barres d'outils sur les commandes CAM2027 (et, dans le logiciel, sur les
+    commandes FreeCAD de ses barres) : au démarrage et quand le thème change (le chemin donné par ``GetResources`` est
+    figé à l'enregistrement)."""
+    items = [(name, getattr(cls, "atelier", "")) for name, cls in COMMANDS]
+    if standalone.is_standalone():
+        items += list(STD_ICONS.items())
+    window = theme.chrome()  # fond réel des barres, pas le thème des panneaux
+    for name, atelier in items:
+        if not atelier:
+            continue
+        try:
+            command = FreeCADGui.Command.get(name)
+            actions = command.getAction() if command is not None else []
+            icon = theme.icon(atelier, window)
+        except Exception:  # commande absente de cette version de FreeCAD, icône manquante
+            continue
+        for action in actions or []:
+            action.setIcon(icon)
+
 
 _registered = False
 

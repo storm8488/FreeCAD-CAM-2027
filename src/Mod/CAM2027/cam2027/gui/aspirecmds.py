@@ -24,7 +24,7 @@ def _templates_dir():
 
 
 class SaveTemplate(base._Base):
-    atelier = "open-project"
+    atelier = "cmd-save-template"
     text = "Save toolpath template"
     tooltip = "Save the operations of this project (strategy, tool, settings, target layer / vector) to apply them to another drawing"
 
@@ -54,7 +54,7 @@ class SaveTemplate(base._Base):
 
 
 class ApplyTemplate(base._Base):
-    atelier = "recalculate"
+    atelier = "cmd-apply-template"
     text = "Apply toolpath template"
     tooltip = "Create the operations of a template on this drawing: vectors matched by layer, then by name, then computed"
 
@@ -102,7 +102,7 @@ def _image_path(title):
 
 
 class TraceBitmap(base._Base):
-    atelier = "contour"
+    atelier = "cmd-trace-bitmap"
     text = "Trace bitmap"
     tooltip = "Turn the dark (or light) areas of an image into closed drawing vectors"
 
@@ -122,7 +122,7 @@ class TraceBitmap(base._Base):
 
 
 class PhotoVCarve(base._Base):
-    atelier = "engrave"
+    atelier = "cmd-photo-vcarve"
     text = "Photo V-carve"
     tooltip = "Engrave a photo with a V-bit: parallel lines, deeper where the image is darker"
 
@@ -145,7 +145,7 @@ class PhotoVCarve(base._Base):
 
 
 class SetupSheetPdf(base._Base):
-    atelier = "open-project"
+    atelier = "cmd-setup-sheet"
     text = "Setup sheet (PDF)"
     tooltip = "Write the setup sheet (tools, operations, estimated time with acceleration, checks) as a PDF file"
 
@@ -204,11 +204,12 @@ class _DecorCommand(base._Base):
 class Moulding(_DecorCommand):
     dialog = "MouldingDialog"
     text = "Moulding"
+    atelier = "cmd-moulding"
     tooltip = "Profile (quarter round, cove, chamfer, ogee) swept along a drawing vector with a ball end mill"
 
 
 class Fluting(_DecorCommand):
-    atelier = "engrave"
+    atelier = "cmd-fluting"
     dialog = "FlutingDialog"
     text = "Fluting"
     tooltip = "Grooves along drawing vectors with depth ramps at both ends (ball end mill or V-bit)"
@@ -217,11 +218,12 @@ class Fluting(_DecorCommand):
 class Texture(_DecorCommand):
     dialog = "TextureDialog"
     text = "Texture"
+    atelier = "cmd-texture"
     tooltip = "Random short strokes in a closed vector (ball end mill or V-bit), same pattern number = same texture"
 
 
 class Prism(_DecorCommand):
-    atelier = "engrave"
+    atelier = "cmd-prism"
     dialog = "PrismDialog"
     text = "Prism"
     tooltip = "V-bit bevel from the outline of a closed vector: ridge or flat top"

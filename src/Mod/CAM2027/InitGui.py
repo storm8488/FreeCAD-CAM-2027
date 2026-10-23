@@ -75,6 +75,10 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             FreeCAD.Console.PrintWarning("CAM2027: scene colours not applied: %s\n" % exc)
         panels.ensure_project_panel()
         self._fix_menu_titles()
+        from PySide import QtCore
+        from cam2027.gui import commands
+
+        QtCore.QTimer.singleShot(0, commands.refresh_icons)  # barres construites juste après Activated
         if standalone.is_standalone():
             standalone.apply_advanced_mode()
 

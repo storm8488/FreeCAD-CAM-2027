@@ -120,7 +120,7 @@ class ProbeDialog(QtWidgets.QDialog):
 class ProbeCommand(object):
     icon = "CAM2027.svg"
     accel = ""
-    atelier = "measure"
+    atelier = "cmd-probe"
     text = "Probe the origin"
     tooltip = "Probing program (G38.2) that sets the work offset from a corner, a hole or the top surface"
 

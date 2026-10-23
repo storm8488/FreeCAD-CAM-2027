@@ -169,6 +169,7 @@ class CamOnlyManipulator(object):
             {"remove": "Std_New"},  # « Nouveau projet » est déjà en tête de la barre CAM2027
             {"remove": "Std_TreeViewActions"},
             {"remove": "Std_Measure"},
+            {"remove": "Std_DrawStyle"},  # menu déroulant à l'icône du style choisi (style FreeCAD) ; reste dans Affichage
         ]
         return changes
 

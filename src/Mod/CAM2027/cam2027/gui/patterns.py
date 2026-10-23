@@ -149,7 +149,7 @@ def theme_checked(on):
 class PatternCommand(object):
     icon = "CAM2027.svg"
     accel = ""
-    atelier = "measure"
+    atelier = "cmd-pattern"
     text = "Toolpath pattern"
     tooltip = "Repeat operations on a grid or a circle (Aspire array copy), with fewer tool changes"
 

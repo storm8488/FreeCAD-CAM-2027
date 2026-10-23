@@ -74,6 +74,19 @@ def resolve(name=None):
     return name
 
 
+def chrome():
+    """Thème de la fenêtre FreeCAD (barres d'outils, menus) d'après sa couleur de fond réelle : le thème des panneaux
+    CAM2027 peut être clair dans une fenêtre restée sombre, et des icônes claires y seraient invisibles."""
+    try:
+        import FreeCADGui
+        from .qt import QtGui
+
+        window = FreeCADGui.getMainWindow().palette().color(QtGui.QPalette.Window)
+        return "dark" if window.lightness() < 128 else "light"
+    except Exception:
+        return resolve()
+
+
 def color(role, theme=None):
     """Couleur sémantique (``background``, ``surface``, ``muted``, ``primary``, ``success``…)."""
     return tokens()["themes"][resolve(theme)][role]
