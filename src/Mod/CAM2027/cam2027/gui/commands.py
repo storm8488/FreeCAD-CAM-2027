@@ -1298,8 +1298,13 @@ def show_material_result(proj, rep):
     objs = []
     if rep.get("rotary"):  # [C4] brut rond : carte de rayon enroulée autour de l'axe A
         st = proj.last_rotary
-        meshes = (_display_mesh(st.surface_mesh(rep["center"])),
-                  st.surface_mesh(rep["center"], st.gouge_mask(rep["tolerance"]), lift=0.02))
+        stock = st.surface_mesh(rep["center"])
+        if stock.CountFacets > DISPLAY_MESH_MAX_FACETS:  # affichage seulement, comme sim.display_mesh
+            try:
+                stock.decimate(0.01, 0.9)
+            except Exception:
+                pass
+        meshes = (stock, st.surface_mesh(rep["center"], st.gouge_mask(rep["tolerance"]), lift=0.02))
     else:
         meshes = (sim.display_mesh(proj.last_zmap, DISPLAY_MESH_MAX_FACETS),
                   sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights, rep["tolerance"]),
