@@ -36,6 +36,15 @@ STRATEGIES = {
                    "FinishDepth", "ClearanceHeight", "SafeHeight", "HelixAngle", "HelixDiameterLimit"),
         "limits": "Offset/zigzag/spiral patterns are NOT adaptive (no engagement control); use 'adaptive'.",
     },
+    "offsetpocket": {
+        "module": "cam2027.project.offsetpocket",
+        "label": "2D pocket (offset passes, every floor in one operation, helical entry)",
+        "params": ("StepDown", "StepOver", "StockToLeave", "HelixAngle", "HelixDiameterLimit", "StartDepth", "FinalDepth",
+                   "ClearanceHeight", "SafeHeight"),
+        "limits": "Flat horizontal faces (drawing faces, pocket floors), vertical walls; offset passes from the inside "
+                  "out, the last one along the walls; a pocket floor of a solid is cut down to its own height, a "
+                  "drawing face down to the final depth; zones narrower than the tool are skipped and reported.",
+    },
     "pocket2d": {
         "module": "Path.Op.PocketShape",
         "label": "2D pocket (inside a drawing contour)",
@@ -97,6 +106,15 @@ STRATEGIES = {
                    "StepDown", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Without selected geometry the slot runs between the two custom points (XY at the start depth).",
     },
+    "stockrough": {
+        "module": "cam2027.project.stockrough",
+        "label": "2.5D roughing on the stock model (all depths, every body protected)",
+        "params": ("StepDown", "StepOver", "StockToLeave", "Resolution", "HelixAngle", "HelixDiameterLimit", "WallPass",
+                   "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "limits": "Flat end mill; clears the whole stock above the part level by level on a height map shared with the "
+                  "material check (pocket floors at every depth in one operation, other bodies never cut); helical "
+                  "entries, raster passes then a wall pass; steps remain on slopes (use a 3D finishing).",
+    },
     "rough3d": {
         "module": "Path.Op.Adaptive",
         "label": "3D roughing (adaptive, stock to model)",
@@ -146,24 +164,6 @@ STRATEGIES = {
                    "LinearDeflection", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Ball or bull nose mill; passes offset along the surface from the boundary (constant 3D step); "
                   "steep-and-shallow mode cuts at constant Z above the threshold angle; no rest machining.",
-    },
-    "offsetpocket": {
-        "module": "cam2027.project.offsetpocket",
-        "label": "2D pocket (offset passes, every floor in one operation, helical entry)",
-        "params": ("StepDown", "StepOver", "StockToLeave", "HelixAngle", "HelixDiameterLimit", "StartDepth", "FinalDepth",
-                   "ClearanceHeight", "SafeHeight"),
-        "limits": "Flat horizontal faces (drawing faces, pocket floors), vertical walls; offset passes from the inside "
-                  "out, the last one along the walls; a pocket floor of a solid is cut down to its own height, a "
-                  "drawing face down to the final depth; zones narrower than the tool are skipped and reported.",
-    },
-    "stockrough": {
-        "module": "cam2027.project.stockrough",
-        "label": "2.5D roughing on the stock model (all depths, every body protected)",
-        "params": ("StepDown", "StepOver", "StockToLeave", "Resolution", "HelixAngle", "HelixDiameterLimit", "WallPass",
-                   "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
-        "limits": "Flat end mill; clears the whole stock above the part level by level on a height map shared with the "
-                  "material check (pocket floors at every depth in one operation, other bodies never cut); helical "
-                  "entries, raster passes then a wall pass; steps remain on slopes (use a 3D finishing).",
     },
     "flat3d": {
         "module": "cam2027.project.flatfinish",

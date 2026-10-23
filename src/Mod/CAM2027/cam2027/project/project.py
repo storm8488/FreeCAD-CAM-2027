@@ -530,9 +530,9 @@ class Project(object):
         if FreeCAD.GuiUp and area.ViewObject is not None:
             area.ViewObject.Visibility = False
         label = name or vcarve_op.Label
-        values = {"StartDepth": start, "FinalDepth": final, "StepOver": 40}
+        values = {"StartDepth": start, "FinalDepth": final, "StepOver": 40, "StepDown": depth}
         values.update(params or {})
-        pocket, _r1 = self.add_operation("pocket2d", tr("{name} - flat", name=label), assembly_id, preset_id,
+        pocket, _r1 = self.add_operation("offsetpocket", tr("{name} - flat", name=label), assembly_id, preset_id,
                                          base=[(area, ["Face%d" % (i + 1) for i in range(len(area.Shape.Faces))])],
                                          params=values)
         outline, _r2 = self.add_operation("engrave", tr("{name} - flat outline", name=label), vrec["assembly_id"],
