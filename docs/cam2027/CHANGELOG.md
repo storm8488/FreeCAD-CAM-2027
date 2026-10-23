@@ -10,7 +10,10 @@
   imbrication 1,34 → 0,20 s, rotatif 1,12 → 0,29 s, incrustation 1,24 → 0,17 s, perçage 0,79 → 0,22 s, ajout
   d'une poche 2,30 → 0,94 s (reste un seul appel d'OpenCascade, `getEnvelope`, voir LIMITS). Le maillage d'affichage du brut simulé (2 appels C++ d'un tenant, 2,9 s) est construit
   dans un processus (même maillage, vérifié point à point). Le panneau Projet n'est plus rafraîchi à chaque rendu
-  de main (0,5 s par rafraîchissement à 21 000 commandes) mais une fois à la fin : durées des commandes inchangées.
+  de main (0,5 s par rafraîchissement à 21 000 commandes) mais une fois à la fin, horloge encore active : durées
+  des commandes inchangées, contour 0,53 → 0,33 s. « Brut et montage » : 1,19 → 0,14 s. Restent, documentés
+  (LIMITS) et reconnus par la sonde : l'enveloppe de la poche 3D (un appel OpenCascade, 0,7-1,1 s) et l'import d'un
+  STL (0,6-1,3 s).
 - **[C2]** **« Arrêter le calcul »** : 5,8 s après le clic sur le plateau (seule l'adaptative s'arrêtait, et le
   recalcul qui suivait l'arrêt refaisait tout hors de la fenêtre de progression) → 0,5 s ; contrôle matière 0,2 s.
   Les opérations arrêtées gardent un parcours incomplet et ne sont plus recalculées en cachette ; « Recalculer »

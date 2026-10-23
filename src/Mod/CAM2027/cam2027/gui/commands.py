@@ -71,9 +71,9 @@ class busy(object):
         self.dialog.setWindowModality(QtCore.Qt.WindowModal)
         self.dialog.canceled.connect(self.stop)
         self.dialog.show()
-        QtWidgets.QApplication.processEvents()
         self.ticker = opsmod.GuiTicker()
-        self.ticker.__enter__()
+        self.ticker.__enter__()  # avant de traiter les événements : un rafraîchissement en attente est différé
+        QtWidgets.QApplication.processEvents()
         return self
 
     def stop(self):
@@ -349,8 +349,11 @@ class StockFixture(_Base):
                 if proj.has_job:
                     _warn(tr("The project already has a job: the sheet is only available for a new 2D project."))
                     return
-                proj.create_sheet_job(thickness=thickness.value(), margin=sheet_margin.value(),
-                                      fixtures=[fixture.currentText()])
+                with busy(tr("Stock & fixture")) as b:
+                    proj.create_sheet_job(thickness=thickness.value(), margin=sheet_margin.value(),
+                                          fixtures=[fixture.currentText()])
+                if b.stopped:
+                    return
             except Exception as exc:
                 _warn(tr_msg(exc))
                 return
@@ -413,7 +416,10 @@ class StockFixture(_Base):
                     else:
                         _warn(tr("Import a part (STEP, STL, OBJ) or a drawing (SVG, DXF) first."))
                     return
-                proj.create_job(sel, stock=spec, fixtures=[fixture.currentText()])
+                with busy(tr("Stock & fixture")) as b:
+                    proj.create_job(sel, stock=spec, fixtures=[fixture.currentText()])
+                if b.stopped:
+                    return
             else:
                 proj.set_stock(spec)
                 from ..project.stock import set_fixtures

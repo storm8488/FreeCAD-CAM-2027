@@ -894,6 +894,7 @@ class GuiTicker(object):
 
     _depth = 0
     _deferred = []
+    _flushing = False
     _thread = None
     _halt = None
     _stop = False
@@ -932,16 +933,22 @@ class GuiTicker(object):
         cls._depth -= 1
         if cls._depth > 0 or cls._thread is None:
             return False
+        # rafraîchissements différés : maintenant, horloge encore active (panneau Projet : lecture des parcours
+        # neufs, 0,5 s pour 21 000 commandes)
+        deferred, cls._deferred = cls._deferred, []
+        cls._flushing = True
+        try:
+            for fn in deferred:
+                try:
+                    fn()
+                except Exception:
+                    pass
+        finally:
+            cls._flushing = False
         cls._halt.set()
         cls._thread.join(2.0)
         cls._thread = None
         cls._stop = False
-        deferred, cls._deferred = cls._deferred, []
-        for fn in deferred:
-            try:
-                fn()
-            except Exception:
-                pass
         try:
             signal.signal(cls._signum, cls._old if cls._old is not None else signal.SIG_DFL)
         except (ValueError, OSError, TypeError):
@@ -960,7 +967,7 @@ class GuiTicker(object):
     def defer(cls, fn):
         """Pendant le calcul, ``fn`` (rafraîchissement d'un panneau : 0,5 s pour 21 000 commandes) est appelée
         une seule fois, à la fin, au lieu de chaque rendu de main. Vrai si différée."""
-        if cls._thread is None:
+        if cls._thread is None or cls._flushing:
             return False
         if fn not in cls._deferred:
             cls._deferred.append(fn)
@@ -972,21 +979,20 @@ class GuiTicker(object):
 
         if cls._thread is None:
             return
-        f, protected = frame, False
-        while f is not None:
-            if f.f_code.co_name in cls.PROTECTED:
-                protected = True
-                break
-            f = f.f_back
         if cls._stop:
+            f, protected = frame, False
+            while f is not None:
+                if f.f_code.co_name in cls.PROTECTED:
+                    protected = True
+                    break
+                f = f.f_back
             now = time.time()
             if not protected and now - cls._stopped_at >= cls.RESTOP_S:
                 cls._stopped_at = now
                 GUI_STATS["stops"].append("%s:%d" % (frame.f_code.co_name, frame.f_lineno))
                 raise ComputationStopped()
             return
-        if not protected:
-            keep_gui_alive()
+        keep_gui_alive()  # jamais imbriqué (garde de keep_gui_alive)
 
     @classmethod
     def _run(cls, halt, signum):

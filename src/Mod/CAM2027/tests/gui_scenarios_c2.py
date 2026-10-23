@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Scénarios d'interface du flux C2 (jour 4 : fluidité de l'interface), appelés par ``gui_scenarios.py``.
 
-- **Sonde d'horloge Qt** : une horloge de 50 ms tourne pendant chaque commande ; son plus grand écart est la
-  durée pendant laquelle l'interface n'a traité aucun événement. Au-delà de ``FREEZE_S`` : ``PROBLEM``. Active
-  dans les scénarios C2, et pour *toutes* les commandes de la suite avec ``CAM2027_C2_PROBE=1``.
+- **Sonde d'horloge Qt** : une horloge de 50 ms tourne pendant chaque commande ; un écart entre deux tops est une
+  durée pendant laquelle l'interface n'a traité aucun événement. Au-delà de ``FREEZE_S`` : ``PROBLEM``, sauf dans
+  un appel C++ documenté (``KNOWN_CPP``, reconnu par la pile du fil principal). Active dans les scénarios C2, et
+  pour *toutes* les commandes de la suite avec ``CAM2027_C2_PROBE=1`` ; piles au rapport avec
+  ``CAM2027_C2_STACKS=1``.
 - ``c2-heavy`` : pièce lourde (plateau ``bitTray3030+v7.stl`` s'il existe, ``CAM2027_C2_PART`` pour une autre,
-  sinon plateau synthétique à 60 alvéoles) : ajout d'une poche et d'un contour, contrôle matière, export.
+  sinon plateau synthétique à 77 alvéoles) : ajout d'une poche et d'un contour, contrôle matière, export.
 - ``c2-stop`` : « Arrêter le calcul » cliqué pendant le recalcul puis pendant le contrôle matière : la commande
-  rend la main vite, avec le message d'arrêt.
-- ``c2-commands`` : imbrication, perçage, rotatif, incrustation sous la sonde.
+  rend la main vite, avec le message d'arrêt, sans rapport.
+- ``c2-nest``, ``c2-rotary``, ``c2-inlay``, ``c2-holes`` : imbrication, rotatif, incrustation, perçage (scénarios
+  existants) sous la sonde.
 """
 
 import os
@@ -25,13 +28,19 @@ FREEZE_S = 0.5
 #: délai maximal entre le clic sur « Arrêter » et le retour de la commande
 STOP_S = 2.0
 DEFAULT_PART = r"C:\Users\damou\Downloads\bitTray3030+v7.stl"
+#: appels C++ d'un seul tenant, mesurés et documentés (LIMITS) : la main ne revient qu'à leur fin. Une pause
+#: au-delà de ``FREEZE_S`` dont la pile relevée est dans l'un d'eux est notée, pas signalée comme problème.
+KNOWN_CPP = ("getEnvelope",  # poche 3D : enveloppe des fonds (Path.Area), 0,7-1,1 s sur le plateau
+             "mesh_to_solid",  # import d'un STL : maillage -> solide, affinage (OpenCascade), 0,6-1,3 s
+             "import_file")  # import : vérification du solide importé (OpenCascade), 0,6 s
 
-freezes = []  # (scénario, commande, pire écart)
+freezes = []  # (scénario, commande, pause)
 _scenario = [""]
 
 
 class Heartbeat(object):
-    """Horloge Qt de 50 ms : le plus grand écart entre deux tops = durée sans traitement des événements."""
+    """Horloge Qt de 50 ms : le plus grand écart entre deux tops = durée sans traitement des événements.
+    ``long`` : chaque écart au-delà de ``FREEZE_S`` (début, durée)."""
 
     def __init__(self):
         self.timer = QtCore.QTimer()
@@ -39,16 +48,20 @@ class Heartbeat(object):
         self.timer.timeout.connect(self._tick)
         self.last = None
         self.worst = 0.0
+        self.long = []
 
     def _tick(self):
         now = time.perf_counter()
         if self.last is not None:
             self.worst = max(self.worst, now - self.last)
+            if now - self.last > FREEZE_S:
+                self.long.append((self.last, now - self.last))
         self.last = now
 
     def __enter__(self):
         self.last = self.first = time.perf_counter()
         self.worst = 0.0
+        self.long = []
         self.timer.start()
         return self
 
@@ -59,9 +72,10 @@ class Heartbeat(object):
 
 
 class StackWatch(object):
-    """``CAM2027_C2_STACKS=1`` : pendant une commande, pile Python du fil principal relevée quand l'horloge Qt
-    n'a pas battu depuis 0,4 s (le fil de surveillance n'obtient la main qu'au retour d'un appel C++ long :
-    la ligne relevée est celle de cet appel)."""
+    """Pendant une commande, pile Python du fil principal relevée quand l'horloge Qt n'a pas battu depuis 0,4 s
+    (le fil de surveillance n'obtient la main qu'au retour d'un appel C++ long, ou pendant s'il relâche le
+    verrou de Python : la ligne relevée est celle de cet appel). ``CAM2027_C2_STACKS=1`` : piles écrites au
+    rapport."""
 
     def __init__(self, hb):
         import threading
@@ -69,34 +83,59 @@ class StackWatch(object):
         self.hb = hb
         self.main = threading.get_ident()
         self.halt = threading.Event()
-        self.stacks = []
+        self.samples = {}  # début de l'écart -> pile
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def _run(self):
         import sys
-        import traceback
 
-        seen = None
         while not self.halt.wait(0.05):
             last = self.hb.last
-            if last is not None and time.perf_counter() - last > 0.4 and seen != last:
-                seen = last
+            if last is not None and time.perf_counter() - last > 0.4 and last not in self.samples:
                 frame = sys._current_frames().get(self.main)
                 gap = time.perf_counter() - last
                 if frame is not None:
-                    st = traceback.extract_stack(frame)[-6:]
-                    self.stacks.append("%.2f s: " % gap + " <- ".join(
-                        "%s:%d %s" % (os.path.basename(f.filename), f.lineno, f.name) for f in reversed(st)))
+                    self.samples.setdefault(last, "%.2f s: %s" % (gap, self._stack(frame)))
+
+    def known(self, start):
+        """Pause commencée à ``start`` dans un appel C++ documenté (``KNOWN_CPP``) ?"""
+        stack = self.samples.get(start, "")
+        return any(" %s" % name in stack for name in KNOWN_CPP)
+
+    def _stack(self, frame):
+        import traceback
+
+        st = traceback.extract_stack(frame)[-6:]
+        return " <- ".join("%s:%d %s" % (os.path.basename(f.filename), f.lineno, f.name) for f in reversed(st))
 
     def __enter__(self):
-        if os.environ.get("CAM2027_C2_STACKS"):
-            self.thread.start()
+        import sys
+
+        from cam2027.project import operations as opsmod
+
+        self.real = opsmod.keep_gui_alive
+
+        def watched():
+            # rendu de main après une longue pause : la pile de l'appelant est là où le calcul a repris, juste
+            # après l'appel C++ qui a tenu la main (le fil de surveillance n'arrive qu'après ce rendu)
+            last = self.hb.last
+            if last is not None and time.perf_counter() - last > 0.4 and last not in self.samples:
+                self.samples[last] = "%.2f s: %s" % (time.perf_counter() - last, self._stack(sys._getframe(2)))
+            self.real()
+
+        opsmod.keep_gui_alive = watched
+        self.thread.start()
         return self
 
     def __exit__(self, *_a):
+        from cam2027.project import operations as opsmod
+
+        opsmod.keep_gui_alive = self.real
         self.halt.set()
-        for line in self.stacks:
-            G.log("    C2 stack after %s" % line)
+        self.thread.join(1.0)
+        if os.environ.get("CAM2027_C2_STACKS"):
+            for _start, line in sorted(self.samples.items()):
+                G.log("    C2 stack after %s" % line)
         return False
 
 
@@ -108,15 +147,18 @@ def probed(cls, name):
             from cam2027.project import operations as opsmod
 
             calls, spent = opsmod.GUI_STATS["calls"], opsmod.GUI_STATS["seconds"]
-            with Heartbeat() as hb, StackWatch(hb):
+            with Heartbeat() as hb, StackWatch(hb) as sw:
                 result = cls.Activated(self, *args)
             elapsed = hb.last - hb.first
             G.log("  C2 %s: %.2f s, longest interface pause %.2f s (%d interface updates, %.2f s)" % (
                 name, elapsed, hb.worst, opsmod.GUI_STATS["calls"] - calls, opsmod.GUI_STATS["seconds"] - spent))
-            if hb.worst > FREEZE_S:
-                freezes.append((_scenario[0], name, round(hb.worst, 2)))
-                G.problem(_scenario[0], "C2 %s: interface not refreshed for %.2f s (command %.1f s)"
-                          % (name, hb.worst, elapsed))
+            for start, gap in hb.long:
+                freezes.append((_scenario[0], name, round(gap, 2)))
+                if sw.known(start):
+                    G.log("  C2 %s: known C++ pause %.2f s (%s)" % (name, gap, sw.samples[start].split(": ", 1)[1][:120]))
+                else:
+                    G.problem(_scenario[0], "C2 %s: interface not refreshed for %.2f s (command %.1f s) %s"
+                              % (name, gap, elapsed, sw.samples.get(start, "")[:200]))
             return result
 
     Probed.__name__ = cls.__name__

@@ -229,7 +229,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   Ordre de grandeur : 20 à 45 000 commandes par seconde (jour 3). Pendant le calcul, l'interface garde la main ;
   un appel C++ d'un seul tenant la fige jusqu'à sa fin (enveloppe des fonds de la poche 3D d'OpenCascade :
   0,9 s sur le plateau à 135 alvéoles, non déplaçable dans un processus à l'identique : l'aller-retour BREP décale
-  la section de `Path.Area` jusqu'à 13,6 µm ; import d'un STL : 0,9-1,3 s).
+  la section de `Path.Area` jusqu'à 13,6 µm ; import d'un STL du plateau : conversion du maillage en solide, affinage
+  et vérification, 0,6 à 1,3 s chacun).
 - Fiche de préparation en Markdown (pas de PDF).
 - Changement d'outil (GRBL) : pause `M5` + `M0` à chaque changement de numéro d'outil, pas au premier outil
   (chargé selon la fiche) ; pas de mesure de longueur d'outil (G43.1 / palpage après changement) : refaire le zéro Z
