@@ -1,0 +1,323 @@
+{
+ "ok": true,
+ "simulator": "grbl-simulator.js",
+ "node": "v24.20.0",
+ "files": [
+  {
+   "id": "01-palpage-coin",
+   "lines": 31,
+   "errors": [],
+   "alarms": [],
+   "positions": 2,
+   "final": [
+    0,
+    0,
+    null
+   ],
+   "envelope": {
+    "X": [
+     0,
+     10
+    ],
+    "Y": [
+     0,
+     0
+    ]
+   },
+   "probes": 3,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "02-poche",
+   "lines": 100,
+   "errors": [],
+   "alarms": [],
+   "positions": 91,
+   "final": [
+    18.3,
+    47,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -6,
+     5
+    ],
+    "X": [
+     18,
+     52
+    ],
+    "Y": [
+     23,
+     47
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0004631949457518658,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "03-poche-2-profondeurs",
+   "lines": 152,
+   "errors": [],
+   "alarms": [],
+   "positions": 140,
+   "final": [
+    86,
+    39.153,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -8,
+     5
+    ],
+    "X": [
+     73,
+     117
+    ],
+    "Y": [
+     18,
+     52
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.00047623808575281146,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "04-percage",
+   "lines": 23,
+   "errors": [],
+   "alarms": [],
+   "positions": 12,
+   "final": [
+    180,
+    35,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -10,
+     5
+    ],
+    "X": [
+     140,
+     180
+    ],
+    "Y": [
+     35,
+     35
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "05-dome-ebauche",
+   "lines": 23079,
+   "errors": [],
+   "alarms": [],
+   "positions": 22004,
+   "final": [
+    76.5,
+    149.95,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -9,
+     5
+    ],
+    "X": [
+     6,
+     84
+    ],
+    "Y": [
+     78.5,
+     153.5
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0005000000000023874,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "06-dome-finition",
+   "lines": 9528,
+   "errors": [],
+   "alarms": [],
+   "positions": 9521,
+   "final": [
+    76.997,
+    146.58,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -10,
+     5
+    ],
+    "X": [
+     13.003,
+     76.997
+    ],
+    "Y": [
+     78.42,
+     146.58
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0004998967396554477,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "07-vcarving-texte",
+   "lines": 1278,
+   "errors": [],
+   "alarms": [],
+   "positions": 1268,
+   "final": [
+    156.561,
+    118.036,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -1.708,
+     5
+    ],
+    "X": [
+     96.381,
+     159.582
+    ],
+    "Y": [
+     117.981,
+     131.333
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0005000000000023874,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "08-contour-attaches",
+   "lines": 161,
+   "errors": [],
+   "alarms": [],
+   "positions": 154,
+   "final": [
+    189.897,
+    102.654,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -18.2,
+     5
+    ],
+    "X": [
+     132,
+     189.897
+    ],
+    "Y": [
+     69,
+     106.897
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0004288239566392349,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "09-recto-verso-A",
+   "lines": 141,
+   "errors": [],
+   "alarms": [],
+   "positions": 125,
+   "final": [
+    43.665,
+    117,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -23,
+     5
+    ],
+    "X": [
+     10,
+     190
+    ],
+    "Y": [
+     68,
+     117
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0004502246700752721,
+   "problems": [],
+   "ok": true
+  },
+  {
+   "id": "09-recto-verso-B",
+   "lines": 89,
+   "errors": [],
+   "alarms": [],
+   "positions": 75,
+   "final": [
+    133.665,
+    117,
+    5
+   ],
+   "envelope": {
+    "Z": [
+     -10,
+     5
+    ],
+    "X": [
+     93,
+     157
+    ],
+    "Y": [
+     68,
+     117
+    ]
+   },
+   "probes": 0,
+   "pauses": 0,
+   "state": "Idle",
+   "max_difference_mm": 0.0004503660914139118,
+   "problems": [],
+   "ok": true
+  }
+ ]
+}
