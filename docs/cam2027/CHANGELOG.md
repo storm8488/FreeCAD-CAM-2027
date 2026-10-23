@@ -2,6 +2,17 @@
 
 ## Non publié
 
+- **[C4]** Usinage rotatif : option **« Parois radiales »** pour la poche et le contour enroulés (fraise plate) :
+  X, Y, Z et A ensemble, la fraise décalée en Y d'un rayon d'outil le long de la normale à la paroi après avoir
+  tourné A jusqu'au contact ; son flanc reste dans le plan radial de la paroi. Poche R20 → R17 en une passe, fraise
+  3 mm : paroi à 0,262 mm du plan radial en haut sans l'option, **0,004 mm** avec (`rotary.gcode_lines`, G93 à la
+  vitesse réelle de la pointe). Cochée par défaut pour une nouvelle opération ; les projets existants gardent
+  leur parcours.
+- **[C4]** **Contrôle matière 4e axe** : sur un brut rond, « Contrôle matière et collisions » simule toutes les
+  opérations (enroulées, parois radiales, indexées, 3 axes) sur une carte de rayon autour de l'axe A
+  (`project/sim_rotary.py`) au lieu de refuser ; brut simulé et entailles affichés autour de l'axe. Poche à parois
+  radiales : aucune entaille, volume enlevé à 0,4 % du volume de la poche ; poche descendue de 0,4 mm de trop :
+  entaille de 0,40 mm signalée.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

@@ -11,6 +11,14 @@ coupe) et tracés par ``wrap.preview_polylines``.
   ``rt R / r``). Le décalage d'outil se fait donc dans le plan **réel** au rayon courant (Y multiplié par
   ``r / R``), puis le parcours est ramené au repère déroulé : la compensation suit le rayon de chaque
   niveau.
+- **Parois radiales (XYZA)** : l'enroulement seul garde la fraise pointée vers l'axe ; son flanc est alors
+  parallèle au rayon qui passe par son centre, pas à celui de la paroi, et la paroi d'une poche sort en biais
+  (marche de ``rt × passe / r`` en haut de chaque niveau). Option ``radial_walls`` (fraise plate) : une passe de
+  paroi tourne A jusqu'au point de contact de la paroi et décale la fraise en Y (et X) d'un rayon d'outil le long
+  de la normale à la paroi : l'axe de la fraise reste parallèle au plan radial de la paroi, son flanc y est
+  tangent sur toute la hauteur, le bout à la profondeur du niveau. Mouvements ``(kind, x, y, z, dy)`` : ``y`` =
+  position déroulée du contact (donne A), ``dy`` = décalage Y machine (mm) ; X, Y, Z et A bougent ensemble
+  (``gcode_lines``, ``preview``).
 - **Finition 3D rotative** (« Rotary parallel » de Fusion) : lignes le long de l'axe, une par angle
   (pas angulaire = pas / rayon maximal de la pièce). Pour chaque angle θ la pièce est tournée de -θ
   autour de l'axe A (seules les facettes au-dessus de l'axe et à portée de la fraise sont gardées) et la
@@ -31,6 +39,8 @@ KINDS = {
 SIDES = ("outside", "inside", "on")
 #: écart de discrétisation des contours déroulés (mm)
 DEFLECTION = 0.01
+#: longueur maximale d'un morceau de passe de paroi radiale (le contact est recalculé à chaque point, mm)
+WALL_STEP = 0.5
 
 
 def _np():
@@ -94,28 +104,83 @@ def _polyline(wire, ky_back):
 
 
 def _ring_moves(rings, z, safe_z, link_ok):
+    """Mouvements d'anneaux ``[(x, y)]`` ou ``[(x, y, dy)]`` (passe de paroi radiale) à la profondeur ``z``."""
     moves, prev = [], None
     for pts in rings:
         if len(pts) < 2:
             continue
-        x0, y0 = pts[0]
-        if prev is None or not link_ok(prev, (x0, y0)):
+        x0, y0 = pts[0][:2]
+        if prev is None or not link_ok(prev[:2], (x0, y0)):
             if prev is not None:
-                moves.append(("rapid", prev[0], prev[1], safe_z))
-            moves.append(("rapid", x0, y0, safe_z))
-            moves.append(("plunge", x0, y0, z))
+                moves.append(("rapid", prev[0], prev[1], safe_z) + tuple(prev[2:]))
+            moves.append(("rapid", x0, y0, safe_z) + tuple(pts[0][2:]))
+            moves.append(("plunge", x0, y0, z) + tuple(pts[0][2:]))
         else:
-            moves.append(("cut", x0, y0, z))
-        moves.extend(("cut", x, y, z) for x, y in pts[1:])
+            moves.append(("cut", x0, y0, z) + tuple(pts[0][2:]))
+        moves.extend(("cut", p[0], p[1], z) + tuple(p[2:]) for p in pts[1:])
         prev = pts[-1]
     if prev is not None:
-        moves.append(("rapid", prev[0], prev[1], safe_z))
+        moves.append(("rapid", prev[0], prev[1], safe_z) + tuple(prev[2:]))
     return moves
 
 
-def contour_moves(wires, radius, tool_radius, side, depth, step_down, safe_z, start=0.0):
+def _nearest(points, polylines):
+    """Point le plus proche de chaque point ``(n, 2)`` sur des polylignes ``[(m, 2)]`` : tableau ``(n, 2)``."""
+    np = _np()
+    A = np.vstack([p[:-1] for p in polylines])
+    D = np.vstack([p[1:] for p in polylines]) - A
+    L2 = np.maximum((D * D).sum(axis=1), 1e-18)
+    out = np.empty_like(points)
+    for k in range(0, len(points), 256):
+        P = points[k:k + 256]
+        t = np.clip(((P[:, None, :] - A[None]) * D[None]).sum(axis=2) / L2[None], 0.0, 1.0)
+        Q = A[None] + t[:, :, None] * D[None]
+        d2 = ((Q - P[:, None, :]) ** 2).sum(axis=2)
+        out[k:k + 256] = Q[np.arange(len(P)), d2.argmin(axis=1)]
+    return out
+
+
+def _wall_rings(real, distance, k):
+    """Passes de paroi radiale autour de ``real`` (face du plan réel au rayon du niveau) : anneaux
+    ``[(x, y déroulé du contact, dy)]`` ; [] si la fraise ne passe pas.
+
+    Le centre de la fraise suit le décalage de ``distance`` (rayon d'outil, signé) dans le plan réel ; pour chaque
+    point, le contact sur la paroi est le point le plus proche du dessin. A amène le contact au sommet, X et Y
+    portent le décalage (normale à la paroi). Chaque segment du décalage prend ses contacts de son côté : à un
+    angle rentrant, la fraise pivote sur place d'une paroi à l'autre."""
+    np = _np()
+    offset = _offset_wires(real, distance)
+    if not offset:
+        return []
+    bounds = [np.array([(p.x, p.y) for p in w.discretize(Deflection=DEFLECTION)], dtype=float) for w in real.Wires]
+    rings = []
+    for wire in offset:
+        q = np.array([(p.x, p.y) for p in wire.discretize(Deflection=DEFLECTION)], dtype=float)
+        pts, probes = [], []
+        for a, b in zip(q[:-1], q[1:]):
+            length = float(np.hypot(*(b - a)))
+            if length < 1e-9:
+                continue
+            n = max(1, int(math.ceil(length / WALL_STEP)))
+            eps = min(1e-4, length / 4.0) / length
+            for f in np.linspace(0.0, 1.0, n + 1):
+                pts.append(a + (b - a) * f)
+                probes.append(a + (b - a) * min(max(f, eps), 1.0 - eps))  # contact du côté de ce segment
+        if len(pts) < 2:
+            continue
+        pts, contact = np.array(pts), _nearest(np.array(probes), bounds)
+        ring = []
+        for (x, t), (_cx, ct) in zip(pts.tolist(), contact.tolist()):
+            p = (x, ct / k, t - ct)
+            if not ring or max(abs(p[0] - ring[-1][0]), abs(p[1] - ring[-1][1]), abs(p[2] - ring[-1][2])) > 1e-9:
+                ring.append(p)
+        rings.append(ring)
+    return rings
+
+
+def contour_moves(wires, radius, tool_radius, side, depth, step_down, safe_z, start=0.0, radial_walls=False):
     """Contour enroulé : fil décalé du rayon d'outil au rayon de chaque niveau (côté extérieur / intérieur /
-    sur le trait)."""
+    sur le trait). ``radial_walls`` : contours fermés suivis avec le décalage Y (paroi radiale, fraise plate)."""
     if side not in SIDES:
         raise UserError("wrapped contour: unknown side {side}", side=side)
     import Part
@@ -129,7 +194,14 @@ def contour_moves(wires, radius, tool_radius, side, depth, step_down, safe_z, st
             if side == "on" or not wire.isClosed():
                 rings.append(_polyline(real, 1.0 / k))
                 continue
-            offset = _offset_wires(Part.Face(real), tool_radius if side == "outside" else -tool_radius)
+            distance = tool_radius if side == "outside" else -tool_radius
+            if radial_walls:
+                walls = _wall_rings(Part.Face(real), distance, k)
+                if not walls:
+                    raise UserError("wrapped contour: the tool does not fit inside a contour of the drawing")
+                rings.extend(walls)
+                continue
+            offset = _offset_wires(Part.Face(real), distance)
             if not offset:
                 raise UserError("wrapped contour: the tool does not fit inside a contour of the drawing")
             rings.extend(_polyline(w, 1.0 / k) for w in offset)
@@ -137,9 +209,10 @@ def contour_moves(wires, radius, tool_radius, side, depth, step_down, safe_z, st
     return moves
 
 
-def pocket_moves(wires, radius, tool_radius, stepover, depth, step_down, safe_z, start=0.0):
+def pocket_moves(wires, radius, tool_radius, stepover, depth, step_down, safe_z, start=0.0, radial_walls=False):
     """Poche enroulée : anneaux décalés vers l'intérieur (rayon d'outil puis pas), du centre vers les parois,
-    à chaque niveau ; décalages calculés dans le plan réel au rayon du niveau."""
+    à chaque niveau ; décalages calculés dans le plan réel au rayon du niveau. ``radial_walls`` : à chaque niveau,
+    une passe de paroi décalée en Y après le vidage (parois radiales, fraise plate)."""
     if stepover <= 0 or stepover > 2.0 * tool_radius:
         raise UserError("wrapped pocket: the stepover must be between 0 and the tool diameter")
     import Part
@@ -174,7 +247,111 @@ def pocket_moves(wires, radius, tool_radius, stepover, depth, step_down, safe_z,
                     return False
             return math.hypot(b[0] - a[0], (b[1] - a[1]) * k) <= 2.0 * stepover
         moves += _ring_moves(ordered, z, safe_z, link_ok)
+        if radial_walls:
+            moves += _ring_moves(_wall_rings(face, -tool_radius, k), z, safe_z, lambda a, b: False)
     return moves
+
+
+# -- écriture XYZA (passes de paroi radiale) -------------------------------------------------------------------
+
+
+def has_y_offset(moves):
+    return any(len(m) > 4 and m[4] for m in moves)
+
+
+def _tip(x, y, z, dy, radius):
+    """Pointe de la fraise dans le repère pièce (relatif à l'axe) pour un mouvement déroulé décalé de ``dy`` :
+    dans le repère tourné (contact au sommet), pointe en (dy, R + z) ; rotation inverse de l'angle y / R."""
+    phi, h = y / radius, radius + z
+    c, s = math.cos(phi), math.sin(phi)
+    return x, dy * c + h * s, -dy * s + h * c
+
+
+def gcode_lines(moves, radius, center, sign, feed, plunge_feed):
+    """Lignes G-code d'un parcours enroulé ; mouvements avec décalage Y (parois radiales) : X, Y, Z et A
+    ensemble en G93, F = avance / déplacement de la pointe sur la pièce. Sans décalage : ``wrap.wrap_moves``
+    (même sortie qu'avant)."""
+    if not has_y_offset(moves):
+        return wrapmod.wrap_moves(moves, radius, center, sign, feed, plunge_feed)
+    if radius <= 0:
+        raise UserError("wrapping radius must be positive")
+    cy, cz = center
+
+    def machine(x, y, z, dy):
+        return "X%.4f Y%.4f A%.4f" % (x, cy + dy, sign * math.degrees(y / radius)), "Z%.4f" % (cz + radius + z)
+
+    lines, prev, inverse = ["G94"], None, False
+    for m in moves:
+        kind, x, y, z = m[:4]
+        dy = m[4] if len(m) > 4 else 0.0
+        if prev is None:
+            # entrée : monter au plan de sécurité avant de tourner / translater
+            lines += ["G0 %s" % machine(x, y, max(z, 0.0), dy)[1], "G0 %s" % machine(x, y, z, dy)[0]]
+            if z < 0:
+                lines.append("G0 %s" % machine(x, y, z, dy)[1])
+            prev = (x, y, z, dy)
+            continue
+        if kind == "rapid":
+            if inverse:
+                lines.append("G94")
+                inverse = False
+            xya, zw = machine(x, y, z, dy)
+            lines += ["G0 %s" % zw, "G0 %s" % xya] if z > prev[2] else ["G0 %s" % xya, "G0 %s" % zw]
+            prev = (x, y, z, dy)
+            continue
+        if feed <= 0 or plunge_feed <= 0:
+            raise UserError("wrapping needs positive feeds")
+        rate = plunge_feed if kind == "plunge" else feed
+        if not inverse:
+            lines.append("G93")
+            inverse = True
+        px, py, pz, pdy = prev
+        a, b = _tip(px, py, pz, pdy, radius), _tip(x, y, z, dy, radius)
+        n = max(1, int(math.ceil(max(math.dist(a, b) / wrapmod.MAX_SEGMENT_MM,
+                                     math.degrees(abs(y - py) / radius) / wrapmod.MAX_SEGMENT_DEG, 1e-9))))
+        last, last_top = a, _tip(px, py, 0.0, pdy, radius)
+        for i in range(1, n + 1):
+            t = float(i) / n
+            q = (px + (x - px) * t, py + (y - py) * t, pz + (z - pz) * t, pdy + (dy - pdy) * t)
+            tip, top = _tip(q[0], q[1], q[2], q[3], radius), _tip(q[0], q[1], 0.0, q[3], radius)
+            # pivot sur place (angle rentrant) : la pointe bouge à peine, l'axe de la fraise à la surface du brut
+            # bouge (un quart de ce déplacement, pour ne pas lancer A à sa vitesse maximale)
+            length = max(math.dist(tip, last), 0.25 * math.dist(top, last_top), 1e-3)
+            last, last_top = tip, top
+            xya, zw = machine(*q)
+            lines.append("G1 %s %s F%.4f" % (xya, zw, rate / length))
+        prev = (x, y, z, dy)
+    if inverse:
+        lines.append("G94")
+    return lines
+
+
+def preview(moves, radius, center):
+    """Trajet de la pointe sur la pièce (repère pièce) pour l'aperçu 3D ; décalages Y compris."""
+    if not has_y_offset(moves):
+        return wrapmod.preview_polylines(moves, radius, center)
+    import FreeCAD
+
+    cy, cz = center
+    out, current, prev = [], [], None
+    for m in moves:
+        kind, x, y, z = m[:4]
+        dy = m[4] if len(m) > 4 else 0.0
+        if kind == "rapid" or prev is None:
+            if len(current) > 1:
+                out.append(current)
+            current, steps, prev = [], [1.0], (x, y, z, dy)
+        else:
+            n = max(1, int(math.ceil(math.degrees(abs(y - prev[1]) / radius) / wrapmod.MAX_SEGMENT_DEG)))
+            steps = [float(i) / n for i in range(1, n + 1)]
+        for t in steps:
+            q = [p + (c - p) * t for p, c in zip(prev, (x, y, z, dy))]
+            tx, ty, tz = _tip(q[0], q[1], q[2], q[3], radius)
+            current.append(FreeCAD.Vector(tx, cy + ty, cz + tz))
+        prev = (x, y, z, dy)
+    if len(current) > 1:
+        out.append(current)
+    return out
 
 
 # -- finition 3D rotative ---------------------------------------------------------------------------------------
@@ -412,6 +589,8 @@ def defaults(kind):
         base["side"] = "outside"
     elif kind == "wrap_pocket":
         base["stepover"] = 0.4  # fraction du diamètre
+    if kind in ("wrap_contour", "wrap_pocket"):
+        base["radial_walls"] = False  # projets existants : parcours inchangé ; le dialogue la propose cochée
     elif kind == "rotary3d":
         base = {"stepover": 0.5, "sample": 0.25, "step_down": 0.0, "leave": 0.0, "safe_margin": 5.0, "spiral": False}
     return base
@@ -441,11 +620,15 @@ def generate(project, op):
             base.append((obj, subs))
         wires = wrapmod.drawing_wires(base)
         warnings += wrapmod.check_layout(wires, radius)
+        radial = bool(p.get("radial_walls"))
+        if radial and tool.tool_type != "endmill":
+            raise UserError("radial walls need a flat end mill (the side of the tool follows the wall)")
         if kind == "wrap_contour":
-            moves = contour_moves(wires, radius, tool_r, p["side"], p["depth"], p["step_down"], safe, p["start"])
+            moves = contour_moves(wires, radius, tool_r, p["side"], p["depth"], p["step_down"], safe, p["start"],
+                                  radial_walls=radial)
         else:
             moves = pocket_moves(wires, radius, tool_r, p["stepover"] * tool.geometry.diameter, p["depth"],
-                                 p["step_down"], safe, p["start"])
+                                 p["step_down"], safe, p["start"], radial_walls=radial)
     elif kind == "rotary3d":
         shapes = [o.Shape for o in project.job.Model.Group if getattr(o, "Shape", None) is not None]
         model = RotaryModel(shapes, (cy, cz))
@@ -468,9 +651,9 @@ def generate(project, op):
     if not moves:
         raise UserError("{op}: no toolpath (nothing to cut)", op=op.Label)
     values = rec["values"]
-    lines = wrapmod.wrap_moves(moves, radius, (cy, cz), sign, values["feed_mm_min"], values["plunge_feed_mm_min"])
+    lines = gcode_lines(moves, radius, (cy, cz), sign, values["feed_mm_min"], values["plunge_feed_mm_min"])
     op.Gcode = wrapmod.path_gcode(lines)
-    project._wrap_preview(op, wrapmod.preview_polylines(moves, radius, (cy, cz)))
+    project._wrap_preview(op, preview(moves, radius, (cy, cz)))
     rec["warnings"] = [w for w in rec.get("warnings", []) if not w.startswith("drawing Y")] + warnings
     project._save_registry(reg)
     project.doc.recompute()

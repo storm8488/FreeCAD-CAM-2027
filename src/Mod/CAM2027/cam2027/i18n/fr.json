@@ -1467,5 +1467,12 @@
   "{n} cutting move(s) with the spindle stopped (before M3, after M5 or at S0)": "{n} mouvement(s) de coupe broche arrêtée (avant M3, après M5 ou à S0)",
   "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée.",
   "{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision": "{n} ligne(s) de plus de {m} caractères (GRBL 1.1 error:11) : réduire la précision du postprocesseur",
-  "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin"
+  "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin",
+  "radial walls need a flat end mill (the side of the tool follows the wall)": "les parois radiales demandent une fraise plate (le flanc de la fraise suit la paroi)",
+  "material check on round stock: {error}": "contrôle matière sur brut rond : {error}",
+  "Material check (radius map around the A axis, {res} mm grid)": "Contrôle matière (carte de rayon autour de l'axe A, grille {res} mm)",
+  "Not checked: undercuts seen from the A axis, tool holder and clamps (round stock).": "Non contrôlé : contre-dépouilles vues de l'axe A, porte-outil et brides (brut rond).",
+  "Radial walls (Y moves with A, flat end mill)": "Parois radiales (Y bouge avec A, fraise plate)",
+  "The side of the tool stays parallel to the radial plane of each wall: X, Y, Z and A move together. Without it the tool points at the axis and the walls lean (a step at the top of each level).": "Le flanc de la fraise reste parallèle au plan radial de chaque paroi : X, Y, Z et A bougent ensemble. Sans cette option, la fraise pointe vers l'axe et les parois penchent (une marche en haut de chaque niveau).",
+  "Walls": "Parois"
 }

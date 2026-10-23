@@ -708,8 +708,9 @@ class Project(object):
         if start_zmap is None and twosided.is_two_sided(self):
             return twosided.material_check(self, resolution, tolerance)
 
-        if getattr(self.job.Stock, "Radius", None) is not None:
-            raise UserError("material check: round stock (4th axis) is not supported, only box stock")
+        if getattr(self.job.Stock, "Radius", None) is not None:  # [C4] brut rond : carte de rayon (4e axe)
+            from . import sim_rotary
+            return sim_rotary.material_check(self, resolution, tolerance)
         resolution = resolution or sim.DEFAULT_RESOLUTION
         self.compute()
         zmap = start_zmap or sim.ZMap.from_bounds(self.stock_bounds(), resolution)
