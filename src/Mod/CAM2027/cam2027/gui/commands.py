@@ -803,6 +803,8 @@ class Nest(_Base):
             lines = [tr("Placed: {n} part(s), sheet use {u} %.", n=len(rep["placed"]), u="%.0f" % (100 * rep["utilization"]))]
             if rep.get("sheets", 1) > 1:
                 lines.append(tr("Sheets used: {n} (laid to the right of the first one).", n=rep["sheets"]))
+            for group in rep.get("groups", []):  # [C4]
+                lines.append(tr("Kept together: {parts}", parts=" + ".join(group)))
             if rep["unplaced"]:
                 lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
             lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))

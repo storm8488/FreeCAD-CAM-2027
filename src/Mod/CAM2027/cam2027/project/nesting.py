@@ -5,13 +5,21 @@ Par rectangles (``skyline_pack``) : chaque dessin est représenté par son recta
 l'espacement demandé. Les rectangles sont placés du plus grand au plus petit, là où leur dessus reste le plus bas puis le plus
 à gauche (ligne d'horizon), avec rotation de 90° si elle est permise et meilleure (les pièces ne
 s'emboîtent pas dans les creux les unes des autres). Dans les deux cas, une pièce qui ne tient pas est rapportée, jamais posée hors du panneau.
+
+[C4] **Sens du fil** (``GRAIN``) : une pièce peut n'accepter que 0 / 180° (fil de la pièce le long de X du
+panneau) ou 90 / 270° (fil de la pièce le long de son Y, tourné le long de X du panneau). **Pièces gardées
+ensemble** : un groupe est placé comme une seule pièce rigide (silhouettes des membres à leurs positions
+relatives, même rotation et même translation pour tous) ; ses angles permis sont ceux communs à ses membres.
+Le sens du fil d'un dessin et son groupe sont aussi lus sur l'objet (propriétés ``CAM2027Grain``,
+``CAM2027NestGroup``).
 """
 
 import FreeCAD
 
 
 def skyline_pack(items, width, height, spacing=0.0, rotate=True):
-    """Place ``items`` = ``[(clé, l, h)]`` dans ``width × height`` (origine 0, 0).
+    """Place ``items`` = ``[(clé, l, h)]`` ou ``[(clé, l, h, rotations)]`` dans ``width × height`` (origine 0, 0) ;
+    ``rotations`` : tournés permis parmi ``(False, True)`` (sens du fil), sinon selon ``rotate``.
 
     Retourne ``(placements, non_placés)`` ; ``placements[clé] = (x, y, tourné)`` coin bas-gauche de la
     pièce (sans l'espacement). Deux pièces restent à ``spacing`` l'une de l'autre au moins.
@@ -21,9 +29,12 @@ def skyline_pack(items, width, height, spacing=0.0, rotate=True):
     skyline = [[0.0, W, 0.0]]  # segments [x, largeur, hauteur]
     order = sorted(items, key=lambda it: (max(it[1], it[2]), it[1] * it[2]), reverse=True)
     placed, unplaced = {}, []
-    for key, w, h in order:
+    for item in order:
+        key, w, h = item[:3]
+        rots = item[3] if len(item) > 3 and item[3] is not None else (
+            (False, True) if rotate and abs(w - h) > 1e-9 else (False,))
         best = None
-        for rot in ((False, True) if rotate and abs(w - h) > 1e-9 else (False,)):
+        for rot in rots:
             pw, ph = ((h, w) if rot else (w, h))
             pw, ph = pw + spacing, ph + spacing
             xs = sorted({s[0] for s in skyline} | {s[0] + s[1] - pw for s in skyline if s[0] + s[1] - pw >= -1e-9})
@@ -153,7 +164,8 @@ def _points_in_polygons(px, py, polygons):
 
 
 def raster_mask(face, angle, res, grow):
-    """Masque prudent de ``face`` tournée de ``angle`` degrés autour de l'origine et décalée de ``grow`` mm.
+    """Masque prudent de ``face`` (ou d'un composé de faces : pièces gardées ensemble) tournée de ``angle`` degrés
+    autour de l'origine et décalée de ``grow`` mm.
 
     Retourne ``(masque[nx, ny], x0, y0)`` : la cellule (i, j) couvre ``[x0 + i·res, x0 + (i+1)·res]`` en X (idem Y)."""
     import math
@@ -163,12 +175,15 @@ def raster_mask(face, angle, res, grow):
     if angle:
         f.rotate(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), float(angle))
     margin = grow + res * math.sqrt(2.0) / 2.0 + DEFLECTION
-    big = f.makeOffset2D(margin, 0, False, False, False)
-    polys = []
-    for w in big.Wires:
-        pts = w.discretize(Deflection=DEFLECTION)
-        polys.append(np.array([[p.x, p.y] for p in pts]))
-    bb = big.BoundBox
+    groups = []  # polygones de chaque face décalée (pair-impair par face, réunion entre faces)
+    bb = None
+    for sub in (f.Faces or [f]):
+        big = sub.makeOffset2D(margin, 0, False, False, False)
+        groups.append([np.array([[p.x, p.y] for p in w.discretize(Deflection=DEFLECTION)]) for w in big.Wires])
+        if bb is None:
+            bb = big.BoundBox
+        else:
+            bb.add(big.BoundBox)
     x0 = math.floor(bb.XMin / res) * res
     y0 = math.floor(bb.YMin / res) * res
     nx = max(1, int(math.ceil((bb.XMax - x0) / res)))
@@ -176,7 +191,10 @@ def raster_mask(face, angle, res, grow):
     xs = x0 + (np.arange(nx) + 0.5) * res
     ys = y0 + (np.arange(ny) + 0.5) * res
     X, Y = np.meshgrid(xs, ys, indexing="ij")
-    return _points_in_polygons(X, Y, polys), x0, y0
+    mask = np.zeros(X.shape, dtype=bool)
+    for polys in groups:
+        mask |= _points_in_polygons(X, Y, polys)
+    return mask, x0, y0
 
 
 def _fast_len(n):
@@ -238,8 +256,9 @@ class _Sheet(object):
         self._fft = None
 
 
-def shape_pack(items, width, height, spacing=0.0, angle_step=15.0, max_sheets=1, res=None):
+def shape_pack(items, width, height, spacing=0.0, angle_step=15.0, max_sheets=1, res=None, allowed=None):
     """Imbrication par forme réelle de ``items`` = ``[(clé, face)]`` dans des panneaux ``width × height``.
+    ``allowed`` : ``{clé: [angles]}`` (sens du fil) au lieu des pas de ``angle_step`` pour ces pièces.
 
     Retourne ``(placements, non_placées, res)`` ; ``placements[clé] = (panneau, angle, dx, dy)`` : la face tournée de
     ``angle`` autour de l'origine puis translatée de (dx, dy) est dans le panneau (origine 0, 0)."""
@@ -257,10 +276,11 @@ def shape_pack(items, width, height, spacing=0.0, angle_step=15.0, max_sheets=1,
         return (round(face.Area, 6), round(face.BoundBox.XLength, 6), round(face.BoundBox.YLength, 6),
                 round(face.Length, 6))
 
+    allowed = allowed or {}
     masks = {}  # (géométrie, angle) -> (masque, x0, y0) : les copies partagent leurs masques
-    for _key, face in items:
+    for key, face in items:
         g = geo_key(face)
-        for angle in angles:
+        for angle in allowed.get(key, angles):
             if (g, angle) not in masks:
                 masks[(g, angle)] = raster_mask(face, angle, res, half)
     usable = [m for m, _x, _y in masks.values() if m.shape[0] <= nx and m.shape[1] <= ny]
@@ -278,7 +298,7 @@ def shape_pack(items, width, height, spacing=0.0, angle_step=15.0, max_sheets=1,
         if len(sheets) < max_sheets:
             candidates.append((len(sheets), _Sheet(nx, ny, fft_shape)))  # panneau neuf si aucun ouvert ne convient
         for s_index, target in candidates:
-            for angle in angles:
+            for angle in allowed.get(key, angles):
                 mask, x0, y0 = masks[(g, angle)]
                 if mask.shape[0] > nx or mask.shape[1] > ny:
                     continue
@@ -315,3 +335,104 @@ def place_shape(obj, angle, dx, dy):
     """Tourne l'objet de ``angle`` autour de l'origine puis le translate de (dx, dy) (après son placement actuel)."""
     obj.Placement = FreeCAD.Placement(FreeCAD.Vector(dx, dy, 0), FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), angle)) \
         .multiply(obj.Placement)
+
+
+# -- sens du fil et pièces gardées ensemble [C4] ------------------------------------------------------------------
+
+#: sens du fil d'une pièce -> angles permis (forme réelle) ; le fil du panneau est le long de son X
+GRAIN = {"x": (0.0, 180.0), "y": (90.0, 270.0)}
+GRAIN_PROPERTY = "CAM2027Grain"
+GROUP_PROPERTY = "CAM2027NestGroup"
+
+
+def grain_of(obj, grain=None):
+    """Sens du fil d'un dessin : ``grain`` (dict ``{objet ou nom: "x" / "y" / None}``) puis la propriété de
+    l'objet ; None = libre."""
+    for key in (obj, obj.Name):
+        try:
+            if grain and key in grain:
+                value = grain[key]
+                break
+        except TypeError:
+            continue
+    else:
+        value = getattr(obj, GRAIN_PROPERTY, "") or None
+    if value not in (None, "x", "y"):
+        raise ValueError("unknown grain direction %r" % (value,))
+    return value
+
+
+def set_nest_options(obj, grain=None, group=""):
+    """Enregistre sur le dessin son sens du fil (``"x"``, ``"y"`` ou None) et son groupe d'imbrication ("" : seul)."""
+    for prop, value, doc in ((GRAIN_PROPERTY, grain or "", "Grain direction for nesting: x (0/180), y (90/270) or empty"),
+                             (GROUP_PROPERTY, group or "", "Drawings with the same group are nested together")):
+        if prop not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", prop, "CAM2027", doc)
+        setattr(obj, prop, value)
+
+
+def units(objs, grain=None, groups=None):
+    """Unités d'imbrication : ``[(clé, [membres], angles permis ou None)]``. ``groups`` : listes de dessins à garder
+    ensemble (sinon la propriété de groupe des dessins) ; un dessin seul forme son unité. Angles d'un groupe : ceux
+    communs à ses membres (``ValueError`` si les sens du fil se contredisent)."""
+    from ..i18n import UserError
+
+    names = [o.Name for o in objs]
+    member_of = {}
+    if groups:
+        for k, group in enumerate(groups):
+            for o in group:
+                if o.Name in names:
+                    member_of[o.Name] = "group%d" % k
+    else:
+        for o in objs:
+            g = getattr(o, GROUP_PROPERTY, "")
+            if g:
+                member_of[o.Name] = "group:" + g
+    out, seen = [], {}
+    for o in objs:
+        tag = member_of.get(o.Name)
+        if tag is None:
+            out.append([o.Name, [o]])
+        elif tag in seen:
+            seen[tag][1].append(o)
+        else:
+            seen[tag] = [o.Name, [o]]
+            out.append(seen[tag])
+    result = []
+    for key, members in out:
+        sets = [GRAIN[g] for g in (grain_of(m, grain) for m in members) if g is not None]
+        angles = None
+        if sets:
+            common = set(sets[0])
+            for a in sets[1:]:
+                common &= set(a)
+            if not common:
+                raise UserError("drawings kept together have opposite grain directions: {names}",
+                                names=", ".join(m.Label for m in members))
+            angles = sorted(common)
+        result.append((key, members, angles))
+    return result
+
+
+def unit_face(members):
+    """Silhouette d'une unité : la face d'un dessin seul, le composé des silhouettes d'un groupe."""
+    import Part
+
+    faces = [silhouette(m.Shape) for m in members]
+    return faces[0] if len(faces) == 1 else Part.Compound(faces)
+
+
+def move_group_to(objs, x, y, rotated):
+    """Comme ``move_to`` pour un groupe : même rotation de 90° (autour de l'origine), puis même translation qui pose
+    le coin bas-gauche de l'englobant du groupe en (x, y)."""
+    rot = FreeCAD.Placement(FreeCAD.Vector(), FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), 90))
+    if rotated:
+        for o in objs:
+            o.Placement = rot.multiply(o.Placement)
+    bb = objs[0].Shape.BoundBox
+    for o in objs[1:]:
+        bb.add(o.Shape.BoundBox)
+    shift = FreeCAD.Placement(FreeCAD.Vector(x - bb.XMin, y - bb.YMin, 0), FreeCAD.Rotation())
+    for o in objs:
+        o.Placement = shift.multiply(o.Placement)

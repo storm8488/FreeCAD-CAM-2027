@@ -194,3 +194,233 @@ class TestRotaryRadialWalls(unittest.TestCase):
                     out.append((length * w["F"], cur[0] == prev[0] and cur[1] == prev[1] and cur[3] == prev[3]))
             prev = cur
         return out
+
+
+def _pocket_points(op):
+    from tests.test_nuit_s5 import cut_points
+
+    return [p for p in cut_points(op) if p[2] < -1e-6]
+
+
+class TestParametricVectors(unittest.TestCase):
+    """Dessin vectoriel : rectangle, cercle, polygone, texte modifiable après coup (poche recalculée), nœuds."""
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_basic_shapes(self):
+        from cam2027.project import vectors
+
+        self.assertAlmostEqual(Part.Face(vectors.rectangle_shape(5, 5, 40, 20).Wires[0]).Area, 800.0, places=6)
+        rounded = Part.Face(vectors.rectangle_shape(0, 0, 40, 20, corner=5.0, angle=30.0).Wires[0])
+        self.assertAlmostEqual(rounded.Area, 800.0 - (4 - math.pi) * 25.0, places=4)
+        self.assertAlmostEqual(rounded.CenterOfMass.x, 0.0, places=6)
+        self.assertAlmostEqual(Part.Face(vectors.circle_shape(1, 2, 10).Wires[0]).Area, math.pi * 100, places=4)
+        hexa = vectors.polygon_shape(0, 0, 10, 6)
+        self.assertAlmostEqual(Part.Face(hexa.Wires[0]).Area, 3 * math.sqrt(3) / 2 * 100, places=6)
+        self.assertAlmostEqual(hexa.BoundBox.YMax, 10.0, places=9)  # premier sommet en haut
+        for bad in (lambda: vectors.rectangle_shape(0, 0, 10, 10, corner=5.0), lambda: vectors.polygon_shape(0, 0, 5, 2),
+                    lambda: vectors.circle_shape(0, 0, 0), lambda: vectors.polyline_shape([(0, 0), (1, 1), (2, 2)])):
+            with self.assertRaises(Exception):
+                bad()
+
+    def _sheet_project(self):
+        from cam2027.project import vectors
+        from tests.test_nuit_s5 import machine, tool_ids
+
+        lib = starter_library()
+        proj = Project.create("Drawing", lib, machine())
+        frame = vectors.add_vector(proj, Part.Compound([Part.makePolygon(
+            [V(-10, -10, 0), V(170, -10, 0), V(170, 60, 0), V(-10, 60, 0), V(-10, -10, 0)])]), "Frame")
+        proj.create_sheet_job(vectors=[frame], thickness=12.0)
+        tool, asm = tool_ids(lib, "3 mm flat end mill", lambda t: t.tool_type == "endmill")
+        return proj, tool, asm
+
+    def _inside(self, op, obj, margin=1.5 - 0.02):
+        from cam2027.project import vectors
+
+        face = vectors.faces_of(obj.Shape)
+        edges = Part.Compound(face.Edges)
+        pts = _pocket_points(op)
+        self.assertGreater(len(pts), 20)
+        for x, y, _z in pts:
+            v = Part.Vertex(V(x, y, 0))
+            self.assertLess(face.distToShape(v)[0], 1e-3, (x, y))
+            self.assertGreater(edges.distToShape(v)[0], margin, (x, y))
+        return pts
+
+    def test_text_edited_pocket_recomputed(self):
+        """Critère : texte « AB » poché, modifié en « ABH » (une lettre de plus, plus grande) puis enregistré, rouvert
+        et modifié encore : la poche suit chaque fois (points dans les lettres, aucune lettre oubliée)."""
+        from cam2027.project import vectors
+
+        proj, tool, asm = self._sheet_project()
+        # Arial Black : traits plus larges que la fraise de 3 mm (en Arial 20 mm, la fraise ne rentre pas)
+        font = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "ariblk.ttf")
+        text = vectors.add_parametric(proj, "text", "Sign", Text="AB", Font=font, Size=30.0, X=0.0, Y=0.0)
+        self.assertTrue(vectors.is_parametric(text))
+        self.assertIn(text, __import__("cam2027.project.sheet", fromlist=["x"]).vector_objects(proj.doc))
+        op, _rec = proj.add_operation("pocket2d", "Pocket text", asm.id, tool.presets[0].id, base=[(text, [])],
+                                      params={"StartDepth": 0.0, "FinalDepth": -1.0, "StepDown": 1.0})
+        res = {r["name"]: r for r in proj.compute()}["Pocket text"]
+        self.assertTrue(res["valid"], res)
+        before = self._inside(op, text)
+        self.assertLess(max(p[0] for p in before), 50.0)
+        touched = vectors.update_parametric(proj, text, Text="ABH", Size=34.0)
+        self.assertEqual([o.Name for o in touched], [op.Name])
+        self.assertEqual(len(op.Base[0][1]), len(proj.doc.getObject(text.Name + "_Face").Shape.Faces))
+        res = {r["name"]: r for r in proj.compute()}["Pocket text"]
+        self.assertTrue(res["valid"], res)
+        after = self._inside(op, text)
+        h_left = text.Shape.BoundBox.XMax - 20.0  # le H (dernière lettre)
+        self.assertTrue(any(x > h_left for x, _y, _z in after), "the new letter is not pocketed")
+        self.assertGreater(max(p[1] for p in after), max(p[1] for p in before) + 2.0)  # lettres plus hautes
+        # enregistrement et réouverture : l'objet reste paramétrique et modifiable
+        path = os.path.join(tempfile.mkdtemp(prefix="cam2027-c4v-"), "drawing.FCStd")
+        proj.doc.saveAs(path)
+        name = text.Name
+        proj.close()
+        proj = Project.open(path)
+        text = proj.doc.getObject(name)
+        self.assertTrue(vectors.is_parametric(text))
+        vectors.update_parametric(proj, text, Text="AH", X=40.0)
+        op = [o for o in proj.operations() if o.Label == "Pocket text"][0]
+        res = {r["name"]: r for r in proj.compute()}["Pocket text"]
+        self.assertTrue(res["valid"], res)
+        pts = self._inside(op, text)
+        self.assertGreater(min(p[0] for p in pts), 40.0)
+
+    def test_nodes_move_delete(self):
+        """Rectangle poché, nœud déplacé puis supprimé : la poche suit la nouvelle forme ; forme dégénérée refusée."""
+        from cam2027.project import vectors
+
+        proj, tool, asm = self._sheet_project()
+        rect = vectors.add_parametric(proj, "rectangle", "Box", X=50.0, Y=20.0, Width=60.0, Height=30.0)
+        op, _rec = proj.add_operation("pocket2d", "Pocket box", asm.id, tool.presets[0].id, base=[(rect, [])],
+                                      params={"StartDepth": 0.0, "FinalDepth": -1.0, "StepDown": 1.0})
+        proj.compute()
+        self._inside(op, rect)
+        pts = vectors.nodes(rect)
+        self.assertEqual(len(pts), 4)
+        i = max(range(4), key=lambda k: pts[k][0] + pts[k][1])  # coin haut droit (80, 35)
+        vectors.move_node(proj, rect, i, 95.0, 45.0)
+        self.assertEqual(rect.VectorKind, "polyline")
+        self.assertAlmostEqual(Part.Face(rect.Shape.Wires[0]).Area, 1800.0 + 0.5 * 15 * 30 + 0.5 * 60 * 10, places=4)
+        res = {r["name"]: r for r in proj.compute()}["Pocket box"]
+        self.assertTrue(res["valid"], res)
+        moved = self._inside(op, rect)
+        self.assertGreater(max(p[0] for p in moved), 82.0)
+        vectors.delete_node(proj, rect, i)
+        self.assertEqual(len(rect.Points), 3)
+        self.assertAlmostEqual(Part.Face(rect.Shape.Wires[0]).Area, 900.0, places=4)
+        proj.compute()
+        self._inside(op, rect)
+        with self.assertRaises(Exception):
+            vectors.delete_node(proj, rect, 0)  # 2 nœuds : plus une forme fermée
+        self.assertEqual(len(rect.Points), 3)
+        with self.assertRaises(Exception):
+            vectors.nodes(vectors.add_parametric(proj, "circle", "Disc", X=0.0, Y=0.0, Radius=5.0))
+
+
+def _drawing(doc, name, wires):
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = Part.Compound(wires)
+    return obj
+
+
+def _rect(x0, y0, w, h):
+    return Part.makePolygon([V(x0, y0, 0), V(x0 + w, y0, 0), V(x0 + w, y0 + h, 0), V(x0, y0 + h, 0), V(x0, y0, 0)])
+
+
+class TestNestingGrainGroups(unittest.TestCase):
+    """Imbrication : sens du fil (0 / 180° ou 90 / 270° par pièce) et pièces gardées ensemble."""
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def _gaps(self, objs, spacing, sheet):
+        from cam2027.project import nesting
+
+        faces = [nesting.silhouette(o.Shape) for o in objs]
+        for f in faces:
+            bb = f.BoundBox
+            self.assertTrue(sheet[0] - 1e-6 <= bb.XMin and bb.XMax <= sheet[2] + 1e-6 and sheet[1] - 1e-6 <= bb.YMin
+                            and bb.YMax <= sheet[3] + 1e-6, bb)
+        worst = float("inf")
+        for i in range(len(faces)):
+            for j in range(i + 1, len(faces)):
+                worst = min(worst, faces[i].distToShape(faces[j])[0])
+        self.assertGreaterEqual(worst, spacing - 1e-6)
+        return worst
+
+    def test_grain_true_shape_and_rectangles(self):
+        """Lattes 100 x 20 : fil X -> couchées (0 / 180°), fil Y -> debout (90 / 270°), en forme réelle (pas de 15°)
+        et en rectangles ; une latte libre sur un panneau étroit est tournée, la même avec fil X ne tient pas."""
+        lib = starter_library()
+        for true_shape in (True, False):
+            proj = Project.create("Grain %s" % true_shape, lib)
+            along = _drawing(proj.doc, "Along", [_rect(0, 0, 100, 20)])
+            across = _drawing(proj.doc, "Across", [_rect(0, 0, 100, 20)])
+            proj.doc.recompute()
+            rep = proj.nest_drawings([along, across], 300, 300, spacing=5, margin=10, true_shape=true_shape,
+                                     copies={along: 3, across: 3}, grain={along: "x", across: "y"})
+            self.assertEqual(rep["unplaced"], [])
+            self.assertEqual(len(rep["objects"]), 6)
+            for o in rep["objects"]:
+                bb = o.Shape.BoundBox
+                lying = o.Name.startswith("Along")
+                self.assertAlmostEqual(bb.XLength if lying else bb.YLength, 100.0, places=4, msg=(o.Label, true_shape))
+                angle = [p[3] for p in rep["placed"] if p[0] == o.Label][0] % 360
+                self.assertIn(round(angle), (0, 180) if lying else (90, 270), (o.Label, angle))
+            self._gaps(rep["objects"], 5.0, (10, 10, 290, 290))
+            proj.close()
+        # panneau étroit (60 de large) : libre -> tournée ; fil X -> refusée (100 mm ne tiennent pas en X)
+        for grain, fits in ((None, True), ("x", False), ("y", True)):
+            proj = Project.create("Narrow", lib)
+            lath = _drawing(proj.doc, "Lath", [_rect(0, 0, 100, 20)])
+            proj.doc.recompute()
+            rep = proj.nest_drawings([lath], 60, 200, spacing=5, margin=10, grain={lath: grain})
+            self.assertEqual(not rep["unplaced"], fits, (grain, rep))
+            proj.close()
+
+    def test_grain_from_property_and_groups(self):
+        """Cadre (60 x 60, fenêtre 30 x 30) et son insert (20 x 20 dans la fenêtre) gardés ensemble, réglés sur les
+        dessins (propriétés) : même rotation et même déplacement pour les deux (l'insert reste dans la fenêtre),
+        fil Y respecté ; sans groupe, l'insert est posé ailleurs. Groupe aux fils contraires : refusé."""
+        from cam2027.project import nesting
+
+        lib = starter_library()
+        results = {}
+        for grouped in (True, False):
+            proj = Project.create("Group %s" % grouped, lib)
+            frame = _drawing(proj.doc, "Frame", [_rect(0, 0, 60, 60), _rect(15, 15, 30, 30)])
+            insert = _drawing(proj.doc, "Insert", [_rect(20, 20, 20, 20)])
+            other = _drawing(proj.doc, "Other", [_rect(0, 0, 70, 40)])
+            proj.doc.recompute()
+            nesting.set_nest_options(frame, "y", "A" if grouped else "")
+            nesting.set_nest_options(insert, None, "A" if grouped else "")
+            before = insert.Shape.BoundBox.Center - frame.Shape.BoundBox.Center
+            rep = proj.nest_drawings([other, frame, insert], 200, 200, spacing=4, margin=10, copies={other: 3})
+            self.assertEqual(rep["unplaced"], [])
+            after = insert.Shape.BoundBox.Center - frame.Shape.BoundBox.Center
+            angle = [p[3] for p in rep["placed"] if p[0] == frame.Label][0] % 360
+            self.assertIn(round(angle), (90, 270))
+            results[grouped] = (before.Length, after.Length, rep)
+            if grouped:
+                self.assertEqual(rep["groups"], [[frame.Label, insert.Label]])
+                self.assertAlmostEqual(after.Length, before.Length, places=6)
+                self.assertEqual(angle, [p[3] for p in rep["placed"] if p[0] == insert.Label][0] % 360)
+                hole = [w for w in frame.Shape.Wires if abs(Part.Face(w).Area - 900.0) < 1e-6][0]
+                self.assertAlmostEqual(Part.Face(hole).common(Part.Face(insert.Shape.Wires[0])).Area, 400.0, places=4)
+                self._gaps([o for o in rep["objects"] if o.Name != insert.Name], 4.0, (10, 10, 190, 190))
+            else:
+                self.assertGreater(after.Length, 20.0)  # silhouette du cadre pleine : l'insert va ailleurs
+            proj.close()
+        proj = Project.create("Conflict", lib)
+        a = _drawing(proj.doc, "A", [_rect(0, 0, 50, 10)])
+        b = _drawing(proj.doc, "B", [_rect(0, 20, 50, 10)])
+        proj.doc.recompute()
+        with self.assertRaises(Exception):
+            proj.nest_drawings([a, b], 200, 200, grain={a: "x", b: "y"}, groups=[[a, b]])

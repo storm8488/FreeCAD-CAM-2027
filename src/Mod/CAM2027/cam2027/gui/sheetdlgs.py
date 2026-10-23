@@ -157,8 +157,9 @@ class NestDialog(QtWidgets.QDialog):
         self.proj = proj
         self.setWindowTitle(tr("Nest parts on a sheet"))
         form = QtWidgets.QFormLayout(self)
-        self.table = QtWidgets.QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels([tr("Drawing"), tr("Size (mm)"), tr("Copies")])
+        self.table = QtWidgets.QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([tr("Drawing"), tr("Size (mm)"), tr("Copies"), tr("Grain"),
+                                              tr("Kept together (group)")])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.objects = [o for o in sheetmod.vector_objects(proj.doc) if sheetmod.closed_wires(o)]
         for obj in self.objects:
@@ -173,6 +174,19 @@ class NestDialog(QtWidgets.QDialog):
             copies = QtWidgets.QSpinBox()
             copies.setRange(1, 500)
             self.table.setCellWidget(r, 2, copies)
+            # [C4] sens du fil (rotations permises) et groupe de pièces gardées ensemble, lus sur le dessin
+            from ..project import nesting
+
+            grain = QtWidgets.QComboBox()
+            grain.addItem(tr("Free"), "")
+            grain.addItem(tr("Along X (0 / 180°)"), "x")
+            grain.addItem(tr("Along Y (90 / 270°)"), "y")
+            grain.setCurrentIndex(max(0, grain.findData(getattr(obj, nesting.GRAIN_PROPERTY, "") or "")))
+            grain.setToolTip(tr("Grain of the part: the sheet grain runs along X. Along X keeps the part as drawn (or turned 180°), along Y turns it a quarter turn."))
+            self.table.setCellWidget(r, 3, grain)
+            group = QtWidgets.QLineEdit(getattr(obj, nesting.GROUP_PROPERTY, ""))
+            group.setToolTip(tr("Drawings with the same group name are placed together, as drawn (an inlay and its frame, parts of one assembly)."))
+            self.table.setCellWidget(r, 4, group)
         self.table.setMinimumHeight(160)
         form.addRow(self.table)
         self.width = _spin(10, 10000, 600.0, 1)
@@ -204,6 +218,11 @@ class NestDialog(QtWidgets.QDialog):
             if self.table.item(r, 0).checkState() == QtCore.Qt.Checked:
                 chosen.append(obj)
                 copies[obj] = self.table.cellWidget(r, 2).value()
+        from ..project import nesting
+
+        for r, obj in enumerate(self.objects):  # [C4] réglages gardés sur le dessin (relus par nest_drawings)
+            nesting.set_nest_options(obj, self.table.cellWidget(r, 3).currentData() or None,
+                                     self.table.cellWidget(r, 4).text().strip())
         step = self.mode.currentData()
         return self.proj.nest_drawings(chosen, self.width.value(), self.length.value(), self.spacing.value(),
                                        self.margin.value(), self.rotate.isChecked(), copies,

@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **[C4]** Imbrication : **sens du fil** par pièce (libre, le long de X : 0 / 180°, le long de Y : 90 / 270° ; le fil
+  du panneau suit X) et **pièces gardées ensemble** (même nom de groupe : placées comme une seule pièce, une
+  incrustation reste dans son cadre), en forme réelle comme en rectangles ; colonnes « Fil » et « Gardés
+  ensemble » du dialogue Imbriquer, réglages gardés sur les dessins (`nesting.units`, `nesting.set_nest_options`).
+- **[C4]** Dessin vectoriel **paramétrique** : Dessin > Rectangle (coins arrondis, rotation), Cercle, Polygone ; le
+  texte (et ces formes) reste modifiable après coup (Dessin > Modifier le vecteur, ou double-clic) : le vecteur, sa
+  face et les clones du job suivent, les opérations qui l'usinent reprennent toutes ses faces et sont recalculées
+  (texte « AB » poché changé en « ABH » : le H est vidé, aussi après enregistrement et réouverture). Dessin >
+  Modifier les nœuds : déplacer / supprimer les nœuds d'une forme à côtés droits. Un rectangle dessiné avant le
+  panneau ne reçoit plus une seconde face figée (`sheet.make_faces`).
 - **[C4]** Usinage rotatif : option **« Parois radiales »** pour la poche et le contour enroulés (fraise plate) :
   X, Y, Z et A ensemble, la fraise décalée en Y d'un rayon d'outil le long de la normale à la paroi après avoir
   tourné A jusqu'au contact ; son flanc reste dans le plan radial de la paroi. Poche R20 → R17 en une passe, fraise

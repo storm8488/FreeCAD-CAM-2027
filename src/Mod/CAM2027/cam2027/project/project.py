@@ -633,7 +633,7 @@ class Project(object):
                 "notes": notes, **gaps}
 
     def nest_drawings(self, drawings, sheet_width, sheet_length, spacing=5.0, margin=10.0, rotate=True, copies=None,
-                      true_shape=True, angle_step=15.0, max_sheets=1):
+                      true_shape=True, angle_step=15.0, max_sheets=1, grain=None, groups=None):
         """Imbrication des dessins 2D sur un panneau ``sheet_width × sheet_length`` (origine 0, 0), avant
         « Brut et montage > panneau ». ``copies`` : ``{objet: nombre}`` (copies créées). Les dessins placés
         sont déplacés ; ceux qui ne tiennent pas restent où ils sont et sont rapportés.
@@ -641,6 +641,10 @@ class Project(object):
         ``true_shape`` : silhouettes réelles (rotations par pas de ``angle_step`` si ``rotate``), sinon rectangles
         englobants (rotation de 90°). ``max_sheets`` > 1 : les panneaux suivants sont posés à droite du premier,
         à ``nesting.SHEET_GAP`` mm ; le job reprend le premier.
+
+        [C4] ``grain`` : ``{dessin: "x" / "y"}`` sens du fil (0 / 180° ou 90 / 270°) ; ``groups`` : listes de dessins
+        placés ensemble comme une seule pièce. Par défaut, lus sur les dessins (``nesting.set_nest_options``) ; les
+        copies gardent le sens du fil de leur dessin, chacune seule.
 
         Retourne un dict : placés ``[(libellé, x, y, angle)]``, non placés, taux d'utilisation, panneaux."""
         from . import nesting
@@ -654,44 +658,59 @@ class Project(object):
                 dup = self.doc.addObject("Part::Feature", obj.Name + "_Copy")
                 dup.Shape = obj.Shape.copy()
                 dup.Label = "%s (%d)" % (obj.Label, k)
+                nesting.set_nest_options(dup, nesting.grain_of(obj, grain))  # [C4] même fil, sans le groupe
                 objs.append(dup)
         self.doc.recompute()
         report = {"placed": [], "unplaced": [], "sheet": (sheet_width, sheet_length), "sheet_of": {}}
         used = 0.0
         width, length = sheet_width - 2 * margin, sheet_length - 2 * margin
+        units = nesting.units(objs, grain, groups)  # [C4] sens du fil, pièces gardées ensemble
+        members = dict((key, m) for key, m, _a in units)
         if true_shape:
-            items = [(o.Name, nesting.silhouette(o.Shape)) for o in objs]
+            items = [(key, nesting.unit_face(m)) for key, m, _a in units]
+            allowed = dict((key, a) for key, _m, a in units if a is not None)
             placed, unplaced, res = nesting.shape_pack(items, width, length, spacing,
-                                                       angle_step if rotate else 0.0, max_sheets)
+                                                       angle_step if rotate else 0.0, max_sheets, allowed=allowed)
             report["resolution"] = res
         else:
-            items = [(o.Name, o.Shape.BoundBox.XLength, o.Shape.BoundBox.YLength) for o in objs]
+            items = []
+            for key, m, a in units:
+                bb = m[0].Shape.BoundBox
+                for o in m[1:]:
+                    bb.add(o.Shape.BoundBox)
+                rots = None if a is None else tuple(sorted({angle % 180.0 > 45.0 for angle in a}))
+                items.append((key, bb.XLength, bb.YLength, rots))
             placed, unplaced = nesting.skyline_pack(items, width, length, spacing, rotate)
         sheets = 1
-        for o in objs:
-            if o.Name not in placed:
-                report["unplaced"].append(o.Label)
+        placed_names = set()
+        for key, m, _a in units:
+            if key not in placed:
+                report["unplaced"].extend(o.Label for o in m)
                 continue
+            placed_names.update(o.Name for o in m)
             if true_shape:
-                sheet, angle, dx, dy = placed[o.Name]
+                sheet, angle, dx, dy = placed[key]
                 shift = sheet * (sheet_width + nesting.SHEET_GAP)
-                nesting.place_shape(o, angle, margin + dx + shift, margin + dy)
+                for o in m:
+                    nesting.place_shape(o, angle, margin + dx + shift, margin + dy)
+                    report["sheet_of"][o.Label] = sheet
                 sheets = max(sheets, sheet + 1)
-                report["sheet_of"][o.Label] = sheet
             else:
-                x, y, rot = placed[o.Name]
-                nesting.move_to(o, margin + x, margin + y, rot)
+                x, y, rot = placed[key]
+                nesting.move_group_to(m, margin + x, margin + y, rot)
                 angle = 90.0 if rot else 0.0
-            bb = o.Shape.BoundBox
-            report["placed"].append((o.Label, bb.XMin, bb.YMin, angle))
-            used += nesting.outline_area(o)
+            for o in m:
+                bb = o.Shape.BoundBox
+                report["placed"].append((o.Label, bb.XMin, bb.YMin, angle))
+                used += nesting.outline_area(o)
         if "NestedSheet" not in self.info.PropertiesList:
             self.info.addProperty("App::PropertyString", "NestedSheet", "CAM2027", "Sheet chosen when nesting (JSON)")
         self.info.NestedSheet = json.dumps([0.0, 0.0, float(sheet_width), float(sheet_length)])
         self.doc.recompute()
         report["sheets"] = sheets
         report["utilization"] = used / (sheets * sheet_width * sheet_length)
-        report["objects"] = [o for o in objs if o.Name in placed]
+        report["objects"] = [o for o in objs if o.Name in placed_names]
+        report["groups"] = [[o.Label for o in m] for m in members.values() if len(m) > 1]
         return report
 
     def material_check(self, resolution=None, tolerance=0.02, start_zmap=None):

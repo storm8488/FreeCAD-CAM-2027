@@ -16,6 +16,8 @@ import Part
 
 SHEET_NAME = "CAM2027Sheet"
 FACE_SUFFIX = "_Face"
+#: objets vecteurs : importés (Part::Feature) et dessinés dans l'atelier, paramétriques [C4] (Part::FeaturePython)
+VECTOR_TYPES = ("Part::Feature", "Part::FeaturePython")
 
 
 def vector_objects(doc):
@@ -25,7 +27,7 @@ def vector_objects(doc):
         shape = getattr(o, "Shape", None)
         if shape is None or shape.isNull() or not shape.Edges or shape.Solids:
             continue
-        if o.Name.endswith(FACE_SUFFIX) or o.Name.startswith("Clone") or o.TypeId != "Part::Feature":
+        if o.Name.endswith(FACE_SUFFIX) or o.Name.startswith("Clone") or o.TypeId not in VECTOR_TYPES:
             continue
         if o.Name.endswith(("_Preview", "_FlatArea")):  # aperçu d'enroulement, zone de fond plat : pas des dessins
             continue
@@ -48,6 +50,16 @@ def make_faces(doc, vectors):
     """Crée une face plane par vecteur fermé (trous intérieurs respectés) ; retourne les objets créés."""
     faces = []
     for o in vectors:
+        existing = doc.getObject(o.Name + FACE_SUFFIX)
+        if existing is not None:  # [C4] face déjà créée (job recréé) : gardée
+            faces.append(existing)
+            continue
+        from . import vectors as vecmod
+
+        if vecmod.is_parametric(o):  # [C4] vecteur dessiné : face paramétrique qui le suit
+            face = vecmod.make_face(doc, o)
+            faces.extend([face] if face is not None else [])
+            continue
         wires = closed_wires(o)
         if not wires:
             continue
@@ -88,7 +100,7 @@ def expand_drawing_base(doc, kind, base):
                 source = inner
                 break
         is_face_obj = source.Name.endswith(FACE_SUFFIX)
-        is_vector = (not is_face_obj and source.TypeId == "Part::Feature" and source.Shape.Edges
+        is_vector = (not is_face_obj and source.TypeId in VECTOR_TYPES and source.Shape.Edges
                      and not source.Shape.Solids and not source.Shape.Faces)
         if subs or not (is_vector or is_face_obj):
             out.append((obj, subs))

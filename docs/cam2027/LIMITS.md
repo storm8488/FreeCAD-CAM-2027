@@ -289,7 +289,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   chaque bord de pièce peut perdre jusqu'à `res·√2/2` mm (0,4 mm sur 300 × 300) ; grand panneau
   (1220 × 2440, grille de 2 mm) : calcul plus long (une FFT par rotation et par pièce, non mesuré sur
   50 pièces). Placement glouton (dessus le plus bas), pas d'optimisation globale de l'ordre ; les trous des
-  pièces ne reçoivent pas d'autres pièces ; sens du fil non géré. Plusieurs panneaux : posés côte à côte
+  pièces ne reçoivent pas d'autres pièces (sauf une pièce gardée avec son cadre **[C4]**). **[C4] Sens du fil** :
+  par pièce, libre, le long de X (0 / 180°) ou de Y (90 / 270°) ; le fil du panneau est toujours le long de son
+  X (tourner le panneau = échanger largeur et longueur). **Pièces gardées ensemble** (même nom de groupe) : placées
+  comme une seule pièce rigide, telles que dessinées l'une par rapport à l'autre (même rotation, même
+  déplacement) ; angles permis = ceux communs aux sens du fil du groupe (contradiction refusée) ; les copies
+  d'un dessin groupé sont placées seules (même sens du fil). Plusieurs panneaux : posés côte à côte
   dans le document ; le job « panneau » est créé sur le premier : les dessins des panneaux suivants sont
   alors hors du brut (à déplacer dans un autre projet avant « Brut et montage » ; pas de job par panneau).
 
@@ -422,8 +427,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   (identifiant SVG). L'outil est cherché par nom, sinon par type et diamètre, dans la bibliothèque du
   projet ; les habillages (attaches, rampes) ne sont pas enregistrés. Calques DXF : seulement quand l'import
   de l'interface les crée (groupes / calques Draft) ; en console, le lecteur DXF ne les garde pas.
-- **Dessin vectoriel** : pas d'édition de nœuds ni de dessin à main levée (rectangles, cercles, polylignes :
-  importer un SVG / DXF) ; le texte est figé à la création (changer le texte = le redessiner). Contours de
+- **Dessin vectoriel** : **[C4]** rectangle (coins arrondis, rotation), cercle, polygone régulier et texte sont des
+  objets paramétriques (« Modifier le vecteur », double-clic) ; « Modifier les nœuds » : tableau X / Y (déplacer,
+  supprimer, fermé ou non) pour les formes à côtés droits seulement (rectangle sans arrondi, polygone, polyligne ;
+  un rectangle ou un polygone devient alors une polyligne) ; pas d'ajout de nœud, pas de courbes de Bézier, pas
+  de glisser-déposer dans la vue 3D, pas de dessin à main levée. Les vecteurs importés (SVG / DXF) et les
+  résultats de décalage / booléens / miroir / copies restent figés. Après modification, les opérations qui
+  usinent le vecteur ou sa face reprennent **toutes** ses faces / arêtes (une sélection partielle de quelques
+  lettres devient le texte entier). Contours de
   police approchés par des polygones à 0,01 mm (sortie en G1). Le texte sur courbe suit le côté gauche du
   vecteur (inverser le vecteur pour passer de l'autre côté) ; une courbe à plusieurs arêtes est approchée par
   une B-spline. Les booléens et le décalage travaillent sur les contours **fermés** seulement. Polices
