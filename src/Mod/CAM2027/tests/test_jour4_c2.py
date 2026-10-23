@@ -151,6 +151,22 @@ class TestGuiTicker(unittest.TestCase):
             FreeCAD.closeDocument(doc.Name)
 
 
+class TestPathStatsCache(unittest.TestCase):
+    def test_full_cache_keeps_recent_entries(self):
+        """Cache plein : vidé en entier (25562b8), le rafraîchissement suivant du panneau relisait tous les
+        parcours hors de la fenêtre de progression (0,5 s pour 21 000 commandes) ; seule la plus ancienne part."""
+        import Path
+
+        paths = [Path.Path([Path.Command("G1", {"X": float(k), "Y": 1.0, "Z": 0.0})]) for k in range(80)]
+        first = opsmod.path_stats(paths[0])
+        for p in paths[1:opsmod._PATH_STATS_MAX]:
+            opsmod.path_stats(p)
+        self.assertIs(opsmod.path_stats(paths[0]), first)  # lu récemment
+        for p in paths[opsmod._PATH_STATS_MAX:]:
+            opsmod.path_stats(p)
+        self.assertIs(opsmod.path_stats(paths[0]), first)
+
+
 class TestOutOfProcess(unittest.TestCase):
     """Calculs C++ d'un seul tenant faits dans un processus : résultat identique au calcul ici."""
 

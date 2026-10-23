@@ -32,7 +32,8 @@ DEFAULT_PART = r"C:\Users\damou\Downloads\bitTray3030+v7.stl"
 #: au-delà de ``FREEZE_S`` dont la pile relevée est dans l'un d'eux est notée, pas signalée comme problème.
 KNOWN_CPP = ("getEnvelope",  # poche 3D : enveloppe des fonds (Path.Area), 0,7-1,1 s sur le plateau
              "mesh_to_solid",  # import d'un STL : maillage -> solide, affinage (OpenCascade), 0,6-1,3 s
-             "import_file")  # import : vérification du solide importé (OpenCascade), 0,6 s
+             "import_file",  # import : vérification du solide importé (OpenCascade), 0,6 s
+             "_buildPathArea")  # poche 3D : découpe d'un niveau par Path.Area (machine chargée : 0,7-0,8 s)
 
 freezes = []  # (scénario, commande, pause)
 _scenario = [""]

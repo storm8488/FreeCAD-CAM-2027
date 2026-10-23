@@ -8,8 +8,9 @@
   progression et « Arrêter le calcul » partout (le contrôle matière et l'export n'en avaient pas). Sonde d'horloge
   Qt sur le plateau `bitTray3030+v7` (pire pause) : contrôle matière 2,35 → 0,21 s, export 0,78 → 0,23 s,
   imbrication 1,34 → 0,20 s, rotatif 1,12 → 0,29 s, incrustation 1,24 → 0,17 s, perçage 0,79 → 0,22 s, ajout
-  d'une poche 2,30 → 0,94 s (reste un seul appel d'OpenCascade, `getEnvelope`, voir LIMITS). Le maillage d'affichage du brut simulé (2 appels C++ d'un tenant, 2,9 s) est construit
-  dans un processus (même maillage, vérifié point à point). Le panneau Projet n'est plus rafraîchi à chaque rendu
+  d'une poche 2,30 → 0,78-0,94 s (reste un seul appel d'OpenCascade, `getEnvelope`, voir LIMITS). Le maillage
+  d'affichage du brut simulé (2 appels C++ d'un tenant, 2,9 s) est construit dans un processus (même maillage,
+  vérifié point à point). Le panneau Projet n'est plus rafraîchi à chaque rendu
   de main (0,5 s par rafraîchissement à 21 000 commandes) mais une fois à la fin, horloge encore active : durées
   des commandes inchangées, contour 0,53 → 0,33 s. « Brut et montage » : 1,19 → 0,14 s. Restent, documentés
   (LIMITS) et reconnus par la sonde : l'enveloppe de la poche 3D (un appel OpenCascade, 0,7-1,1 s) et l'import d'un
@@ -34,7 +35,9 @@
   (10 194 colonnes) : entaille annoncée 25,2 mm → 0,500 mm (la vraie). Calcul vectorisé par paires (triangle,
   colonne) sur une grille, portées croissantes : mêmes valeurs que la boucle colonne par colonne (écart < 1e-9),
   vérification 1,4-1,6 → 0,3 s, contrôle complet 2,5 → 1,4 s.
-
+- **[C2]** Statistiques des parcours (panneau Projet) : le cache plein (64 parcours) était vidé en entier, et le
+  rafraîchissement suivant relisait tous les parcours hors de la fenêtre de progression (0,5 s pour 21 000
+  commandes, vu en fin de longue session) ; seule la plus ancienne entrée part maintenant.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

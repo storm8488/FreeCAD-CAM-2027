@@ -1597,8 +1597,9 @@ def path_stats(path, owner=None):
     key = (path.Size, round(float(path.Length), 9),
            tuple(round(v, 9) for v in (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)),
            getattr(owner, "Name", None), _feed_key(owner))
-    hit = _PATH_STATS.get(key)
+    hit = _PATH_STATS.pop(key, None)
     if hit is not None:
+        _PATH_STATS[key] = hit  # la plus récemment lue : gardée le plus longtemps
         return hit
     cmds = path.Commands
     feeds = set()
@@ -1619,7 +1620,9 @@ def path_stats(path, owner=None):
     stats = {"commands": len(cmds), "cutting": cutting, "feeds": sorted(feeds), "axes": sorted(axes),
              "gcodes": sorted(set(c.Name for c in cmds)), "bbox": bbox, "length_mm": float(path.Length)}
     if len(_PATH_STATS) >= _PATH_STATS_MAX:
-        _PATH_STATS.clear()
+        # la plus ancienne seulement : tout vider faisait relire tous les parcours au rafraîchissement suivant du
+        # panneau (0,5 s pour 21 000 commandes, hors de toute fenêtre de progression)
+        _PATH_STATS.pop(next(iter(_PATH_STATS)))
     _PATH_STATS[key] = stats
     return stats
 
