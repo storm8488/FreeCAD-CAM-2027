@@ -26,6 +26,42 @@
   « no task page »). Fournisseur de vue CAM2027 (`leads.ViewProviderLeads`) : page de FreeCAD au double-clic
   seulement, avant comme après réouverture. Scénarios `c1-leads-task-page`, `c1-dogbone-editor`,
   `c1-helix-message`.
+- **[C2]** **Interface vivante pendant les calculs** : pendant toute action longue (ajout d'opération, recalcul,
+  contrôle matière, export, imbrication, rotatif, perçage, incrustation, import...), une horloge rend la main à
+  l'interface toutes les 0,1 s, quel que soit le code Python qui calcule (FreeCAD ou CAM2027), avec la fenêtre de
+  progression et « Arrêter le calcul » partout (le contrôle matière et l'export n'en avaient pas). Sonde d'horloge
+  Qt sur le plateau `bitTray3030+v7` (pire pause) : contrôle matière 2,35 → 0,21 s, export 0,78 → 0,23 s,
+  imbrication 1,34 → 0,20 s, rotatif 1,12 → 0,29 s, incrustation 1,24 → 0,17 s, perçage 0,79 → 0,22 s, ajout
+  d'une poche 2,30 → 0,78-0,94 s (reste un seul appel d'OpenCascade, `getEnvelope`, voir LIMITS). Le maillage
+  d'affichage du brut simulé (2 appels C++ d'un tenant, 2,9 s) est construit dans un processus (même maillage,
+  vérifié point à point). Le panneau Projet n'est plus rafraîchi à chaque rendu
+  de main (0,5 s par rafraîchissement à 21 000 commandes) mais une fois à la fin, horloge encore active : durées
+  des commandes inchangées, contour 0,53 → 0,33 s. « Brut et montage » : 1,19 → 0,14 s. Restent, documentés
+  (LIMITS) et reconnus par la sonde : l'enveloppe de la poche 3D (un appel OpenCascade, 0,7-1,1 s) et l'import d'un
+  STL (0,6-1,3 s).
+- **[C2]** **« Arrêter le calcul »** : 5,8 s après le clic sur le plateau (seule l'adaptative s'arrêtait, et le
+  recalcul qui suivait l'arrêt refaisait tout hors de la fenêtre de progression) → 0,5 s ; contrôle matière 0,2 s.
+  Les opérations arrêtées gardent un parcours incomplet et ne sont plus recalculées en cachette ; « Recalculer »
+  les reprend.
+- **[C2]** Contrôle matière : le **dépassement voulu des dogbones** (0,75 mm sur la plaque des tests, fraise de 6)
+  était compté comme une entaille. Les os (aller-retour du coin à la pointe dans le parcours d'un habillage
+  `DogboneII`) sont reconnus : leur zone est exclue des entailles et le rapport donne le dépassement à part
+  (« Dépassement voulu des dogbones (pas compté comme entaille) : jusqu'à 0,75 mm, 72 os ») ; une vraie entaille
+  le long des parois reste vue.
+- **[C2]** Contrôle des **brides exact** : chaque tronçon de l'assemblage (cylindre au-dessus de la pointe) est
+  comparé à chaque bride sur la portion du mouvement où il est à sa hauteur, par la plus courte distance du
+  segment à la bride vue de dessus (avant : un point tous les 1 mm, coin d'une bride ou plongée en biais manqués :
+  0,17 mm de pénétration manqués dans le test). La pénétration donnée est la plus grande du mouvement (avant : celle
+  du premier point, 0,022 mm au lieu de 0,749 mm sur le plateau). Plateau avec 2 brides : mêmes événements, contrôle
+  complet 1,89 → 1,15 s.
+- **[C2]** Contrôle matière : **toutes les colonnes signalées sont vérifiées en 3D** (avant : les 4 000 plus
+  profondes, les suivantes gardaient la hauteur de paroi comme entaille). Plateau avec une poche 0,5 mm trop large
+  (10 194 colonnes) : entaille annoncée 25,2 mm → 0,500 mm (la vraie). Calcul vectorisé par paires (triangle,
+  colonne) sur une grille, portées croissantes : mêmes valeurs que la boucle colonne par colonne (écart < 1e-9),
+  vérification 1,4-1,6 → 0,3 s, contrôle complet 2,5 → 1,4 s.
+- **[C2]** Statistiques des parcours (panneau Projet) : le cache plein (64 parcours) était vidé en entier, et le
+  rafraîchissement suivant relisait tous les parcours hors de la fenêtre de progression (0,5 s pour 21 000
+  commandes, vu en fin de longue session) ; seule la plus ancienne entrée part maintenant.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

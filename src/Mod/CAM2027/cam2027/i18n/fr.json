@@ -1473,5 +1473,9 @@
   "The holes of the part are smaller than the {d} mm tool (largest: {fit} mm): choose a smaller tool.": "Les trous de la pièce sont plus petits que la fraise de {d} mm (plus grand : {fit} mm) : choisissez une fraise plus petite.",
   "Copies {a} and {b} of the pattern overlap: the distance between copies must be at least the size of the cut ({w:.1f} x {h:.1f} mm), {sx:.1f} x {sy:.1f} mm with a tool diameter of material between them.": "Les copies {a} et {b} du motif se recouvrent : la distance entre copies doit valoir au moins la taille de la coupe ({w:.1f} x {h:.1f} mm), {sx:.1f} x {sy:.1f} mm avec un diamètre de fraise de matière entre elles.",
   "Copies {a} and {b} of the pattern overlap: fewer copies, a smaller angle or a centre farther from the toolpath.": "Les copies {a} et {b} du motif se recouvrent : moins de copies, un angle plus petit ou un centre plus éloigné du parcours.",
-  "Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & fixture) or use fewer copies.": "La copie {n} du motif sort du brut de {d:.1f} mm : agrandissez le brut (Brut et montage) ou réduisez le nombre de copies."
+  "Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & fixture) or use fewer copies.": "La copie {n} du motif sort du brut de {d:.1f} mm : agrandissez le brut (Brut et montage) ou réduisez le nombre de copies.",
+  "Computation stopped.": "Calcul arrêté.",
+  "Material and collision check...": "Contrôle matière et collisions...",
+  "Post-processing...": "Postprocesseur...",
+  "Intended dogbone overcut (not counted as a gouge): up to {d} mm, {n} bone(s)": "Dépassement voulu des dogbones (pas compté comme entaille) : jusqu'à {d} mm, {n} os"
 }

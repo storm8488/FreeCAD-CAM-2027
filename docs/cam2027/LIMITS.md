@@ -200,8 +200,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Collisions (même commande) : à chaque mouvement, avant d'enlever sa matière, la queue (de la longueur
   de coupe à la sortie) et chaque tronçon du porte-outil sont comparés à la matière restante (brut +
   pièce) dans leur rayon ; l'assemblage entier est comparé aux brides (boîtes englobantes), rapides
-  compris. Première collision de chaque type par opération, avec son n° de commande et la position
-  de la pointe. Tronçons coniques pris à leur rayon maximal (prudent). Sans bride déclarée, sans
+  compris, exactement (plus courte distance de chaque mouvement à la bride, pas d'échantillonnage). Première
+  collision de chaque type par opération, avec son n° de commande et la position de la pointe (pour une bride :
+  là où la pénétration est la plus grande dans ce mouvement). Tronçons coniques pris à leur rayon maximal (prudent). Sans bride déclarée, sans
   porte-outil dans l'assemblage ou avec des opérations non simulées (axe A), le contrôle concerné est
   « non contrôlé », jamais « OK ». À l'export : collisions du dernier contrôle = erreurs bloquantes
   tant que les parcours sont identiques ; contrôle absent ou périmé = « non vérifiable ».
@@ -210,9 +211,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   pas contrôlées (dit dans le rapport). Fraises autres que plate / boule / torique / conique simulées
   comme plates (signalé). Brut rond (4e axe) refusé. Une entaille est un écart de plus de 0,02 mm sous
   le dessus de la pièce au centre d'une colonne, ou à 0,05 mm de lui (colonne pile sur une paroi
-  verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Un rapide compte
+  verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Dogbones : la zone balayée
+  par la fraise le long de chaque os (aller-retour du coin à la pointe, fraise + une maille) est exclue des
+  entailles, son dépassement voulu (r·(1 - 1/√2) dans un angle droit) est donné à part ; une vraie entaille dans
+  cette zone, d'une autre opération, n'y est pas vue non plus. Un rapide compte
   dans la matière au-delà de 0,01 mm ; le dégagement vertical vers le haut n'est jamais compté.
-  Chaque colonne signalée (les 4 000 plus profondes) est vérifiée en 3D sur la pièce triangulée : l'entaille
+  Chaque colonne signalée (toutes) est vérifiée en 3D sur la pièce triangulée : l'entaille
   retenue est la distance du point coupé à la surface (sous un surplomb, que le corps de la fraise traverse : celle du
   milieu de la première traversée de la pièce au-dessus), pas la hauteur de paroi
   qu'une fraise tangente fait perdre à la colonne ; une colonne sur le bord de la silhouette (pièce absente
@@ -222,8 +226,11 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   dénivelé ; queue et porte-outil : dessous du cylindre balayé (exact sur les rampes). Pièce triangulée à 0,01 mm.
   Segments traités par paquets vectorisés (pré-contrôles de la queue, du porte-outil et des rapides sur
   l'état d'avant le paquet, repli séquentiel quand ils signalent quelque chose : même résultat qu'un à un).
-  Ordre de grandeur : 20 à 45 000 commandes par seconde (jour 3). Au-delà de 4 000 colonnes signalées, les
-  suivantes gardent leur entaille verticale (plus grande que la pénétration réelle).
+  Ordre de grandeur : 20 à 45 000 commandes par seconde (jour 3). Pendant le calcul, l'interface garde la main ;
+  un appel C++ d'un seul tenant la fige jusqu'à sa fin (enveloppe des fonds de la poche 3D d'OpenCascade :
+  0,9 s sur le plateau à 135 alvéoles, non déplaçable dans un processus à l'identique : l'aller-retour BREP décale
+  la section de `Path.Area` jusqu'à 13,6 µm ; import d'un STL du plateau : conversion du maillage en solide, affinage
+  et vérification, 0,6 à 1,3 s chacun).
 - Fiche de préparation en Markdown (pas de PDF).
 - Changement d'outil (GRBL) : pause `M5` + `M0` à chaque changement de numéro d'outil, pas au premier outil
   (chargé selon la fiche) ; pas de mesure de longueur d'outil (G43.1 / palpage après changement) : refaire le zéro Z

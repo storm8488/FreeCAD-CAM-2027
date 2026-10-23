@@ -126,10 +126,11 @@ class HoleCommand(object):
         dlg = HoleDialog(proj, FreeCADGui.getMainWindow())
         if commands.exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
             return
+        made = []
         try:
             with undo.transaction(FreeCAD.ActiveDocument, tr(self.text)):
-                made = dlg.apply()
                 with commands.busy(tr("Computing the toolpaths...")):
+                    made = dlg.apply()  # outils FreeCAD (bibliothèque) créés ici
                     proj.compute()
         except Exception as exc:
             commands._warn(tr("Operation failed: {error}", error=tr_msg(exc)))
