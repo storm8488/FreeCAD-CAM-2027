@@ -200,8 +200,9 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Collisions (même commande) : à chaque mouvement, avant d'enlever sa matière, la queue (de la longueur
   de coupe à la sortie) et chaque tronçon du porte-outil sont comparés à la matière restante (brut +
   pièce) dans leur rayon ; l'assemblage entier est comparé aux brides (boîtes englobantes), rapides
-  compris. Première collision de chaque type par opération, avec son n° de commande et la position
-  de la pointe. Tronçons coniques pris à leur rayon maximal (prudent). Sans bride déclarée, sans
+  compris, exactement (plus courte distance de chaque mouvement à la bride, pas d'échantillonnage). Première
+  collision de chaque type par opération, avec son n° de commande et la position de la pointe (pour une bride :
+  là où la pénétration est la plus grande dans ce mouvement). Tronçons coniques pris à leur rayon maximal (prudent). Sans bride déclarée, sans
   porte-outil dans l'assemblage ou avec des opérations non simulées (axe A), le contrôle concerné est
   « non contrôlé », jamais « OK ». À l'export : collisions du dernier contrôle = erreurs bloquantes
   tant que les parcours sont identiques ; contrôle absent ou périmé = « non vérifiable ».

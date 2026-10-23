@@ -627,26 +627,98 @@ def material_excess_many(zmap, P0, P1, radius, offset):
     return np.where(np.isfinite(worst), worst, 0.0)
 
 
-def clamp_contacts(p0, p1, envelope, boxes, step=1.0):
-    """Contacts entre l'assemblage (toutes ses parties) et des brides (``FreeCAD.BoundBox``) le long du segment.
+def _segment_rect_distance(ax, ay, bx, by, x0, y0, x1, y1):
+    """Plus courte distance entre le segment 2D ``a``-``b`` et le rectangle ``[x0, x1] x [y0, y1]`` (plein) :
+    ``(distance, t)``, ``t`` = paramètre sur le segment du point le plus proche (entrée dans le rectangle s'il
+    le traverse)."""
+    dx, dy = bx - ax, by - ay
+    # traversée (Liang-Barsky) : distance nulle dès l'entrée
+    lo, hi = 0.0, 1.0
+    for p, q in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+        if p == 0.0:
+            if q < 0.0:
+                lo, hi = 1.0, 0.0
+                break
+        else:
+            r = q / p
+            if p < 0.0:
+                lo = max(lo, r)
+            else:
+                hi = min(hi, r)
+    if lo <= hi:
+        return 0.0, lo
 
-    Retourne une liste ``(bride, rôle, pénétration, (x, y, z_pointe))`` (premier point de chaque bride)."""
-    length = math.dist(p0, p1)
-    n = max(1, int(math.ceil(length / step)))
-    hits = {}
-    for k in range(n + 1):
-        q = [p0[c] + (p1[c] - p0[c]) * k / n for c in range(3)]
-        for name, bb in boxes:
-            if name in hits:
+    def to_rect(x, y):
+        return math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1))
+
+    best = min((to_rect(ax, ay), 0.0), (to_rect(bx, by), 1.0))
+    L2 = dx * dx + dy * dy
+    if L2 > 0.0:
+        for cx, cy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+            t = min(max(((cx - ax) * dx + (cy - ay) * dy) / L2, 0.0), 1.0)
+            d = math.hypot(ax + t * dx - cx, ay + t * dy - cy)
+            if d < best[0]:
+                best = (d, t)
+    return best
+
+
+def clamp_contacts(p0, p1, envelope, boxes):
+    """Contacts entre l'assemblage (toutes ses parties) et des brides (``FreeCAD.BoundBox``) le long du segment,
+    calculés exactement : pour chaque tronçon (cylindre au-dessus de la pointe), plage du segment où il est à
+    la hauteur de la bride, puis plus courte distance de cette portion à la bride vue de dessus. Avant (jour 3),
+    le segment était échantillonné tous les 1 mm : coin d'une bride ou rampe qui sort de sa hauteur manqués.
+
+    Retourne une liste ``(bride, rôle, pénétration, (x, y, z_pointe))`` : par bride, le tronçon qui la touche le
+    premier le long du mouvement (à égalité, le plus bas), sa plus grande pénétration et où."""
+    dz = p1[2] - p0[2]
+
+    def dist(t, bb):
+        x, y = p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t
+        return math.hypot(max(bb.XMin - x, 0.0, x - bb.XMax), max(bb.YMin - y, 0.0, y - bb.YMax))
+
+    rmax = max(r for _lo, _hi, r, _role in envelope.parts)
+    xlo, xhi = min(p0[0], p1[0]) - rmax, max(p0[0], p1[0]) + rmax
+    ylo, yhi = min(p0[1], p1[1]) - rmax, max(p0[1], p1[1]) + rmax
+    zlo = min(p0[2], p1[2]) + min(lo for lo, _hi, _r, _role in envelope.parts)
+    out = []
+    for name, bb in boxes:
+        if xhi <= bb.XMin or xlo >= bb.XMax or yhi <= bb.YMin or ylo >= bb.YMax or zlo >= bb.ZMax - 1e-6:
+            continue  # loin de la bride ou au-dessus
+        first = None  # (t du premier contact, sortie)
+        for lo, hi, r, role in envelope.parts:
+            # z(t) + lo < ZMax et z(t) + hi > ZMin (marges de 1e-6 comme avant)
+            t0, t1 = 0.0, 1.0
+            top, bottom = bb.ZMax - 1e-6 - lo - p0[2], bb.ZMin + 1e-6 - hi - p0[2]
+            if dz == 0.0:
+                if not (0.0 < top and 0.0 > bottom):
+                    continue
+            elif dz > 0.0:
+                t1, t0 = min(t1, top / dz), max(t0, bottom / dz)
+            else:
+                t0, t1 = max(t0, top / dz), min(t1, bottom / dz)
+            if t0 > t1:
                 continue
-            ex = max(bb.XMin - q[0], 0.0, q[0] - bb.XMax)
-            ey = max(bb.YMin - q[1], 0.0, q[1] - bb.YMax)
-            dist = math.hypot(ex, ey)
-            for lo, hi, r, role in envelope.parts:
-                if q[2] + lo < bb.ZMax - 1e-6 and q[2] + hi > bb.ZMin + 1e-6 and dist < r - 1e-6:
-                    hits[name] = (name, role, r - dist, tuple(q))
-                    break
-    return list(hits.values())
+            ax, ay = p0[0] + (p1[0] - p0[0]) * t0, p0[1] + (p1[1] - p0[1]) * t0
+            bx, by = p0[0] + (p1[0] - p0[0]) * t1, p0[1] + (p1[1] - p0[1]) * t1
+            d, u = _segment_rect_distance(ax, ay, bx, by, bb.XMin, bb.YMin, bb.XMax, bb.YMax)
+            if d >= r - 1e-6:
+                continue
+            t = t0 + (t1 - t0) * u
+            # premier contact : la distance (convexe) décroît de t0 à t ; bissection sur cette portion
+            a, b = t0, t
+            if dist(a, bb) >= r - 1e-6:
+                for _k in range(50):
+                    m = 0.5 * (a + b)
+                    if dist(m, bb) < r - 1e-6:
+                        b = m
+                    else:
+                        a = m
+                a = b
+            if first is None or a < first[0] - 1e-12:
+                first = (a, (name, role, r - d, tuple(p0[c] + (p1[c] - p0[c]) * t for c in range(3))))
+        if first is not None:
+            out.append(first[1])
+    return out
 
 
 # -- dogbones -----------------------------------------------------------------------------------------

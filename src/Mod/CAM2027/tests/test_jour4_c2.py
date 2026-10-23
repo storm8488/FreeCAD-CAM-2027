@@ -251,5 +251,110 @@ class TestDogboneOvercut(unittest.TestCase):
         proj.close()
 
 
+def _old_clamp_contacts(p0, p1, envelope, boxes, step=1.0):
+    """``clamp_contacts`` de 25562b8 (segment échantillonné tous les 1 mm), pour montrer ce qu'il manquait."""
+    length = math.dist(p0, p1)
+    n = max(1, int(math.ceil(length / step)))
+    hits = {}
+    for k in range(n + 1):
+        q = [p0[c] + (p1[c] - p0[c]) * k / n for c in range(3)]
+        for name, bb in boxes:
+            if name in hits:
+                continue
+            dist = math.hypot(max(bb.XMin - q[0], 0.0, q[0] - bb.XMax), max(bb.YMin - q[1], 0.0, q[1] - bb.YMax))
+            for lo, hi, r, role in envelope.parts:
+                if q[2] + lo < bb.ZMax - 1e-6 and q[2] + hi > bb.ZMin + 1e-6 and dist < r - 1e-6:
+                    hits[name] = (name, role, r - dist, tuple(q))
+                    break
+    return list(hits.values())
+
+
+def _dense_clamp_contacts(p0, p1, envelope, boxes, step=0.0005):
+    """Référence : segment échantillonné tous les 0,5 µm ; par bride, le tronçon qui la touche le premier (à
+    égalité, le plus bas) et sa plus grande pénétration."""
+    import numpy as np
+
+    n = max(1, int(math.ceil(math.dist(p0, p1) / step)))
+    t = np.linspace(0.0, 1.0, n + 1)
+    q = np.array(p0, float)[None, :] + (np.array(p1, float) - np.array(p0, float))[None, :] * t[:, None]
+    out = []
+    for name, bb in boxes:
+        dist = np.hypot(np.maximum.reduce([bb.XMin - q[:, 0], np.zeros(len(q)), q[:, 0] - bb.XMax]),
+                        np.maximum.reduce([bb.YMin - q[:, 1], np.zeros(len(q)), q[:, 1] - bb.YMax]))
+        first = None
+        for lo, hi, r, role in envelope.parts:
+            ok = (q[:, 2] + lo < bb.ZMax - 1e-6) & (q[:, 2] + hi > bb.ZMin + 1e-6) & (dist < r - 1e-6)
+            if ok.any():
+                k = int(np.argmax(ok))
+                if first is None or k < first[0]:
+                    first = (k, (name, role, float((r - dist[ok]).max())))
+        if first is not None:
+            out.append(first[1])
+    return out
+
+
+class TestClampContacts(unittest.TestCase):
+    """Brides : contact exact segment / boîte (avant : échantillonnage tous les 1 mm)."""
+
+    ENV = sim.Envelope([(0.0, 5.0, 3.0, "cutter"), (5.0, 25.0, 3.0, "shank"), (25.0, 60.0, 12.0, "holder")], True)
+    BOX = FreeCAD.BoundBox(0, 0, 0, 30, 20, 12)
+
+    def test_ramp_leaving_the_clamp_height(self):
+        """Plongée en biais qui s'éloigne de la bride : la fraise n'est à sa hauteur et à moins de son rayon que
+        sur 0,5 mm du segment, entre deux points de l'échantillonnage à 1 mm."""
+        env = sim.Envelope([(0.0, 5.0, 3.0, "cutter")], False)
+        p0, p1 = (-2.5, 10.0, 13.0), (-12.5, 10.0, -17.0)  # sous Z 12 après x = -2,83, à moins de 3 mm avant x = -3
+        old = _old_clamp_contacts(p0, p1, env, [("Clamp", self.BOX)])
+        new = sim.clamp_contacts(p0, p1, env, [("Clamp", self.BOX)])
+        ref = _dense_clamp_contacts(p0, p1, env, [("Clamp", self.BOX)])
+        self.assertEqual(old, [])  # manqué sur 25562b8
+        self.assertEqual([(h[0], h[1]) for h in new], [("Clamp", "cutter")])
+        self.assertAlmostEqual(new[0][2], ref[0][2], delta=5e-4)  # pas de la référence : 0,16 µm en x
+        self.assertGreater(new[0][2], 0.15)
+
+    def test_matches_a_dense_sampling(self):
+        import random
+
+        rnd = random.Random(2027)
+        boxes = [("A", self.BOX), ("B", FreeCAD.BoundBox(45, -10, 0, 55, 30, 8))]
+        for _k in range(1000):
+            p0 = (rnd.uniform(-20, 70), rnd.uniform(-25, 45), rnd.uniform(-5, 40))
+            p1 = tuple(c + rnd.uniform(-12, 12) for c in p0)
+            new = {h[0]: h for h in sim.clamp_contacts(p0, p1, self.ENV, boxes)}
+            ref = {h[0]: h for h in _dense_clamp_contacts(p0, p1, self.ENV, boxes)}
+            for name in set(new) | set(ref):
+                if name not in ref:  # contact plus court que l'échantillonnage dense
+                    self.assertLess(new[name][2], 1e-3, (p0, p1, new[name]))
+                    continue
+                self.assertIn(name, new, (p0, p1, ref[name]))
+                self.assertEqual(new[name][1], ref[name][1], (p0, p1))
+                self.assertGreaterEqual(new[name][2], ref[name][2] - 1e-9)
+                self.assertLess(new[name][2], ref[name][2] + 1e-3)
+                # la position donnée est bien un point du segment où la pénétration est atteinte
+                at = new[name][3]
+                lo, hi, r, _role = next(p for p in self.ENV.parts if p[3] == new[name][1])
+                bb = dict(boxes)[name]
+                d = math.hypot(max(bb.XMin - at[0], 0.0, at[0] - bb.XMax), max(bb.YMin - at[1], 0.0, at[1] - bb.YMax))
+                self.assertAlmostEqual(r - d, new[name][2], delta=1e-6)
+
+    def test_speed(self):
+        """Pas plus lent que l'échantillonnage à 1 mm sur des mouvements courts (cas des parcours réels)."""
+        import random
+
+        rnd = random.Random(7)
+        segs = []
+        for _k in range(3000):
+            p0 = (rnd.uniform(-20, 70), rnd.uniform(-25, 45), rnd.uniform(-5, 20))
+            segs.append((p0, tuple(c + rnd.uniform(-1.5, 1.5) for c in p0)))
+        boxes = [("A", self.BOX), ("B", FreeCAD.BoundBox(45, -10, 0, 55, 30, 8))]
+        times = {}
+        for name, fn in (("old", _old_clamp_contacts), ("new", sim.clamp_contacts)) * 2:
+            t0 = time.perf_counter()
+            for p0, p1 in segs:
+                fn(p0, p1, self.ENV, boxes)
+            times[name] = min(times.get(name, 1e9), time.perf_counter() - t0)
+        self.assertLess(times["new"], 1.1 * times["old"], times)
+
+
 if __name__ == "__main__":
     unittest.main()

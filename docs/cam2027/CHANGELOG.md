@@ -20,6 +20,12 @@
   `DogboneII`) sont reconnus : leur zone est exclue des entailles et le rapport donne le dépassement à part
   (« Dépassement voulu des dogbones (pas compté comme entaille) : jusqu'à 0,75 mm, 72 os ») ; une vraie entaille
   le long des parois reste vue.
+- **[C2]** Contrôle des **brides exact** : chaque tronçon de l'assemblage (cylindre au-dessus de la pointe) est
+  comparé à chaque bride sur la portion du mouvement où il est à sa hauteur, par la plus courte distance du
+  segment à la bride vue de dessus (avant : un point tous les 1 mm, coin d'une bride ou plongée en biais manqués :
+  0,17 mm de pénétration manqués dans le test). La pénétration donnée est la plus grande du mouvement (avant : celle
+  du premier point, 0,022 mm au lieu de 0,749 mm sur le plateau). Plateau avec 2 brides : mêmes événements, contrôle
+  complet 1,89 → 1,15 s.
 
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
