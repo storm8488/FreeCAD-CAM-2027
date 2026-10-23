@@ -30,13 +30,17 @@ ideas in English are welcome.*
 
 Ce qui n'est pas encore fait : [LIMITS.md](../docs/cam2027/LIMITS.md). Historique : [CHANGELOG.md](../docs/cam2027/CHANGELOG.md).
 
-## Essayer (Windows, FreeCAD 1.1)
+## Essayer (Windows 10 / 11, 64 bits)
 
-1. Installez **FreeCAD 1.1** (version officielle : <https://www.freecad.org/downloads.php>).
-2. Téléchargez ce dépôt : bouton **Code > Download ZIP** sur la branche `cam2027`, puis décompressez.
-3. Copiez le dossier `src/Mod/CAM2027` dans le dossier des modules de FreeCAD :
-   `%APPDATA%\FreeCAD\v1-1\Mod\` (créez `Mod` s'il n'existe pas).
-4. Lancez FreeCAD et choisissez l'atelier **CAM2027** dans la liste des ateliers.
+1. Téléchargez **`CAM2027-…-windows-x64.zip`** dans la
+   **[dernière version](https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest)** (fichiers joints).
+2. Décompressez-le où vous voulez (évitez `Program Files`).
+3. Double-cliquez sur **`Lancer CAM2027.cmd`**. FreeCAD 1.1.4 est inclus, rien d'autre à installer. Si Windows
+   affiche « Windows a protégé votre ordinateur » : *Informations complémentaires > Exécuter quand même* (le
+   logiciel n'est pas signé).
+
+Autre possibilité, dans un FreeCAD 1.1 déjà installé : copiez le dossier `src/Mod/CAM2027` de ce dépôt
+(**Code > Download ZIP**) dans `%APPDATA%\FreeCAD\v1-1\Mod\`, puis choisissez l'atelier **CAM2027**.
 
 Testé sur Windows 11 avec FreeCAD 1.1.4. Linux et macOS : non testés, retours bienvenus.
 Logiciel autonome (sans les ateliers de modélisation) : [DISTRIBUTION.md](../docs/cam2027/DISTRIBUTION.md).

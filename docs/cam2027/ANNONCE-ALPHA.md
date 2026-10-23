@@ -20,7 +20,7 @@ Salut ! Je développe **CAM2027**, un logiciel de FAO open source (LGPL) pour fr
 
 **Ce que je cherche** : des gens qui l'essaient sur leurs vraies pièces et leurs vraies machines. Bugs, plantages, parcours bizarres, fonctions qui manquent, étapes trop longues : tout m'intéresse.
 
-**Essayer** (Windows + FreeCAD 1.1) 👉 https://github.com/storm8488/FreeCAD-CAM-2027
+**Essayer** (Windows, un zip à décompresser, rien à installer) 👉 https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest
 
 **Faire un retour** : dans le logiciel, menu **Aide > Signaler un bug / Proposer une idée** (ou les liens à côté du repère ALPHA, en bas à droite). Le formulaire GitHub s'ouvre avec vos versions déjà remplies. Joignez si possible le fichier qui pose problème, ça fait gagner un temps fou.
 Pas de compte GitHub ? Répondez simplement ici 🙂
@@ -46,7 +46,7 @@ Hi! I'm building **CAM2027**, an open-source (LGPL) CAM for hobby and workshop C
 
 **What I'm looking for**: people trying it on real parts and real machines. Bugs, crashes, odd toolpaths, missing features, tedious steps: all welcome.
 
-**Try it** (Windows + FreeCAD 1.1) 👉 https://github.com/storm8488/FreeCAD-CAM-2027
+**Try it** (Windows, unzip and run, nothing to install) 👉 https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest
 
 **Give feedback**: in the app, **Help > Report a bug / Suggest a feature** (or the links next to the ALPHA badge, bottom right). The GitHub form opens with your versions filled in. Attaching the file that shows the problem helps a lot.
 No GitHub account? Just reply here 🙂
@@ -75,7 +75,7 @@ What works today:
 
 What I'd love from you: try it on a real part and a real machine, and tell me what breaks, what's missing and what's tedious. In the app, Help > Report a bug / Suggest a feature opens a GitHub form with your versions already filled in; attaching the file that shows the problem helps a lot. Comments here are fine too.
 
-Repo and install (Windows + FreeCAD 1.1): https://github.com/storm8488/FreeCAD-CAM-2027
+Download (Windows, unzip and run): https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest (source: https://github.com/storm8488/FreeCAD-CAM-2027)
 
 It's free and will stay free. If it helps you: https://buymeacoffee.com/damouse8482 ☕
 
@@ -98,7 +98,7 @@ Je développe **CAM2027**, un logiciel de FAO libre et gratuit (licence LGPL) po
 
 **Ce que je cherche** : des retours sur de vraies pièces et de vraies machines. Bugs, plantages, parcours étranges, fonctions qui manquent, étapes trop longues. Dans le logiciel, **Aide > Signaler un bug / Proposer une idée** ouvre un formulaire GitHub avec vos versions déjà remplies ; joindre le fichier qui pose problème aide énormément. Les réponses ici sont aussi les bienvenues, je passe régulièrement.
 
-**Essayer** (Windows, FreeCAD 1.1) : https://github.com/storm8488/FreeCAD-CAM-2027
+**Essayer** (Windows, un zip à décompresser, rien à installer) : https://github.com/storm8488/FreeCAD-CAM-2027/releases/latest
 
 Le logiciel est et restera gratuit. Pour soutenir le projet : https://buymeacoffee.com/damouse8482
 
