@@ -80,6 +80,73 @@ def load_heightmap(path, cells=DEFAULT_CELLS):
     return grid, (w, h)
 
 
+#: plus grand côté (px) de l'image analysée pour le gonflage (distance au bord à la résolution de l'image)
+INFLATE_MAX_PX = 1600
+SOURCES = ("grey", "inflate")
+
+
+def load_grey_array(path, max_px=INFLATE_MAX_PX):
+    """Image en niveaux de gris [0, 1] (numpy, ``a[ligne][colonne]``, ligne 0 = haut), réduite à ``max_px`` sur le
+    grand côté, et sa taille d'origine en pixels. Les pixels transparents comptent comme noirs."""
+    import numpy as np
+
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    QtCore, QtGui = _qt()
+    ensure_image_plugins()
+    img = QtGui.QImage(path)
+    if img.isNull():
+        raise UserError("unreadable image: {file}", file=os.path.basename(path))
+    w, h = img.width(), img.height()
+    if w < 2 or h < 2:
+        raise UserError("image too small: {w}x{h}", w=w, h=h)
+    if max(w, h) > max_px:
+        img = img.scaled(max_px, max_px, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+    img = img.convertToFormat(QtGui.QImage.Format_ARGB32)
+    raw = bytes(img.constBits())
+    arr = np.frombuffer(raw, dtype=np.uint8).reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
+    arr = arr.reshape(img.height(), img.width(), 4).astype(np.float64)
+    b_, g_, r_, a_ = arr[..., 0], arr[..., 1], arr[..., 2], arr[..., 3]  # ARGB32 = octets B G R A
+    grey = (r_ * 11 + g_ * 16 + b_ * 5) / 32.0 / 255.0 * (a_ / 255.0)
+    return grey, (w, h)
+
+
+def inflate_grid(path, width, relief_height, cells=DEFAULT_CELLS, threshold=0.5, raise_light=False, rounding=3.0,
+                 grey_mix=0.0):
+    """Hauteurs [0, 1] « gonflées » (comme « Créer une forme > arrondi » d'Aspire) : les formes sombres de l'image
+    (les claires avec ``raise_light``) deviennent des dômes arrondis sur ``rounding`` mm depuis leur bord, plats
+    au-delà ; un trait fin devient une arête arrondie d'autant plus haute qu'il est large. ``grey_mix`` (0..1)
+    garde une part des niveaux de gris (ombrages du dessin). Pour un dessin au trait, un logo, une silhouette — une
+    image en niveaux de gris n'est pas une carte de profondeur. Même grille que ``load_heightmap``."""
+    import numpy as np
+    from scipy import ndimage
+
+    grey, (w_px, h_px) = load_grey_array(path)
+    mask = grey >= threshold if raise_light else grey < threshold
+    if not mask.any():
+        raise UserError("no shape found in the image at this threshold")
+    px_mm = width / float(grey.shape[1])
+    dist = np.maximum(ndimage.distance_transform_edt(mask) - 0.5, 0.0) * px_mm  # au bord réel (demi-pixel)
+    r = max(1e-6, float(rounding))
+    t = np.clip(dist / r, 0.0, 1.0)
+    dome = np.sqrt(1.0 - (1.0 - t) ** 2)  # quart de cercle (étiré à la hauteur du relief)
+    dome[~mask] = 0.0
+    mix = min(1.0, max(0.0, float(grey_mix)))
+    if mix:
+        shade = grey if raise_light else 1.0 - grey
+        dome = (1.0 - mix) * dome + mix * shade
+    cells = max(MIN_CELLS, min(MAX_CELLS, int(cells)))
+    scale = min(1.0, float(cells) / max(w_px, h_px))
+    nx, ny = max(2, int(round(w_px * scale))), max(2, int(round(h_px * scale)))
+    factor = dome.shape[1] / float(nx)
+    if factor > 1.0:  # anti-crénelage avant réduction
+        dome = ndimage.gaussian_filter(dome, sigma=0.5 * factor)
+    small = ndimage.zoom(dome, (ny / float(dome.shape[0]), nx / float(dome.shape[1])), order=1)[:ny, :nx]
+    small = np.clip(small, 0.0, 1.0)
+    grid = [[float(small[ny - 1 - j, i]) for j in range(ny)] for i in range(nx)]  # ligne 0 de l'image = Y max
+    return grid, (w_px, h_px)
+
+
 def smooth(grid, passes):
     """``passes`` flous 3 × 3 (bords recopiés)."""
     nx, ny = len(grid), len(grid[0])
@@ -158,15 +225,23 @@ def build_shape(heights, width, length, z_bottom=0.0):
 
 
 def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothing=1, cells=DEFAULT_CELLS,
-                z_bottom=0.0, label=None):
-    """Crée l'objet « Relief » (Part::Feature) ; retourne ``(objet, avertissements)``."""
+                z_bottom=0.0, label=None, source="grey", threshold=0.5, rounding=3.0, grey_mix=0.0):
+    """Crée l'objet « Relief » (Part::Feature) ; retourne ``(objet, avertissements)``. ``source`` : ``grey``
+    (niveau de gris = hauteur) ou ``inflate`` (formes gonflées, voir ``inflate_grid`` ; ``invert`` y lève les
+    zones claires au lieu des sombres)."""
     if width <= 0 or relief_height <= 0:
         raise UserError("width and relief height must be positive")
     if base <= 0:
         raise UserError("base thickness must be positive")
-    grid, (w_px, h_px) = load_heightmap(path, cells)
+    if source not in SOURCES:
+        raise UserError("unknown relief source: {s}", s=source)
+    if source == "inflate":
+        grid, (w_px, h_px) = inflate_grid(path, width, relief_height, cells, threshold, invert, rounding, grey_mix)
+        heights = relief_heights(grid, relief_height, base, False, smoothing, z_bottom)
+    else:
+        grid, (w_px, h_px) = load_heightmap(path, cells)
+        heights = relief_heights(grid, relief_height, base, invert, smoothing, z_bottom)
     length = width * h_px / float(w_px)
-    heights = relief_heights(grid, relief_height, base, invert, smoothing, z_bottom)
     shape = build_shape(heights, width, length, z_bottom)
     warnings = []
     nx, ny = len(grid), len(grid[0])
@@ -184,8 +259,12 @@ def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothi
                               ("ReliefHeight", "App::PropertyLength", relief_height),
                               ("ReliefBase", "App::PropertyLength", base),
                               ("ReliefInvert", "App::PropertyBool", bool(invert)),
-                              ("ReliefSmoothing", "App::PropertyInteger", int(smoothing))):
+                              ("ReliefSmoothing", "App::PropertyInteger", int(smoothing)),
+                              ("ReliefSource", "App::PropertyString", source)):
         obj.addProperty(kind, prop, "CAM2027 relief", "")
         setattr(obj, prop, value)
+    if FreeCAD.GuiUp and obj.ViewObject is not None:
+        # ombré sans arêtes : les bords des tuiles du dessus (des milliers) cachaient le relief sous un quadrillage
+        obj.ViewObject.DisplayMode = "Shaded"
     doc.recompute()
     return obj, warnings

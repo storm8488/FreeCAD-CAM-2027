@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **Relief depuis une image : formes gonflées** (dessins au trait, logos, silhouettes). Un dessin n'est pas une carte
+  de profondeur : en niveau de gris, ses traits donnaient des creux et bosses partout (dragon de l'utilisateur). Choix
+  « Hauteur d'après » : niveau de gris (cartes de profondeur, comme avant) ou formes gonflées — les formes sombres (ou
+  claires) deviennent des dômes arrondis sur une largeur donnée depuis leur bord réel, plats au-delà (comme « Créer
+  une forme > arrondi » d'Aspire), avec une part des gris en option. Image analysée jusqu'à 1 600 px, puis ramenée à
+  la grille ; dragon 1024 px à 400 points : 56 s, solide valide. Le relief s'affiche ombré sans arêtes (les bords des
+  milliers de tuiles cachaient le relief sous un quadrillage).
 - **Icônes des barres d'outils refaites** : une icône par commande (55, thèmes sombre et clair), au trait comme la
   direction « Atelier », en deux tons : la couleur du texte pour la pièce ou le support, la couleur d'accent pour ce
   que fait la commande (la fraise, la flèche, le résultat). Avant, plusieurs commandes partageaient « poche »,

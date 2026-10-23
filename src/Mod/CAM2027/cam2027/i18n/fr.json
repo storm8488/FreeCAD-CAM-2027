@@ -1527,5 +1527,17 @@
   "Along Y (90 / 270°)": "Le long de Y (90 / 270°)",
   "Grain of the part: the sheet grain runs along X. Along X keeps the part as drawn (or turned 180°), along Y turns it a quarter turn.": "Fil de la pièce : le fil du panneau suit X. « Le long de X » garde la pièce comme dessinée (ou tournée de 180°), « le long de Y » la tourne d'un quart de tour.",
   "Drawings with the same group name are placed together, as drawn (an inlay and its frame, parts of one assembly).": "Les dessins de même nom de groupe sont placés ensemble, comme dessinés (une incrustation et son cadre, les pièces d'un assemblage).",
-  "Kept together: {parts}": "Gardés ensemble : {parts}"
+  "Kept together: {parts}": "Gardés ensemble : {parts}",
+  "Grey level (light = high): depth maps": "Niveau de gris (clair = haut) : cartes de profondeur",
+  "Inflated shapes: drawings, logos, line art": "Formes gonflées : dessins, logos, dessins au trait",
+  "Width over which a shape rises from its edge to the full height, as a rounded dome; a line narrower than twice this width stays lower.": "Largeur sur laquelle une forme monte de son bord à la pleine hauteur, en dôme arrondi ; un trait plus étroit que deux fois cette largeur reste plus bas.",
+  "Share of the grey levels kept on top of the inflated shapes (shading of the drawing).": "Part des niveaux de gris gardée sur les formes gonflées (ombrages du dessin).",
+  "Height from": "Hauteur d'après",
+  "Shape threshold": "Seuil des formes",
+  "Rounding width (mm)": "Largeur d'arrondi (mm)",
+  "Grey levels kept": "Niveaux de gris gardés",
+  "Raise the light areas (instead of the dark ones)": "Lever les zones claires (au lieu des sombres)",
+  "Dark shapes become rounded domes, flat beyond the rounding width; for a drawing, keep the resolution high (400) so thin lines stay sharp. The relief bottom is at Z 0; machine it with 3D roughing and 3D finishing (small ball end mill).": "Les formes sombres deviennent des dômes arrondis, plats au-delà de la largeur d'arrondi ; pour un dessin, gardez une résolution élevée (400) pour que les traits fins restent nets. Le dessous du relief est à Z 0 ; usinez-le avec l'ébauche 3D puis la finition 3D (petite fraise boule).",
+  "no shape found in the image at this threshold": "aucune forme trouvée dans l'image à ce seuil",
+  "unknown relief source: {s}": "source de relief inconnue : {s}"
 }
