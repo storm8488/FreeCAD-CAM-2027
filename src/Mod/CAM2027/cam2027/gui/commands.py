@@ -596,6 +596,10 @@ class AddOperation(_Base):
                 _warn(tr("The {d} mm tool is too large for the pockets found on the part (largest tool that fits: {fit} mm): choose a smaller tool, or select the faces to machine.",
                          d="%g" % tool.geometry.diameter, fit="%.1f" % fit))
                 return
+            why = helix_refusal(base, tool.geometry.diameter) if k == "helix" else None
+            if why:
+                _warn(why)
+                return
             _warn(tr("This strategy produced no toolpath on the whole part: select the faces or edges to machine, then add the operation again."))
             return
         if len(added_ops) > 1:
@@ -808,6 +812,28 @@ class Nest(_Base):
             lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
             _info("\n".join(lines))
             FreeCADGui.SendMsgToActiveView("ViewFit")
+
+
+def helix_refusal(base, diameter):
+    """Pourquoi l'hélice n'a rien donné sur la pièce entière (message traduit), ``None`` si ce n'est pas la taille
+    des trous. FreeCAD n'y garde que les trous ronds verticaux plus larges que la fraise (``Drillable``) : disque
+    WobbleRing, Ø6 → trous de 4,5 mm ; plateau STL → aucun trou rond (un maillage n'a pas de cylindres)."""
+    import FreeCAD
+    import Part
+    import Path.Base.Drillable as Drillable
+
+    sizes = []
+    for obj, _subs in base or []:
+        for _o, sub in Drillable.getDrillableTargets(obj, ToolDiameter=0, vector=FreeCAD.Vector(0, 0, 1)):
+            face = obj.Shape.getElement(sub)
+            if isinstance(face.Surface, Part.Cylinder):
+                sizes.append(2.0 * face.Surface.Radius)
+    if not sizes:
+        return tr("The helix found no round vertical hole on the part (a mesh imported from STL has none): use a pocket or the adaptive clearing.")
+    if max(sizes) <= diameter + 1e-6:
+        return tr("The holes of the part are smaller than the {d} mm tool (largest: {fit} mm): choose a smaller tool.",
+                  d="%g" % diameter, fit="%g" % round(max(sizes), 2))
+    return None
 
 
 def default_params(kind, tool, values):

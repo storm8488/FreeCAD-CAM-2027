@@ -6,6 +6,10 @@
   enregistrement). FreeCAD relit le parcours enregistré comme du G-code et y efface `G21` ; le libellé « Palper
   l'origine (coin) » donnait aussi un commentaire à parenthèses imbriquées, relu autrement. L'opération ne porte
   plus `G21` (le postprocesseur l'écrit en tête du programme) et s'appelle « Palper l'origine : coin ».
+- **[C1]** Hélice sans sélection refusée (disque WobbleRing, plateau STL, fraise de 6 mm) : au lieu du message
+  générique « aucun parcours sur la pièce entière », Ajouter une opération dit « trous plus petits que la fraise
+  de 6 mm (plus grand : 4,5 mm) » ou, sur un maillage STL, qu'aucun trou rond vertical n'existe
+  (`commands.helix_refusal`, trous vus par FreeCAD).
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

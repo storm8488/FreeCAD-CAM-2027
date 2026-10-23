@@ -1468,5 +1468,7 @@
   "The tool library {file} could not be read ({error}): it was kept as {backup} and the starter library is used.": "La bibliothèque d'outils {file} est illisible ({error}) : elle est conservée sous {backup} et la bibliothèque de démarrage est utilisée.",
   "{n} line(s) longer than {m} characters (GRBL 1.1 error:11): lower the post precision": "{n} ligne(s) de plus de {m} caractères (GRBL 1.1 error:11) : réduire la précision du postprocesseur",
   "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin",
-  "Probe the origin: {mode}": "Palper l'origine : {mode}"
+  "Probe the origin: {mode}": "Palper l'origine : {mode}",
+  "The helix found no round vertical hole on the part (a mesh imported from STL has none): use a pocket or the adaptive clearing.": "L'hélice n'a trouvé aucun trou rond vertical sur la pièce (un maillage importé d'un STL n'en a pas) : utilisez une poche ou le vidage adaptatif.",
+  "The holes of the part are smaller than the {d} mm tool (largest: {fit} mm): choose a smaller tool.": "Les trous de la pièce sont plus petits que la fraise de {d} mm (plus grand : {fit} mm) : choisissez une fraise plus petite."
 }
