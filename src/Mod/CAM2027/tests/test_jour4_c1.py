@@ -210,5 +210,21 @@ class TestPatternDefaults(_PartCase):
         self.assertEqual(proj.material_check()["gouge_max"] or 0.0, 0.0)
 
 
+class TestPatternClose(unittest.TestCase):
+    def test_same_answer_as_brute_force(self):
+        """Recouvrement des copies : casiers numpy = toutes les distances (nuages tirés au hasard, 300 cas)."""
+        import random
+        from cam2027.project import patterns, sim
+
+        np = sim._np()
+        rnd = random.Random(4)
+        for _k in range(300):
+            A = np.array([(rnd.uniform(0, 30), rnd.uniform(0, 20)) for _i in range(rnd.randint(1, 40))])
+            B = np.array([(rnd.uniform(10, 50), rnd.uniform(-5, 25)) for _i in range(rnd.randint(1, 40))])
+            d = rnd.uniform(0.5, 6.0)
+            brute = bool((((A[:, None, :] - B[None, :, :]) ** 2).sum(axis=2) < d * d).any())
+            self.assertEqual(patterns._close(A, B, d), brute)
+
+
 if __name__ == "__main__":
     unittest.main()

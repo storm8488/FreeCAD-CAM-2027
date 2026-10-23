@@ -259,21 +259,27 @@ def _moved(P, offset, centre):
 
 
 def _close(A, B, d):
-    """Un point de ``A`` à moins de ``d`` d'un point de ``B`` (casiers de côté ``d``)."""
+    """Un point de ``A`` à moins de ``d`` d'un point de ``B`` : casiers de côté ``d`` (numpy), distance exacte pour
+    les seuls points de ``A`` dont un casier voisin contient un point de ``B``."""
     from . import sim
 
     np = sim._np()
     if d <= 0 or not len(A) or not len(B):
         return False
-    cells = {}
-    for key, pt in zip(map(tuple, np.floor(B / d).astype(np.int64)), B):
-        cells.setdefault(key, []).append(pt)
-    cells = {k: np.array(v) for k, v in cells.items()}
-    for (cx, cy), pt in zip(map(tuple, np.floor(A / d).astype(np.int64)), A):
-        for kx in (cx - 1, cx, cx + 1):
-            for ky in (cy - 1, cy, cy + 1):
-                near = cells.get((kx, ky))
-                if near is not None and (((near - pt) ** 2).sum(axis=1) < d * d).any():
+    lo = np.minimum(A.min(axis=0), B.min(axis=0))
+    ia, ib = np.floor((A - lo) / d).astype(np.int64) + 1, np.floor((B - lo) / d).astype(np.int64) + 1
+    width = int(max(ia[:, 1].max(), ib[:, 1].max())) + 2
+    kb = ib[:, 0] * width + ib[:, 1]
+    order = np.argsort(kb, kind="stable")
+    kb = kb[order]
+    for ox in (-1, 0, 1):
+        for oy in (-1, 0, 1):
+            ka = (ia[:, 0] + ox) * width + ia[:, 1] + oy
+            left = np.searchsorted(kb, ka, "left")
+            right = np.searchsorted(kb, ka, "right")
+            for i in np.nonzero(right > left)[0]:
+                near = B[order[left[i]:right[i]]]
+                if (((near - A[i]) ** 2).sum(axis=1) < d * d).any():
                     return True
     return False
 
