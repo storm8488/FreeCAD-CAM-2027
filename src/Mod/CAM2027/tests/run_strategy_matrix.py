@@ -19,7 +19,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STRATEGIES = ["profile", "pocket", "pocket2d", "adaptive", "drilling", "millface", "engrave", "vcarve", "helix",
-              "slot", "rough3d", "stockrough", "surface3d", "waterline", "threadmill", "chamfer"]
+              "slot", "rough3d", "stockrough", "offsetpocket", "surface3d", "waterline", "threadmill", "chamfer"]
 
 
 def main():

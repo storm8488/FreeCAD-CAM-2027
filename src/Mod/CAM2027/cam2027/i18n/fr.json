@@ -1668,5 +1668,9 @@
   "Wall pass": "Passe le long des parois",
   "Follow the walls of each region after the raster passes.": "Longe les parois de chaque zone après le balayage.",
   "stock roughing: start depth must be above the final depth": "ébauche sur brut : la profondeur de départ doit être au-dessus de la profondeur finale",
-  "stock roughing: the job has no stock": "ébauche sur brut : le job n'a pas de brut"
+  "stock roughing: the job has no stock": "ébauche sur brut : le job n'a pas de brut",
+  "2D pocket (offset passes, every floor in one operation, helical entry)": "Poche 2D (passes décalées, tous les fonds en une opération, entrée en hélice)",
+  "Flat horizontal faces (drawing faces, pocket floors), vertical walls; offset passes from the inside out, the last one along the walls; a pocket floor of a solid is cut down to its own height, a drawing face down to the final depth; zones narrower than the tool are skipped and reported.": "Faces planes horizontales (faces d'un dessin, fonds de poche), parois verticales ; passes décalées de l'intérieur vers l'extérieur, la dernière le long des parois ; un fond de poche d'un solide est creusé jusqu'à sa propre hauteur, une face de dessin jusqu'à la profondeur finale ; les zones plus étroites que la fraise sont sautées et signalées.",
+  "2D pocket: select the faces to pocket (drawing faces or pocket floors)": "poche 2D : choisir les faces à évider (faces du dessin ou fonds de poche)",
+  "2D pocket: no flat horizontal face in the selection": "poche 2D : aucune face plane horizontale dans la sélection"
 }

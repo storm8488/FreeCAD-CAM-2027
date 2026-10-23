@@ -384,6 +384,10 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   peu plus de parcours que nécessaire). Entrées dans les morceaux gardés : plongée verticale en avance de
   plongée depuis la hauteur de sécurité (pas d'hélice ni de rampe) : fraise à coupe au centre nécessaire ; sur
   une adaptative, beaucoup de petits morceaux = beaucoup de remontées (480 sur le plateau de test).
+- **Poche 2D par décalages** (`offsetpocket`, `project/offsetpocket.py`) : décalages OpenCascade (une zone plus
+  étroite que la fraise est sautée et signalée) ; motif « décalé » seulement (pas de zigzag ni de spirale) ; hélice
+  seulement là où elle tient (sinon plongée droite, signalée) ; pas de contrôle d'engagement ; toute la matière
+  de la zone est supposée présente (pas de reprise du brut restant) ; parois verticales seulement.
 - **Ébauche 2,5D sur le modèle de brut** (`stockrough`, `project/stockrough.py`) : fraise plate seulement (le profil
   de la carte est un disque) ; la pièce est vue aux centres des cellules (résolution 0,5 mm par défaut) : plancher
   dilaté de 0,75 cellule en plus du rayon, donc jusqu'à 0,4 mm de matière en plus le long des parois, et des marches

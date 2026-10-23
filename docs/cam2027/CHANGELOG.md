@@ -2,6 +2,13 @@
 
 ## Non publié
 
+- **Poche 2D par décalages, moteur CAM2027** (nouvelle stratégie `offsetpocket`). Faces d'un dessin ou fonds de
+  poche d'un solide : décalages de l'intérieur vers l'extérieur, dernière passe exactement le long des parois,
+  chaque fond creusé à sa propre hauteur dans la même opération, entrée en hélice (arcs G2) depuis le niveau
+  précédent, plongée droite seulement si l'hélice ne tient pas (signalée), liaisons sans remontée quand le trajet
+  reste dans la zone. Plateau à alvéoles (fraise 6 mm, mêmes pas) contre la poche de FreeCAD : 2,4 s / 758 cm³
+  enlevés / reste moyen 1,05 mm contre 6,4 s / 739 cm³ / 1,40 mm, aucune entaille des deux côtés (33 000 commandes
+  contre 21 500 : les hélices). La poche FreeCAD (`pocket2d`) reste disponible.
 - **Ébauche 2,5D sur le modèle de brut** (nouvelle stratégie `stockrough`, fraise plate). Le brut est la carte de
   hauteur du contrôle matière, mise à jour niveau par niveau ; la pièce entière (tous les corps) borne la
   descente de la fraise : fonds de poche à toutes les profondeurs en une seule opération (les hauteurs des zones

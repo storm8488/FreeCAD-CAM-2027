@@ -122,7 +122,7 @@ def _after_change():
 
 #: stratégie -> icône « Atelier »
 STRATEGY_ICONS = {
-    "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "adaptive": "pocket", "drilling": "drill",
+    "profile": "contour", "pocket": "pocket", "pocket2d": "pocket", "offsetpocket": "pocket", "adaptive": "pocket", "drilling": "drill",
     "millface": "surface", "engrave": "engrave", "vcarve": "engrave", "chamfer": "engrave", "helix": "drill",
     "slot": "contour", "threadmill": "drill", "surface3d": "surface", "waterline": "surface", "rough3d": "pocket",
     "scallop": "surface",
@@ -873,7 +873,7 @@ def default_params(kind, tool, values):
     params = {"StepDown": values["axial_engagement_mm"]}
     stepover = max(1, min(100, int(round(100.0 * (values["radial_engagement_mm"] or tool.geometry.diameter * 0.4)
                                          / tool.geometry.diameter))))
-    if kind in ("pocket", "millface", "adaptive", "helix", "rough3d", "stockrough"):
+    if kind in ("pocket", "millface", "adaptive", "helix", "rough3d", "stockrough", "offsetpocket"):
         params["StepOver"] = stepover
     if kind in ("adaptive", "rough3d"):
         # liaisons de l'adaptative « en zone dégagée » remontées d'une passe : à 0 (défaut FreeCAD) elles se font

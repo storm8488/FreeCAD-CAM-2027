@@ -77,7 +77,7 @@ def make_faces(doc, vectors):
 
 
 #: stratégies qui attendent une face (les autres prennent les arêtes du vecteur)
-FACE_STRATEGIES = ("pocket2d", "vcarve", "pocket", "adaptive", "millface")
+FACE_STRATEGIES = ("pocket2d", "offsetpocket", "vcarve", "pocket", "adaptive", "millface")
 
 
 def expand_drawing_base(doc, kind, base):

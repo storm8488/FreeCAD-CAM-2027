@@ -147,6 +147,15 @@ STRATEGIES = {
         "limits": "Ball or bull nose mill; passes offset along the surface from the boundary (constant 3D step); "
                   "steep-and-shallow mode cuts at constant Z above the threshold angle; no rest machining.",
     },
+    "offsetpocket": {
+        "module": "cam2027.project.offsetpocket",
+        "label": "2D pocket (offset passes, every floor in one operation, helical entry)",
+        "params": ("StepDown", "StepOver", "StockToLeave", "HelixAngle", "HelixDiameterLimit", "StartDepth", "FinalDepth",
+                   "ClearanceHeight", "SafeHeight"),
+        "limits": "Flat horizontal faces (drawing faces, pocket floors), vertical walls; offset passes from the inside "
+                  "out, the last one along the walls; a pocket floor of a solid is cut down to its own height, a "
+                  "drawing face down to the final depth; zones narrower than the tool are skipped and reported.",
+    },
     "stockrough": {
         "module": "cam2027.project.stockrough",
         "label": "2.5D roughing on the stock model (all depths, every body protected)",
@@ -204,6 +213,7 @@ TOOLS_FOR = {
     "chamfer": ("chamfer", "vbit", "engrave"),
     "flat3d": ("endmill", "bullnose", "facemill"),
     "stockrough": ("endmill",),
+    "offsetpocket": ("endmill", "bullnose"),
     "pencil": ("ballend",),
     "scallop": ("ballend", "bullnose"),
 }
@@ -295,7 +305,7 @@ def stock_top_face(stock):
 def auto_geometry(kind, models):
     """Géométrie choisie sans sélection : ``[(objet, sous-éléments)]``, ``[]`` si rien de pertinent, ``None``
     quand la stratégie travaille sur la pièce entière."""
-    if kind in ("pocket", "pocket2d", "adaptive"):  # poche 2D : faces planes (fonds trouvés, comme la poche)
+    if kind in ("pocket", "pocket2d", "adaptive", "offsetpocket"):  # poche 2D : faces planes (fonds trouvés, comme la poche)
         finder = pocket_floor_faces
     elif kind == "millface":
         finder = top_faces

@@ -846,6 +846,7 @@ def main():
             ("pocket-step", lambda: scenario_solid("pocket-step", files["step"], tmp, "adaptive")),
             ("pocket-stl", lambda: scenario_solid("pocket-stl", files["stl"], tmp, "pocket")),
             ("stockrough-step", lambda: scenario_solid("stockrough-step", files["step"], tmp, "stockrough")),
+            ("offsetpocket-stl", lambda: scenario_solid("offsetpocket-stl", files["stl"], tmp, "offsetpocket")),
             ("facing-step", lambda: scenario_solid("facing-step", files["step"], tmp, "millface")),
             ("import-without-project", lambda: scenario_import_without_project("import-without-project", files["stl"])),
             ("sheet-svg", lambda: scenario_sheet("sheet-svg", files, tmp)),
