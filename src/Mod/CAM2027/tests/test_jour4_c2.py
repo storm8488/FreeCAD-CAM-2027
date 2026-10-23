@@ -170,5 +170,86 @@ class TestOutOfProcess(unittest.TestCase):
         self.assertEqual(there.Topology[1], here.Topology[1])
 
 
+class TestDogboneOvercut(unittest.TestCase):
+    """Dogbones : l'os dépasse volontairement dans l'angle (r·(1 - 1/√2) = 0,88 mm pour une fraise de 6, 0,75 mm au
+    contrôle à 0,5 mm). Le contrôle le comptait comme une entaille ; la zone des os est maintenant exclue des
+    entailles et signalée à part, une vraie entaille ailleurs reste vue."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_pipeline import make_part
+
+        cls.tmp = tempfile.mkdtemp(prefix="cam2027-c2d-")
+        cls.step = os.path.join(cls.tmp, "plate.step")
+        make_part(cls.step)
+        FreeCAD.ConfigSet("SuppressRecomputeRequiredDialog", "True")
+
+    def _project(self):
+        from cam2027.project.project import Project
+        from cam2027.tools.library import starter_library
+
+        lib = starter_library()
+        proj = Project.create("C2Dog", lib)
+        proj.import_model(self.step)
+        proj.create_job(proj.model_candidates(), stock={"kind": "box_margins", "xy": 2.0, "z_top": 1.0, "z_bottom": 0.0})
+        return proj
+
+    def _add(self, proj, kind, extra=None):
+        from cam2027.gui.commands import default_params
+
+        lib = proj.library
+        tool = lib.search("6 mm flat end mill 2F")[0]
+        asm = lib.assemblies_for_tool(tool.id)[0]
+        preset = tool.presets[0]
+        models = list(proj.job.Model.Group)
+        base = opsmod.auto_geometry(kind, models)
+        params = dict(default_params(kind, tool, preset.resolve(tool)), **(extra or {}))
+        op, _rec = proj.add_operation(kind, kind, asm.id, preset.id,
+                                      base=[(m, []) for m in models] if base is None else base, params=params)
+        return op
+
+    def test_bone_moves(self):
+        segs = [(False, [0, 0, 5], [10, 0, 5], 1), (False, [10, 0, 5], [11, 1, 5], 2), (False, [11, 1, 5], [10, 0, 5], 3),
+                (False, [10, 0, 5], [10, 10, 5], 4), (True, [10, 10, 5], [10, 10, 9], 5),
+                (False, [0, 0, 1], [3, 0, 1], 6), (False, [3, 0, 1], [0, 0, 1], 7)]  # 3 mm : plus long que r = 1
+        self.assertEqual(sim.bone_moves(segs, 1.0), [((10, 0), (11, 1))])
+        z = sim.ZMap(0, 0, 20, 20, 10, 0.5)
+        mask = sim.bone_mask(z, [((10.0, 0.0), (11.0, 1.0), 1.0)])
+        i, j = int((11.0 - 0.25) / 0.5), int((1.0 - 0.25) / 0.5)
+        self.assertTrue(mask[i, j])
+        self.assertFalse(mask[int(15 / 0.5), int(5 / 0.5)])
+
+    def test_overcut_not_counted_as_gouge(self):
+        proj = self._project()
+        op = self._add(proj, "pocket", {"CutMode": "Climb", "OffsetPattern": "Offset", "ClearingPattern": "Offset"})
+        proj.compute()
+        before = proj.material_check()
+        self.assertLessEqual(before["gouge_max"], before["tolerance"])  # sans os : rien
+        bone, _ignored = proj.add_dressup(op, "dogbone")
+        proj.compute()
+        self.assertGreater(bone.Path.Size, op.Path.Size)
+        rep = proj.material_check()
+        self.assertLessEqual(rep["gouge_max"], rep["tolerance"], rep)  # 0,75 mm compté sur 25562b8
+        over = rep["dogbone_overcut"]
+        self.assertGreater(over["bones"], 0)
+        self.assertGreater(over["max"], 0.3)
+        self.assertLess(over["max"], 3.0 * (1.0 - 0.5 ** 0.5) + 0.05)
+        from cam2027.gui.commands import material_report_text
+        self.assertIn("dogbone", material_report_text(rep))
+        proj.close()
+
+    def test_real_gouge_still_seen_with_dogbones(self):
+        proj = self._project()
+        op = self._add(proj, "pocket", {"CutMode": "Climb", "OffsetPattern": "Offset", "ClearingPattern": "Offset"})
+        proj.add_dressup(op, "dogbone")
+        # seconde poche agrandie de 0,5 mm (ExtraOffset négatif) : vraie entaille le long des parois, hors des os
+        self._add(proj, "pocket", {"CutMode": "Climb", "OffsetPattern": "Offset", "ClearingPattern": "Offset",
+                                   "ExtraOffset": -0.5})
+        proj.compute()
+        rep = proj.material_check()
+        self.assertGreater(rep["gouge_max"], 0.4, rep)
+        proj.close()
+
+
 if __name__ == "__main__":
     unittest.main()

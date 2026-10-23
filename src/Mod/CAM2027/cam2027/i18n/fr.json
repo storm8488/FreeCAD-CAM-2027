@@ -1470,5 +1470,6 @@
   "{name}: no geometry (text or unsupported element), not usable as a drawing: convert texts to paths in the drawing program": "{name} : aucune géométrie (texte ou élément non pris en charge), inutilisable comme dessin : convertir les textes en tracés dans le logiciel de dessin",
   "Computation stopped.": "Calcul arrêté.",
   "Material and collision check...": "Contrôle matière et collisions...",
-  "Post-processing...": "Postprocesseur..."
+  "Post-processing...": "Postprocesseur...",
+  "Intended dogbone overcut (not counted as a gouge): up to {d} mm, {n} bone(s)": "Dépassement voulu des dogbones (pas compté comme entaille) : jusqu'à {d} mm, {n} os"
 }

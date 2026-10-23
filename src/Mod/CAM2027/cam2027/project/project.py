@@ -720,6 +720,7 @@ class Project(object):
             + keepout.zone_boxes(self.doc)
         events = []  # (type, opération, n° de commande, position, valeur)
         no_holder = []
+        bones = []  # os des dogbones : ((x0, y0), (x1, y1), rayon de la fraise)
         pos = None
         for obj in self.operations():
             if indexing.is_index_op(obj):
@@ -757,6 +758,8 @@ class Project(object):
             if rec.get("kind") == "drilling" and holesmod.has_cycles(commands):  # cycles : mouvements équivalents
                 commands = holesmod.expand_cycles(commands)
             segments, pos = sim.path_segments(commands, pos, with_index=True)
+            if any(dressupmod.dressup_kind(d) == "dogbone" for d in dressupmod.dressup_chain(obj)):
+                bones += [(a, b, profile.radius) for a, b in sim.bone_moves(segments, profile.radius)]
             top_max = float(zmap.top.max())  # la matière ne fait que baisser pendant l'opération
             clamp_top = max([bb.ZMax for _n, bb in boxes] or [-float("inf")])
             def excess_events(p0, p1, index, z_low):
@@ -846,7 +849,17 @@ class Project(object):
         # entailles vérifiées en 3D : vraie pénétration au lieu de la hauteur de paroi (trous filetés déjà
         # écartés : ils ne sont plus candidats)
         low = sim.refine_gouges(zmap, [o.Shape for o in self.job.Model.Group if getattr(o, "Shape", None)], low, tolerance)
+        # dépassement voulu des dogbones (r·(1 - 1/√2) dans un angle droit) : zone des os hors des entailles,
+        # signalé à part
+        overcut = {"gouge_max": 0.0, "gouge_cells": 0, "gouge_at": None}
+        if bones:
+            np = sim._np()
+            bone_zone = sim.bone_mask(zmap, bones)
+            overcut = sim.compare(zmap, heights, tolerance, gouge_heights=np.where(bone_zone, low, -np.inf))
+            low = np.where(bone_zone, -np.inf, low)
         report = sim.compare(zmap, heights, tolerance, gouge_heights=low)
+        report["dogbone_overcut"] = {"bones": len(bones), "max": overcut["gouge_max"], "cells": overcut["gouge_cells"],
+                                     "at": overcut["gouge_at"]}
         checked = bool(simulated)
         not_run = [label for label, _r in skipped]
 

@@ -649,6 +649,42 @@ def clamp_contacts(p0, p1, envelope, boxes, step=1.0):
     return list(hits.values())
 
 
+# -- dogbones -----------------------------------------------------------------------------------------
+
+
+def bone_moves(segments, radius):
+    """Os des dogbones (``DogboneII`` de FreeCAD) dans des segments ``(rapid, p0, p1, index)`` : aller-retour
+    horizontal en coupe, du coin jusqu'à la pointe de l'os et retour, d'au plus un diamètre. Retourne
+    ``[((x, y) du coin, (x, y) de la pointe)]``."""
+    out = []
+    limit = 2.0 * radius + 0.01
+    for (r0, a0, b0, _i0), (r1, a1, b1, _i1) in zip(segments, segments[1:]):
+        if r0 or r1 or a0[2] != b0[2] or a1[2] != b1[2] or a0[2] != a1[2]:
+            continue
+        if math.dist(b0, a1) > 1e-6 or math.dist(b1, a0) > 1e-6:
+            continue
+        if 1e-6 < math.dist(a0, b0) <= limit:
+            out.append(((a0[0], a0[1]), (b0[0], b0[1])))
+    return out
+
+
+def bone_mask(zmap, bones):
+    """Colonnes balayées par la fraise le long des os ``[((x0, y0), (x1, y1), rayon)]`` (rayon + une maille)."""
+    np = _np()
+    mask = np.zeros((zmap.nx, zmap.ny), dtype=bool)
+    for (x0, y0), (x1, y1), r in bones:
+        rr = r + zmap.res
+        win = zmap._window(min(x0, x1) - rr, max(x0, x1) + rr, min(y0, y1) - rr, max(y0, y1) + rr)
+        if win is None:
+            continue
+        i0, i1, j0, j1, (X, Y) = win
+        dx, dy = x1 - x0, y1 - y0
+        L2 = dx * dx + dy * dy
+        t = np.clip(((X - x0) * dx + (Y - y0) * dy) / L2, 0.0, 1.0) if L2 > 0 else 0.0
+        mask[i0:i1, j0:j1] |= np.hypot(X - (x0 + t * dx), Y - (y0 + t * dy)) <= rr
+    return mask
+
+
 # -- parcours -----------------------------------------------------------------------------------------
 
 

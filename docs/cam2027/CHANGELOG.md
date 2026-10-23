@@ -15,6 +15,11 @@
   recalcul qui suivait l'arrêt refaisait tout hors de la fenêtre de progression) → 0,5 s ; contrôle matière 0,2 s.
   Les opérations arrêtées gardent un parcours incomplet et ne sont plus recalculées en cachette ; « Recalculer »
   les reprend.
+- **[C2]** Contrôle matière : le **dépassement voulu des dogbones** (0,75 mm sur la plaque des tests, fraise de 6)
+  était compté comme une entaille. Les os (aller-retour du coin à la pointe dans le parcours d'un habillage
+  `DogboneII`) sont reconnus : leur zone est exclue des entailles et le rapport donne le dépassement à part
+  (« Dépassement voulu des dogbones (pas compté comme entaille) : jusqu'à 0,75 mm, 72 os ») ; une vraie entaille
+  le long des parois reste vue.
 
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à

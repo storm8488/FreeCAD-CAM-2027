@@ -1300,6 +1300,10 @@ def material_report_text(rep):
                         d="%.2f" % rep["gouge_max"], x="%.1f" % x, y="%.1f" % y, n=rep["gouge_cells"]))
     else:
         lines.append(tr("No gouge found on the top of the part (tolerance {t} mm)", t="%g" % rep["tolerance"]))
+    bone = rep.get("dogbone_overcut") or {}
+    if bone.get("max", 0.0) > rep["tolerance"]:
+        lines.append(tr("Intended dogbone overcut (not counted as a gouge): up to {d} mm, {n} bone(s)",
+                        d="%.2f" % bone["max"], n=bone["bones"]))
     if rep["part_cells"]:
         x, y, _z = rep["leftover_at"]
         lines.append(tr("Stock left on the part: max {m} mm (at X {x} Y {y}), mean {a} mm",
