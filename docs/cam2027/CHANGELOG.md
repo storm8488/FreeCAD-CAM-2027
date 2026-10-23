@@ -13,6 +13,12 @@
 - **[C1]** Éditeur d'opération : la case « Dogbones » n'est plus proposée pour l'ébauche adaptative, où l'ajout
   est toujours refusé (os dans les parois) ; la case suit la règle du refus (`dressups.dogbone_possible`) et reste
   pour les contours et les poches (refusée en zigzag avec un message clair).
+- **[C1]** Entrées / sorties : le fournisseur de vue de FreeCAD ouvrait sa page de tâches dès la création de
+  l'habillage (dans la transaction de l'éditeur CAM2027) et ne gardait pas la page ouverte : après réouverture du
+  projet, le double-clic dans l'arbre donnait une page qu'on ne pouvait pas annuler par programme (audit B3 :
+  « no task page »). Fournisseur de vue CAM2027 (`leads.ViewProviderLeads`) : page de FreeCAD au double-clic
+  seulement, avant comme après réouverture. Scénarios `c1-leads-task-page`, `c1-dogbone-editor`,
+  `c1-helix-message`.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

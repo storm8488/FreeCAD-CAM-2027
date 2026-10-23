@@ -204,7 +204,7 @@ def add_dressup(job, op, kind, params=None, count=None):
                 import Path.Dressup.Gui.Tags as TagsGui
 
                 obj.ViewObject.Proxy = TagsGui.PathDressupTagViewProvider(obj.ViewObject)
-            elif kind == "pattern":
+            elif kind in ("pattern", "leads") and type(getattr(obj.ViewObject, "Proxy", None)).__module__.startswith("cam2027"):
                 pass  # fournisseur de vue posé à la création
             elif kind == "dogbone":
                 import Path.Dressup.Gui.DogboneII as DogboneGui
