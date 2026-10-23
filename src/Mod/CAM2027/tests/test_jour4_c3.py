@@ -74,5 +74,29 @@ class TestReliefTiles(unittest.TestCase):
         self.assertEqual(len(shape.Faces), 6)
 
 
+class TestPencilFilter(unittest.TestCase):
+    def test_threads_equal_full_kernel(self):
+        """Filtre de la boule réparti sur des fils, une passe pour deux lignes symétriques du noyau : identique au
+        bit près au noyau 2D entier de scipy et à un seul fil (boule de 6 mm sur une carte à marches)."""
+        import numpy as np
+        from scipy import ndimage
+        from cam2027.project import pencil
+
+        rng = np.random.default_rng(7)
+        H = np.cumsum(rng.normal(size=(160, 130)), axis=1) * 0.05 + np.where(rng.random((160, 130)) < 0.01, 4.0, 0.0)
+        radius, res = 3.0, 0.1
+        foot, prof = pencil.ball_kernel(radius, res)
+        full_d = ndimage.grey_dilation(H, footprint=foot, structure=prof, mode="nearest")
+        full_e = ndimage.grey_erosion(full_d, footprint=foot, structure=prof, mode="nearest")
+        workers = pencil.FILTER_WORKERS
+        try:
+            for w in (1, 3, 8):
+                pencil.FILTER_WORKERS = w
+                self.assertTrue(np.array_equal(pencil.tip_heights(H, radius, res), full_d), w)
+                self.assertTrue(np.array_equal(pencil.envelope(full_d, radius, res), full_e), w)
+        finally:
+            pencil.FILTER_WORKERS = workers
+
+
 if __name__ == "__main__":
     unittest.main()

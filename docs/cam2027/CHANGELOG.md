@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **[C3]** Reprise des angles plus rapide, parcours identique (G-code octet pour octet sur la plaque des tests,
+  le disque WobbleX, le plateau et le chauffage, 2 répétitions, entaille 0) : le filtre de la boule de référence
+  traite ensemble les deux lignes symétriques du noyau et se répartit sur 8 fils (`scipy.ndimage` rend le GIL).
+  Plaque 42,1 → 4,8 s, disque 22,0 → 3,5 s, plateau 57,9 → 41,0 s ; filtre du chauffage 14 → 1,3 s.
 - **[C3]** Relief depuis une image : la surface du dessus (la même B-spline par les points de la grille) est
   découpée en tuiles d'environ 8 × 8 points. OpenCascade triangulait la grande face d'un seul tenant en un temps
   et une mémoire bien plus que proportionnels : à l'écart de la finition 3D (tolérance du job / 4), 23 s et

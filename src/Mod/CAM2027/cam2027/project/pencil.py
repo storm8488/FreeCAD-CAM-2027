@@ -19,6 +19,7 @@ Chaque passe est reliée à la suivante par une remontée à la hauteur de sécu
 """
 
 import math
+import os
 
 import FreeCAD
 
@@ -29,6 +30,7 @@ DEFAULT_RESOLUTION = 0.1
 MAX_CELLS = 2_000_000
 SAMPLING = 0.1  # pas de la chute de la boule (OpenCamLib), mm
 MIN_CELLS = 4  # zone utile plus petite : ignorée (bruit de la grille)
+FILTER_WORKERS = 8  # fils du filtre de la boule (chacun garde une carte : 16 Mo à 2 millions de cellules)
 
 
 def _np():
@@ -60,7 +62,12 @@ def ball_kernel(radius, res):
 def _ball_filter(H, radius, res, dilate):
     """Dilatation (érosion) de ``H`` par le profil de la boule, une ligne du noyau à la fois : même résultat que
     ``grey_dilation`` avec le noyau 2D entier, qui monte à 6,5 Go pour une boule de référence de 18 mm sur une
-    grille de 540 x 781 (disque WobbleRing ; 0,12 Go ici)."""
+    grille de 540 x 781 (disque WobbleRing ; 0,12 Go ici).
+
+    Les lignes ``k`` et ``2n - k`` du noyau ont le même profil : une seule passe 1D sur la carte bordée sert aux
+    deux, décalée. Les passes sont réparties sur ``FILTER_WORKERS`` fils (``scipy.ndimage`` rend le GIL), chacun
+    gardant son maximum (minimum) ; le maximum ne dépend pas de l'ordre : résultat identique au bit près."""
+    from concurrent.futures import ThreadPoolExecutor, wait
     from scipy import ndimage
 
     np = _np()
@@ -68,18 +75,33 @@ def _ball_filter(H, radius, res, dilate):
     n = foot.shape[0] // 2
     pad = np.pad(H, ((n, n), (0, 0)), mode="edge")
     rows = H.shape[0]
-    out = None
-    for k in range(foot.shape[0]):
-        if not foot[k].any():
-            continue
-        if dilate:
-            r = ndimage.grey_dilation(pad[k:k + rows], footprint=foot[k][None, :], structure=prof[k][None, :],
-                                      mode="nearest")
-            out = r if out is None else np.maximum(out, r, out=out)
-        else:
-            r = ndimage.grey_erosion(pad[2 * n - k:2 * n - k + rows], footprint=foot[k][None, :],
-                                     structure=prof[k][None, :], mode="nearest")
-            out = r if out is None else np.minimum(out, r, out=out)
+    pick = np.maximum if dilate else np.minimum
+    flt = ndimage.grey_dilation if dilate else ndimage.grey_erosion
+    ks = [k for k in range(n + 1) if foot[k].any()]
+
+    def part(chunk):
+        out = None
+        for k in chunk:
+            r = flt(pad, footprint=foot[k][None, :], structure=prof[k][None, :], mode="nearest")
+            # dilatation : ligne k du noyau sur pad[k:k + rows] ; érosion : sur pad[2n - k:...] ; et la symétrique
+            for a in {k, 2 * n - k}:
+                s = r[a:a + rows]
+                out = s.copy() if out is None else pick(out, s, out=out)
+        return out
+
+    workers = max(1, min(FILTER_WORKERS, (os.cpu_count() or 2) - 1, len(ks)))
+    if workers == 1:
+        return part(ks)
+    from .operations import keep_gui_alive
+
+    with ThreadPoolExecutor(workers) as pool:
+        futures = [pool.submit(part, ks[w::workers]) for w in range(workers)]
+        while wait(futures, timeout=0.2).not_done:
+            keep_gui_alive()
+        parts = [f.result() for f in futures]
+    out = parts[0]
+    for p in parts[1:]:
+        pick(out, p, out=out)
     return out
 
 
