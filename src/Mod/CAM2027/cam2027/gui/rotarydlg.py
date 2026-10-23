@@ -72,11 +72,16 @@ class RotaryDialog(QtWidgets.QDialog):
         self.spiral.addItem(tr("Lines along the axis"), False)
         self.spiral.addItem(tr("Spiral (A turns continuously)"), True)
         self.spiral.setCurrentIndex(1 if p.get("spiral") else 0)
+        # [C4] parois radiales (Y avec A) : cochée par défaut pour une nouvelle opération, fraise plate seulement
+        self.radial = QtWidgets.QCheckBox(tr("Radial walls (Y moves with A, flat end mill)"))
+        self.radial.setToolTip(tr("The side of the tool stays parallel to the radial plane of each wall: X, Y, Z and A move together. Without it the tool points at the axis and the walls lean (a step at the top of each level)."))  # noqa: E501
+        self.radial.setChecked(bool(p.get("radial_walls")) if rec else True)
         self.rows = {}
         for key, label, widget in (
                 ("depth", "Depth below the surface (mm)", self.depth),
                 ("step_down", "Step down (mm)", self.step_down),
                 ("side", "Side", self.side),
+                ("radial", "Walls", self.radial),
                 ("spiral", "Pattern", self.spiral),
                 ("stepover", "Stepover", self.stepover),
                 ("sample", "Sample interval (mm)", self.sample),
@@ -109,8 +114,8 @@ class RotaryDialog(QtWidgets.QDialog):
 
     def _update(self):
         kind = self.current_kind()
-        shown = {"wrap_contour": ("depth", "step_down", "side", "safe"),
-                 "wrap_pocket": ("depth", "step_down", "stepover", "safe"),
+        shown = {"wrap_contour": ("depth", "step_down", "side", "radial", "safe"),
+                 "wrap_pocket": ("depth", "step_down", "stepover", "radial", "safe"),
                  "rotary3d": ("spiral", "step_down", "stepover", "sample", "leave", "safe")}[kind]
         for key, (lab, widget) in self.rows.items():
             lab.setVisible(key in shown)
@@ -140,6 +145,12 @@ class RotaryDialog(QtWidgets.QDialog):
         self.info.setText(text)
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(ok)
 
+    def _flat_tool(self):
+        if self.asm.currentData() is None:
+            return False
+        lib = self.proj.library
+        return lib.tool(lib.assembly(self.asm.currentData()).tool_id).tool_type == "endmill"
+
     def _fill_presets(self):
         self.preset.clear()
         if self.asm.currentData() is None:
@@ -157,6 +168,7 @@ class RotaryDialog(QtWidgets.QDialog):
                      spiral=bool(self.spiral.currentData()))
         else:
             p["depth"] = -self.depth.value()
+            p["radial_walls"] = self.radial.isChecked() and self._flat_tool()
             if kind == "wrap_contour":
                 p["side"] = self.side.currentData()
             else:

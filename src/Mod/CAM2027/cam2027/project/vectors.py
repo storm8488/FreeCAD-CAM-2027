@@ -287,3 +287,374 @@ def add_vector(proj, shape, label, layer=""):
             job.Model.addObject(PathJob.createModelResourceClone(job, o))
     doc.recompute()
     return obj
+
+
+# -- formes de base et vecteurs paramétriques [C4] ----------------------------------------------------------------
+#
+# Un vecteur dessiné dans l'atelier est un objet ``Part::FeaturePython`` (``ParametricVector``) qui garde ses
+# réglages (texte, police, rectangle, cercle, polygone, nœuds d'une polyligne) et recalcule sa forme ; sa face
+# (``VectorFace``, même nom + ``_Face``) suit la source, les clones du job aussi (``Draft.clone``). Modifier le
+# vecteur puis recalculer met à jour les opérations qui l'usinent (``refresh_operations`` : sous-éléments repris
+# quand le nombre de faces change, un texte qui gagne une lettre par exemple).
+
+KINDS = ("text", "rectangle", "circle", "polygon", "polyline")
+LAYOUTS = ("line", "arc", "curve")
+
+#: réglages de chaque genre : (propriété, type FreeCAD, valeur par défaut)
+PROPERTIES = {
+    "text": (("Text", "App::PropertyString", "CAM2027"), ("Font", "App::PropertyString", ""),
+             ("Size", "App::PropertyFloat", 10.0), ("Tracking", "App::PropertyFloat", 0.0),
+             ("Layout", "App::PropertyString", "line"), ("X", "App::PropertyFloat", 0.0),
+             ("Y", "App::PropertyFloat", 0.0), ("ArcRadius", "App::PropertyFloat", 40.0),
+             ("ArcSpan", "App::PropertyFloat", 180.0), ("Below", "App::PropertyBool", False),
+             ("Rail", "App::PropertyLink", None)),
+    "rectangle": (("X", "App::PropertyFloat", 0.0), ("Y", "App::PropertyFloat", 0.0),
+                  ("Width", "App::PropertyFloat", 50.0), ("Height", "App::PropertyFloat", 30.0),
+                  ("CornerRadius", "App::PropertyFloat", 0.0), ("Angle", "App::PropertyFloat", 0.0)),
+    "circle": (("X", "App::PropertyFloat", 0.0), ("Y", "App::PropertyFloat", 0.0),
+               ("Radius", "App::PropertyFloat", 20.0)),
+    "polygon": (("X", "App::PropertyFloat", 0.0), ("Y", "App::PropertyFloat", 0.0),
+                ("Radius", "App::PropertyFloat", 20.0), ("Sides", "App::PropertyInteger", 6),
+                ("Angle", "App::PropertyFloat", 0.0)),
+    "polyline": (("Points", "App::PropertyVectorList", None), ("Closed", "App::PropertyBool", True)),
+}
+
+
+def rectangle_shape(x, y, width, height, corner=0.0, angle=0.0):
+    """Rectangle centré en (x, y), angles arrondis de ``corner`` mm, tourné de ``angle`` degrés."""
+    if width <= 0 or height <= 0:
+        raise UserError("the rectangle width and height must be above 0")
+    if corner < 0 or (corner > 0 and corner >= min(width, height) / 2.0 - 1e-9):
+        raise UserError("the corner radius must be less than half the smaller side ({m} mm)",
+                        m="%g" % (min(width, height) / 2.0))
+    w, h = width / 2.0 - corner, height / 2.0 - corner
+    wire = Part.makePolygon([V(x - w, y - h, 0), V(x + w, y - h, 0), V(x + w, y + h, 0), V(x - w, y + h, 0),
+                             V(x - w, y - h, 0)])
+    if corner > 0:  # côtés exacts, coins en arcs de cercle
+        wire = Part.Face(wire).makeOffset2D(corner, 0, False, False, False).Wires[0]
+    if angle:
+        wire.rotate(V(x, y, 0), V(0, 0, 1), angle)
+    return Part.Compound([wire])
+
+
+def circle_shape(x, y, radius):
+    if radius <= 0:
+        raise UserError("the circle radius must be above 0")
+    return Part.Compound([Part.Wire(Part.makeCircle(radius, V(x, y, 0)))])
+
+
+def polygon_shape(x, y, radius, sides, angle=0.0):
+    """Polygone régulier inscrit dans le cercle de ``radius`` mm, premier sommet en haut (tourné de ``angle``)."""
+    sides = int(sides)
+    if sides < 3:
+        raise UserError("a polygon needs at least 3 sides")
+    if radius <= 0:
+        raise UserError("the polygon radius must be above 0")
+    a0 = math.pi / 2 + math.radians(angle)
+    pts = [V(x + radius * math.cos(a0 + 2 * math.pi * i / sides), y + radius * math.sin(a0 + 2 * math.pi * i / sides), 0)
+           for i in range(sides)]
+    return Part.Compound([Part.makePolygon(pts + pts[:1])])
+
+
+def polyline_shape(points, closed=True):
+    """Polyligne de nœuds ``[(x, y)]`` (fermée : le dernier nœud rejoint le premier)."""
+    pts = []
+    for p in points:
+        q = V(float(p[0]), float(p[1]), 0)
+        if not pts or (q - pts[-1]).Length > 1e-6:
+            pts.append(q)
+    if closed and len(pts) > 1 and (pts[0] - pts[-1]).Length <= 1e-6:
+        pts.pop()
+    if len(pts) < (3 if closed else 2):
+        raise UserError("the shape needs at least {n} distinct nodes", n=3 if closed else 2)
+    wire = Part.makePolygon(pts + (pts[:1] if closed else []))
+    if closed and Part.Face(wire).Area < 1e-9:
+        raise UserError("the closed shape has no area (nodes in line)")
+    return Part.Compound([wire])
+
+
+def build_shape(kind, p):
+    """Forme d'un vecteur paramétrique depuis ses réglages ``p`` (dict ; ``Rail`` : forme du rail), placement
+    appliqué à la géométrie (un placement de forme deviendrait celui de l'objet et s'ajouterait au suivant)."""
+    shape = _build_shape(kind, p).copy()
+    if not shape.Placement.isIdentity():
+        m = shape.Placement.toMatrix()
+        shape.Placement = FreeCAD.Placement()
+        shape.transformShape(m, True)  # copie de la géométrie : placement neutre, arcs et droites gardés
+    return shape
+
+
+def _build_shape(kind, p):
+    if kind == "text":
+        layout = p.get("Layout", "line")
+        args = (p["Text"], p.get("Font") or None, p["Size"], p.get("Tracking", 0.0))
+        if layout == "line":
+            return text_shape(*args, origin=(p["X"], p["Y"]))
+        if layout == "arc":
+            rail = arc_rail((p["X"], p["Y"]), p["ArcRadius"], p["ArcSpan"], top=not p.get("Below"))
+            return text_on_curve(args[0], rail, *args[1:], below=bool(p.get("Below")))
+        if layout == "curve":
+            if p.get("Rail") is None:
+                raise UserError("the text has no curve to follow")
+            return text_on_curve(args[0], p["Rail"], *args[1:])
+        raise UserError("unknown text layout {layout}", layout=layout)
+    if kind == "rectangle":
+        return rectangle_shape(p["X"], p["Y"], p["Width"], p["Height"], p.get("CornerRadius", 0.0), p.get("Angle", 0.0))
+    if kind == "circle":
+        return circle_shape(p["X"], p["Y"], p["Radius"])
+    if kind == "polygon":
+        return polygon_shape(p["X"], p["Y"], p["Radius"], p["Sides"], p.get("Angle", 0.0))
+    if kind == "polyline":
+        return polyline_shape([(q[0], q[1]) for q in p["Points"]], p.get("Closed", True))
+    raise UserError("unknown vector kind {kind}", kind=kind)
+
+
+def is_parametric(obj):
+    return obj is not None and isinstance(getattr(obj, "Proxy", None), ParametricVector)
+
+
+def params_of(obj):
+    """Réglages d'un vecteur paramétrique (dict) ; ``Rail`` donné en forme, ``Points`` en ``(x, y)``."""
+    p = {}
+    for name, _type, _default in PROPERTIES[obj.VectorKind]:
+        value = getattr(obj, name)
+        if name == "Rail":
+            value = value.Shape if value is not None else None
+        elif name == "Points":
+            value = [(v.x, v.y) for v in value]
+        p[name] = value
+    return p
+
+
+class ParametricVector(object):
+    """Proxy d'un vecteur dessiné : forme recalculée depuis ses réglages."""
+
+    def __init__(self, obj, kind):
+        obj.Proxy = self
+        obj.addProperty("App::PropertyString", "VectorKind", "CAM2027 vector", "Kind of drawing vector")
+        obj.VectorKind = kind
+        obj.setEditorMode("VectorKind", 1)
+        self.add_properties(obj)
+
+    @staticmethod
+    def add_properties(obj):
+        for name, typ, default in PROPERTIES[obj.VectorKind]:
+            if name not in obj.PropertiesList:
+                obj.addProperty(typ, name, "CAM2027 vector", name)
+                if default is not None:
+                    setattr(obj, name, default)
+
+    def execute(self, obj):
+        # forme sans placement : FreeCAD lui applique celui de l'objet (vecteur déplacé par l'imbrication)
+        obj.Shape = build_shape(obj.VectorKind, params_of(obj))
+
+    def onDocumentRestored(self, obj):
+        self.add_properties(obj)
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+
+class VectorFace(object):
+    """Proxy de la face d'un vecteur fermé : suit la source (``Source``)."""
+
+    def __init__(self, obj, source):
+        obj.Proxy = self
+        obj.addProperty("App::PropertyLink", "Source", "CAM2027 vector", "Drawing vector of this face")
+        obj.Source = source
+
+    def execute(self, obj):
+        src = obj.Source
+        if src is None:
+            return
+        wires = closed_wires_of(src.Shape)
+        if not wires:
+            raise UserError("{name}: no closed contour left, the face cannot follow", name=src.Label)
+        obj.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+
+def add_parametric(proj, kind, label, layer="", **params):
+    """Nouveau vecteur paramétrique ``kind`` ; réglages vérifiés avant la création (``UserError`` sinon).
+    Avec un job : sa face (si fermé) et leurs clones dans le modèle, comme ``add_vector``."""
+    if kind not in KINDS:
+        raise UserError("unknown vector kind {kind}", kind=kind)
+    p = dict(((n, d) for n, _t, d in PROPERTIES[kind]), **params)
+    check = dict(p)
+    if check.get("Rail") is not None:
+        check["Rail"] = check["Rail"].Shape
+    shape = build_shape(kind, check)
+    doc = proj.doc
+    obj = doc.addObject("Part::FeaturePython", "Vector")
+    ParametricVector(obj, kind)
+    obj.Label = label
+    for name, value in p.items():
+        if value is None:
+            continue
+        if name == "Points":
+            value = [V(q[0], q[1], 0) for q in value]
+        setattr(obj, name, value)
+    obj.Shape = shape
+    if layer:
+        from . import templates
+
+        templates.set_layer(obj, layer)
+    _attach_view(obj)
+    doc.recompute()
+    if proj.has_job:  # comme add_vector : la face (si fermé) et les clones avec le job seulement
+        import Path.Main.Job as PathJob
+
+        job = proj.job
+        for o in [obj] + sheetmod.make_faces(doc, [obj]):
+            job.Model.addObject(PathJob.createModelResourceClone(job, o))
+    doc.recompute()
+    return obj
+
+
+def make_face(doc, obj):
+    """Face paramétrique d'un vecteur dessiné (``sheet.make_faces``) : suit le vecteur ; None s'il n'est pas fermé."""
+    if not closed_wires_of(obj.Shape):
+        return None
+    face = doc.addObject("Part::FeaturePython", obj.Name + sheetmod.FACE_SUFFIX)
+    VectorFace(face, obj)
+    face.Label = obj.Label + sheetmod.FACE_SUFFIX
+    if FreeCAD.GuiUp and face.ViewObject is not None:
+        face.ViewObject.Proxy = 0
+        face.ViewObject.Visibility = False
+    face.recompute()
+    return face
+
+
+def _attach_view(obj):
+    if not FreeCAD.GuiUp or obj.ViewObject is None:
+        return
+    try:
+        from ..gui.vectors import ViewProviderVector
+
+        ViewProviderVector(obj.ViewObject)
+    except Exception:
+        obj.ViewObject.Proxy = 0
+    obj.ViewObject.LineColor = (0.10, 0.10, 0.10)
+    obj.ViewObject.LineWidth = 2.0
+
+
+def update_parametric(proj, obj, **params):
+    """Change les réglages d'un vecteur paramétrique (vérifiés d'abord), recalcule le dessin et les opérations
+    qui l'usinent. Retourne les opérations touchées."""
+    if not is_parametric(obj):
+        raise UserError("{name} is not a vector drawn in CAM2027 (imported vectors cannot be edited)", name=obj.Label)
+    p = dict(params_of(obj))
+    for name, value in params.items():
+        p[name] = value.Shape if name == "Rail" and value is not None else value
+    shape = build_shape(obj.VectorKind, p)
+    if proj.doc.getObject(obj.Name + sheetmod.FACE_SUFFIX) is not None and not closed_wires_of(shape):
+        raise UserError("{name} is machined as a closed shape: it must stay closed", name=obj.Label)
+    for name, value in params.items():
+        if name == "Points":
+            value = [V(q[0], q[1], 0) for q in value]
+        setattr(obj, name, value)
+    return refresh_operations(proj, obj)
+
+
+def nodes(obj):
+    """Nœuds ``[(x, y)]`` d'un vecteur paramétrique à côtés droits (polyligne, rectangle sans arrondi,
+    polygone) ; ``UserError`` sinon."""
+    if not is_parametric(obj):
+        raise UserError("{name} is not a vector drawn in CAM2027 (imported vectors cannot be edited)", name=obj.Label)
+    if obj.VectorKind == "polyline":
+        return [(v.x, v.y) for v in obj.Points]
+    if obj.VectorKind not in ("rectangle", "polygon") or (obj.VectorKind == "rectangle" and obj.CornerRadius > 0):
+        raise UserError("only straight-sided shapes (rectangle without rounded corners, polygon, line) have nodes")
+    return [(v.Point.x, v.Point.y) for v in obj.Shape.Wires[0].OrderedVertexes]
+
+
+def set_nodes(proj, obj, points, closed=None):
+    """Remplace les nœuds (déplacés, supprimés) ; un rectangle ou un polygone devient une polyligne (même
+    forme tant qu'aucun nœud ne bouge). Opérations recalculées comme ``update_parametric``."""
+    nodes(obj)  # vérifie que le vecteur a des nœuds
+    closed = obj.Closed if obj.VectorKind == "polyline" and closed is None else (True if closed is None else closed)
+    polyline_shape(points, closed)  # vérifié avant de toucher l'objet
+    if obj.VectorKind != "polyline":
+        for name, _t, _d in PROPERTIES[obj.VectorKind]:
+            obj.removeProperty(name)
+        obj.VectorKind = "polyline"
+        ParametricVector.add_properties(obj)
+    return update_parametric(proj, obj, Points=list(points), Closed=closed)
+
+
+def move_node(proj, obj, index, x, y):
+    pts = nodes(obj)
+    if not 0 <= index < len(pts):
+        raise UserError("no node {n}", n=index + 1)
+    pts[index] = (x, y)
+    return set_nodes(proj, obj, pts)
+
+
+def delete_node(proj, obj, index):
+    pts = nodes(obj)
+    if not 0 <= index < len(pts):
+        raise UserError("no node {n}", n=index + 1)
+    del pts[index]
+    return set_nodes(proj, obj, pts)
+
+
+def _clone_source(obj):
+    for attr in ("Objects", "Base"):
+        inner = getattr(obj, attr, None)
+        if isinstance(inner, list) and len(inner) == 1:
+            inner = inner[0]
+        if inner is not None and hasattr(inner, "Shape") and hasattr(inner, "Name"):
+            return inner
+    return obj
+
+
+def refresh_operations(proj, vector):
+    """Opérations dont la géométrie vient de ``vector`` (ou de sa face, ou de leurs clones) : sous-éléments
+    « toutes les faces » / « toutes les arêtes » repris sur la nouvelle forme (le nombre de lettres d'un texte
+    peut changer), puis recalcul du document. Retourne les opérations touchées."""
+    names = {vector.Name, vector.Name + sheetmod.FACE_SUFFIX}
+    # 1. opérations ramenées au premier élément (toujours présent) : FreeCAD ne cherche pas à suivre « Face2 »
+    #    quand le clone change de forme (élément disparu « ?Face2 », message d'erreur)
+    plans = []
+    for op in (proj.operations() if proj.has_job else []):
+        base = getattr(op, "Base", None)
+        if not isinstance(base, list) or not base:
+            continue
+        entries, changed = [], False
+        for o, subs in base:
+            subs = tuple(s.lstrip("?") for s in subs)
+            kind = None
+            if _clone_source(o).Name in names and subs:
+                kind = "Face" if all(s.startswith("Face") for s in subs) else (
+                    "Edge" if all(s.startswith("Edge") for s in subs) else None)
+            changed = changed or _clone_source(o).Name in names
+            entries.append((o, subs, kind))
+        if changed:
+            op.Base = [(o, (kind + "1",) if kind else subs) for o, subs, kind in entries]
+            plans.append((op, entries))
+    # 2. le dessin, sa face et leurs clones
+    for o in [vector, proj.doc.getObject(vector.Name + sheetmod.FACE_SUFFIX)] + [
+            c for c in proj.doc.Objects if c.Name.startswith("Clone") and _clone_source(c).Name in names]:
+        if o is not None:
+            o.touch()
+            o.recompute()
+    # 3. tous les éléments de la nouvelle forme, puis recalcul des opérations
+    for op, entries in plans:
+        new = []
+        for o, subs, kind in entries:
+            if kind:
+                count = len(o.Shape.Faces) if kind == "Face" else len(o.Shape.Edges)
+                subs = tuple("%s%d" % (kind, i + 1) for i in range(count))
+            new.append((o, subs))
+        op.Base = new
+        op.touch()
+    proj.doc.recompute()
+    return [op for op, _e in plans]

@@ -837,6 +837,8 @@ class Nest(_Base):
             lines = [tr("Placed: {n} part(s), sheet use {u} %.", n=len(rep["placed"]), u="%.0f" % (100 * rep["utilization"]))]
             if rep.get("sheets", 1) > 1:
                 lines.append(tr("Sheets used: {n} (laid to the right of the first one).", n=rep["sheets"]))
+            for group in rep.get("groups", []):  # [C4]
+                lines.append(tr("Kept together: {parts}", parts=" + ".join(group)))
             if rep["unplaced"]:
                 lines.append(tr("Not placed (no room): {parts}", parts=", ".join(rep["unplaced"])))
             lines.append(tr("Next: Stock & fixture > sheet under the 2D drawing (the sheet keeps the nesting size)."))
@@ -1294,11 +1296,17 @@ def show_material_result(proj, rep):
 
     doc = proj.doc
     objs = []
+    if rep.get("rotary"):  # [C4] brut rond : carte de rayon enroulée autour de l'axe A
+        st = proj.last_rotary
+        meshes = (_display_mesh(st.surface_mesh(rep["center"])),
+                  st.surface_mesh(rep["center"], st.gouge_mask(rep["tolerance"]), lift=0.02))
+    else:
+        meshes = (sim.display_mesh(proj.last_zmap, DISPLAY_MESH_MAX_FACETS),
+                  sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights, rep["tolerance"]),
+                                   lift=0.02))
     for name, mesh, colour in (
-            ("CAM2027SimStock", sim.display_mesh(proj.last_zmap, DISPLAY_MESH_MAX_FACETS), (0.62, 0.66, 0.72)),
-            ("CAM2027SimGouges", sim.surface_mesh(proj.last_zmap, sim.gouge_mask(proj.last_zmap, proj.last_heights,
-                                                                                rep["tolerance"]), lift=0.02),
-             (0.9, 0.15, 0.15))):
+            ("CAM2027SimStock", meshes[0], (0.62, 0.66, 0.72)),
+            ("CAM2027SimGouges", meshes[1], (0.9, 0.15, 0.15))):
         obj = doc.getObject(name) or doc.addObject("Mesh::Feature", name)
         obj.Mesh = mesh
         obj.Label = tr("Simulated stock") if name == "CAM2027SimStock" else tr("Gouges")
@@ -1322,7 +1330,8 @@ def show_material_result(proj, rep):
 
 
 def material_report_text(rep):
-    lines = [tr("Material check (height map, {res} mm grid, 3 axes)", res="%g" % rep["resolution"]),
+    lines = [tr("Material check (radius map around the A axis, {res} mm grid)", res="%g" % rep["resolution"])
+             if rep.get("rotary") else tr("Material check (height map, {res} mm grid, 3 axes)", res="%g" % rep["resolution"]),
              tr("Removed: {v} cm3", v="%.1f" % (rep["removed_volume"] / 1000.0))]
     if not rep.get("simulated"):  # tout sauté (axe A, palpage, outil inconnu) : rien n'a été contrôlé
         lines.append(tr("No operation simulated: gouges not checked"))
@@ -1367,7 +1376,8 @@ def material_report_text(rep):
     from . import twosided as tsgui
 
     lines += tsgui.report_lines(rep)
-    lines.append(tr("Not checked: vertical walls and undercuts (height map), A axis operations."))
+    lines.append(tr("Not checked: undercuts seen from the A axis, tool holder and clamps (round stock).") if rep.get("rotary")
+                 else tr("Not checked: vertical walls and undercuts (height map), A axis operations."))
     return "\n".join(lines)
 
 

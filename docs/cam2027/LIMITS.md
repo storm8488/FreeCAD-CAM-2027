@@ -209,7 +209,7 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - Contrôle matière (Simuler > Contrôle matière et collisions) : carte de hauteur 3 axes à 0,5 mm ; une colonne ne
   voit que le dessus : parois verticales, contre-dépouilles et collisions porte-outil / brides ne sont
   pas contrôlées (dit dans le rapport). Fraises autres que plate / boule / torique / conique simulées
-  comme plates (signalé). Brut rond (4e axe) refusé. Une entaille est un écart de plus de 0,02 mm sous
+  comme plates (signalé). Brut rond (4e axe) : carte de rayon **[C4]**, voir « 4e axe ». Une entaille est un écart de plus de 0,02 mm sous
   le dessus de la pièce au centre d'une colonne, ou à 0,05 mm de lui (colonne pile sur une paroi
   verticale) ; les trous filetés sont comptés creusés jusqu'au diamètre majeur du filet. Dogbones : la zone balayée
   par la fraise le long de chaque os (aller-retour du coin à la pointe, fraise + une maille) est exclue des
@@ -296,7 +296,12 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   chaque bord de pièce peut perdre jusqu'à `res·√2/2` mm (0,4 mm sur 300 × 300) ; grand panneau
   (1220 × 2440, grille de 2 mm) : calcul plus long (une FFT par rotation et par pièce, non mesuré sur
   50 pièces). Placement glouton (dessus le plus bas), pas d'optimisation globale de l'ordre ; les trous des
-  pièces ne reçoivent pas d'autres pièces ; sens du fil non géré. Plusieurs panneaux : posés côte à côte
+  pièces ne reçoivent pas d'autres pièces (sauf une pièce gardée avec son cadre **[C4]**). **[C4] Sens du fil** :
+  par pièce, libre, le long de X (0 / 180°) ou de Y (90 / 270°) ; le fil du panneau est toujours le long de son
+  X (tourner le panneau = échanger largeur et longueur). **Pièces gardées ensemble** (même nom de groupe) : placées
+  comme une seule pièce rigide, telles que dessinées l'une par rapport à l'autre (même rotation, même
+  déplacement) ; angles permis = ceux communs aux sens du fil du groupe (contradiction refusée) ; les copies
+  d'un dessin groupé sont placées seules (même sens du fil). Plusieurs panneaux : posés côte à côte
   dans le document ; le job « panneau » est créé sur le premier : les dessins des panneaux suivants sont
   alors hors du brut (à déplacer dans un autre projet avant « Brut et montage » ; pas de job par panneau).
 
@@ -317,10 +322,16 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
 - **[S4] Usinage rotatif continu** (Usiner > Usinage rotatif) : **contour et poche enroulés** d'un dessin
   déroulé et **finition 3D rotative** de la pièce, en G93 comme la gravure enroulée (mêmes contrôles d'export,
   même aperçu « (preview) »). Compensation du rayon d'outil faite dans le plan réel au rayon de chaque
-  niveau (le dessin déroulé est à l'échelle du brut) ; l'outil reste radial (Y fixe, pas de décalage en Y) :
-  les parois d'une poche enroulée ne sont pas des plans radiaux, elles s'écartent d'au plus
-  `rayon outil × passe / rayon` entre deux niveaux (0,04 mm pour une fraise de 3 mm, passe 0,5 mm, R18) ;
-  angles de la poche au rayon de la fraise. Contour : extérieur / intérieur / sur le trait, pas d'entrée en
+  niveau (le dessin déroulé est à l'échelle du brut). Sans l'option « Parois radiales », l'outil reste radial
+  (Y fixe) : les parois d'une poche enroulée ne sont pas des plans radiaux, elles s'écartent d'au plus
+  `rayon outil × passe / rayon` entre deux niveaux (0,04 mm pour une fraise de 3 mm, passe 0,5 mm, R18 ; 0,26 mm
+  en une passe de 3 mm à R17). **[C4] Parois radiales** (case cochée par défaut dans le dialogue, fraise plate
+  seulement ; projets existants inchangés) : après le vidage de chaque niveau, une passe de paroi tourne A
+  jusqu'au contact et décale la fraise en Y d'un rayon d'outil (X, Y, Z et A ensemble, G93) ; paroi droite le
+  long de X ou de l'angle : plan radial à 0,004 mm mesuré ; paroi oblique dans le dessin déroulé : surface
+  hélicoïdale, la normale est prise au rayon du niveau (écart non mesuré au-dessus) ; aux angles rentrants la
+  fraise pivote sur place d'une paroi à l'autre (avance comptée sur un quart du déplacement de l'axe de la fraise
+  à la surface du brut). Angles de la poche au rayon de la fraise. Contour : extérieur / intérieur / sur le trait, pas d'entrée en
   arc ni d'attaches ; poche : anneaux décalés du centre vers les parois, plongée verticale (pas de rampe ni
   d'hélice), liaisons à la profondeur seulement dans la zone déjà vidée. Finition 3D rotative : lignes le long
   de l'axe (aller-retour) ou spirale **[B4]** (A sur autant de tours que de pas le long de X : refusée si la course
@@ -329,8 +340,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   OpenCamLib sur la pièce tournée (exactes pour une fraise pointée vers l'axe) ; surépaisseur appliquée
   radialement (pas normale à la surface) ; niveaux d'ébauche radiaux optionnels depuis le brut rond, sans
   contrôle d'engagement (passe pleine largeur) ; contre-dépouilles par rapport à la direction radiale non
-  usinées. Contrôle matière 3 axes non applicable (opérations sur A sautées) : la vérification passe par une
-  carte radiale (`rotary.RadialMap`) dans les tests seulement. Opérations figées à leur création pour
+  usinées. **[C4] Contrôle matière sur brut rond** (`sim_rotary.py`, même commande) : carte de rayon sur le
+  cylindre déroulé (0,5 mm en X et en arc au rayon du brut) ; toutes les opérations (enroulées, parois radiales,
+  indexées, 3 axes à A = 0) simulées par la même géométrie (fraise verticale dans le repère tourné : plate,
+  boule, conique, torique). Entaille = rayon de la pièce (triangulée, à 0,05 mm près latéralement) moins le rayon
+  le plus bas atteint par la fraise. La carte ne garde qu'une surface par rayon : une coupe qui laisse de la
+  matière au-delà de la fraise sur un même rayon (trou sous la surface) n'abaisse pas la surface (reste
+  surestimé) et un rapide n'y est pas compté ; pièce vue de l'axe (contre-dépouilles non contrôlées) ;
+  porte-outil, longueur de coupe et brides « non contrôlé ». Opérations figées à leur création pour
   l'outil et le dessin (recréer pour les changer), recalculées à chaque « Recalculer ».
 - FreeCAD 1.0 replie A dans ±180° avant le postprocesseur, même pour un placement neutre
   (`PathUtils.getPathWithPlacement` → `Command.transform`). Pendant l'export, CAM2027 applique la
@@ -417,8 +434,14 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   (identifiant SVG). L'outil est cherché par nom, sinon par type et diamètre, dans la bibliothèque du
   projet ; les habillages (attaches, rampes) ne sont pas enregistrés. Calques DXF : seulement quand l'import
   de l'interface les crée (groupes / calques Draft) ; en console, le lecteur DXF ne les garde pas.
-- **Dessin vectoriel** : pas d'édition de nœuds ni de dessin à main levée (rectangles, cercles, polylignes :
-  importer un SVG / DXF) ; le texte est figé à la création (changer le texte = le redessiner). Contours de
+- **Dessin vectoriel** : **[C4]** rectangle (coins arrondis, rotation), cercle, polygone régulier et texte sont des
+  objets paramétriques (« Modifier le vecteur », double-clic) ; « Modifier les nœuds » : tableau X / Y (déplacer,
+  supprimer, fermé ou non) pour les formes à côtés droits seulement (rectangle sans arrondi, polygone, polyligne ;
+  un rectangle ou un polygone devient alors une polyligne) ; pas d'ajout de nœud, pas de courbes de Bézier, pas
+  de glisser-déposer dans la vue 3D, pas de dessin à main levée. Les vecteurs importés (SVG / DXF) et les
+  résultats de décalage / booléens / miroir / copies restent figés. Après modification, les opérations qui
+  usinent le vecteur ou sa face reprennent **toutes** ses faces / arêtes (une sélection partielle de quelques
+  lettres devient le texte entier). Contours de
   police approchés par des polygones à 0,01 mm (sortie en G1). Le texte sur courbe suit le côté gauche du
   vecteur (inverser le vecteur pour passer de l'autre côté) ; une courbe à plusieurs arêtes est approchée par
   une B-spline. Les booléens et le décalage travaillent sur les contours **fermés** seulement. Polices
