@@ -195,3 +195,16 @@ Finition 3D du chauffage : l'ancien parcours passait sous le couvercle du second
 intégration : 213 tests sur 1.1.4 et 1.0.2 (2 ignorés sur 1.0), 48 scénarios sans problème, smoke 1.0, matrice
 90 cas : 6 collisions de longueur de coupe / porte-outil (les mêmes qu'avant), aucune entaille, plantage ni
 dépassement de temps ; aucun processus au-delà de 8 Go.
+
+### Intégration des finitions du 2026-10-23 (avant `25562b8` / après `ddec025c`, FreeCAD 1.1.4 seulement)
+
+Benchmarks (même tableau que ci-dessus, avant / après alternés) : aucun écart au-delà du bruit (calcul et contrôle à
+±10 %), mêmes commandes au bruit de l'adaptative près, mêmes volumes, entaille 0 partout (plateau : finition 3D
+11,5 / 10,5 s, adaptative 3,6 / 3,6 s, ébauche 3D 14,5 / 14,7 s, poche 6,6 / 6,6 s, Z constant 5,4 / 5,2 s ;
+chauffage : finition 3D 66,2 / 66,9 s, ébauche 3D 21,3 / 21,1 s, adaptative 8,8 / 8,8 s).
+
+Suite complète : 261 tests OK (2 échecs attendus) ; matrice 90 cas : les 6 mêmes collisions de longueur de coupe /
+porte-outil, aucune entaille ; aucun processus au-delà de 8 Go. Scénarios (63) : **47 signalements, tous connus**
+— sondes d'interface figée de C2 (46) : rafraîchissement du panneau Projet qui relit chaque parcours (`path_stats`,
+0,4–0,6 s par parcours) en fin de longue session (1 seul signalement quand les scénarios C2 tournent seuls : premier
+chargement d'un module, 1,3 s) ; `c3-memory-cycles` : mémoire +59 à +98 Mo par cycle (montée connue, non résolue).
