@@ -1539,5 +1539,15 @@
   "Raise the light areas (instead of the dark ones)": "Lever les zones claires (au lieu des sombres)",
   "Dark shapes become rounded domes, flat beyond the rounding width; for a drawing, keep the resolution high (400) so thin lines stay sharp. The relief bottom is at Z 0; machine it with 3D roughing and 3D finishing (small ball end mill).": "Les formes sombres deviennent des dômes arrondis, plats au-delà de la largeur d'arrondi ; pour un dessin, gardez une résolution élevée (400) pour que les traits fins restent nets. Le dessous du relief est à Z 0 ; usinez-le avec l'ébauche 3D puis la finition 3D (petite fraise boule).",
   "no shape found in the image at this threshold": "aucune forme trouvée dans l'image à ce seuil",
-  "unknown relief source: {s}": "source de relief inconnue : {s}"
+  "unknown relief source: {s}": "source de relief inconnue : {s}",
+  "AI depth (Depth Anything): photos, illustrations": "Profondeur par IA (Depth Anything) : photos, illustrations",
+  "Download the AI model (about 110 MB)...": "Télécharger le modèle d'IA (environ 110 Mo)...",
+  "Far = high (invert)": "Loin = haut (inverser)",
+  "An AI model estimates the depth of the image (near = high): the volume of a photo or an illustration. Keep some grey levels to carve the lines of a drawing into the volume. Runs on this computer, nothing is sent.": "Un modèle d'IA estime la profondeur de l'image (proche = haut) : le volume d'une photo ou d'une illustration. Gardez une part des niveaux de gris pour creuser les traits d'un dessin dans le volume. Calculé sur cet ordinateur, rien n'est envoyé.",
+  "AI depth": "Profondeur par IA",
+  "Download onnxruntime (about 12 MB) and the Depth Anything V2 Small model (about 100 MB, Apache 2.0 licence) from the Internet into {folder}? The model then runs on this computer; no image is sent.": "Télécharger depuis Internet onnxruntime (environ 12 Mo) et le modèle Depth Anything V2 Small (environ 100 Mo, licence Apache 2.0) dans {folder} ? Le modèle tourne ensuite sur cet ordinateur ; aucune image n'est envoyée.",
+  "Downloading the AI model...": "Téléchargement du modèle d'IA...",
+  "onnxruntime could not be installed: {error}": "onnxruntime n'a pas pu être installé : {error}",
+  "the AI depth model is not usable after installation": "le modèle de profondeur n'est pas utilisable après l'installation",
+  "the AI depth model is not installed": "le modèle de profondeur par IA n'est pas installé"
 }

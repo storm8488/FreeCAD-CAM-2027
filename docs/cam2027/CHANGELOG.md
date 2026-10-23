@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- **Relief depuis une image : profondeur par IA**. Troisième choix « Hauteur d'après » : un modèle Depth Anything V2
+  Small (licence Apache 2.0, format ONNX) estime la profondeur de l'image (proche = haut), le volume d'une photo ou
+  d'une illustration ; une part des niveaux de gris y creuse les traits d'un dessin. Rien n'est installé d'office :
+  le bouton « Télécharger le modèle d'IA » demande l'accord, puis place onnxruntime 1.20.1 (pip, sans dépendances) et
+  le modèle (99 Mo) dans `%LOCALAPPDATA%\CAM2027\depth` (ou `CAM2027_DEPTH_DIR`), hors du Python de FreeCAD. Calcul
+  sur l'ordinateur, aucune image envoyée : 0,2 s pour l'image, 35 s pour le relief du dragon à 400 points.
 - **Relief depuis une image : formes gonflées** (dessins au trait, logos, silhouettes). Un dessin n'est pas une carte
   de profondeur : en niveau de gris, ses traits donnaient des creux et bosses partout (dragon de l'utilisateur). Choix
   « Hauteur d'après » : niveau de gris (cartes de profondeur, comme avant) ou formes gonflées — les formes sombres (ou

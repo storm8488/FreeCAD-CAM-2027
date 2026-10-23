@@ -71,5 +71,47 @@ class TestReliefInflate(unittest.TestCase):
             relief.inflate_grid(self.path, 100.0, 5.0, cells=100, threshold=0.0)
 
 
+
+class TestReliefDepth(unittest.TestCase):
+    """Profondeur estimée par l'IA (Depth Anything V2 Small, installée à la demande : test ignoré sans elle)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.path = os.path.join(tempfile.mkdtemp(prefix="cam2027-depth-"), "shapes.png")
+        _image(cls.path)
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def test_not_available_in_an_empty_folder(self):
+        old = os.environ.get("CAM2027_DEPTH_DIR")
+        os.environ["CAM2027_DEPTH_DIR"] = tempfile.mkdtemp(prefix="cam2027-nodepth-")
+        try:
+            self.assertFalse(relief.depth_available())
+            with self.assertRaises(Exception):
+                relief.depth_grid(self.path, 50)
+        finally:
+            if old is None:
+                del os.environ["CAM2027_DEPTH_DIR"]
+            else:
+                os.environ["CAM2027_DEPTH_DIR"] = old
+
+    def test_depth_grid_and_relief(self):
+        if not relief.depth_available():
+            self.skipTest("AI depth model not installed")
+        grid, size = relief.depth_grid(self.path, 60, grey_mix=0.25)
+        self.assertEqual(size, (200, 100))
+        self.assertEqual((len(grid), len(grid[0])), (60, 30))
+        values = [v for col in grid for v in col]
+        self.assertGreaterEqual(min(values), 0.0)
+        self.assertLessEqual(max(values), 1.0)
+        self.assertGreater(max(values) - min(values), 0.2)  # une vraie variation de profondeur
+        doc = FreeCAD.newDocument("DepthRelief")
+        obj, _w = relief.make_relief(doc, self.path, 100.0, 4.0, base=2.0, cells=60, source="depth", smoothing=0)
+        self.assertTrue(obj.Shape.isValid())
+        self.assertEqual(obj.ReliefSource, "depth")
+
+
 if __name__ == "__main__":
     unittest.main()

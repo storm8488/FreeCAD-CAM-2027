@@ -42,6 +42,9 @@ class ReliefDialog(QtWidgets.QDialog):
         self.source = QtWidgets.QComboBox()
         self.source.addItem(tr("Grey level (light = high): depth maps"), "grey")
         self.source.addItem(tr("Inflated shapes: drawings, logos, line art"), "inflate")
+        self.source.addItem(tr("AI depth (Depth Anything): photos, illustrations"), "depth")
+        self.depth_button = QtWidgets.QPushButton(tr("Download the AI model (about 110 MB)..."))
+        self.depth_button.clicked.connect(self.install_depth)
         self.threshold = self._spin(0.05, 0.95, 0.5, 2)
         self.threshold.setSingleStep(0.05)
         self.threshold.setToolTip(tr("Grey level separating the shapes from the background (0 black, 1 white)."))
@@ -52,6 +55,7 @@ class ReliefDialog(QtWidgets.QDialog):
         self.grey_mix.setSuffix(" %")
         self.grey_mix.setToolTip(tr("Share of the grey levels kept on top of the inflated shapes (shading of the drawing)."))
         form.addRow(tr("Height from"), self.source)
+        form.addRow("", self.depth_button)
         form.addRow(tr("Width X (mm)"), self.width)
         form.addRow(tr("Length Y (from the image ratio)"), self.length)
         form.addRow(tr("Relief height (mm)"), self.height)
@@ -78,13 +82,21 @@ class ReliefDialog(QtWidgets.QDialog):
         self._update_source()
 
     def _update_source(self, *_args):
-        inflate = self.source.currentData() == "inflate"
+        source = self.source.currentData()
+        inflate = source == "inflate"
         for widget in self._inflate_rows:
-            widget.setVisible(inflate)
+            shown = inflate or (source == "depth" and widget is self.grey_mix)
+            widget.setVisible(shown)
             label = self._form.labelForField(widget)
             if label is not None:
-                label.setVisible(inflate)
-        if inflate:
+                label.setVisible(shown)
+        missing = source == "depth" and not relief.depth_available()
+        self.depth_button.setVisible(missing)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self._size_px is not None and not missing)
+        if source == "depth":
+            self.invert.setText(tr("Far = high (invert)"))
+            self.hint.setText(tr("An AI model estimates the depth of the image (near = high): the volume of a photo or an illustration. Keep some grey levels to carve the lines of a drawing into the volume. Runs on this computer, nothing is sent."))
+        elif inflate:
             self.invert.setText(tr("Raise the light areas (instead of the dark ones)"))
             self.hint.setText(tr("Dark shapes become rounded domes, flat beyond the rounding width; for a drawing, keep the resolution high (400) so thin lines stay sharp. The relief bottom is at Z 0; machine it with 3D roughing and 3D finishing (small ball end mill)."))
         else:
@@ -117,7 +129,8 @@ class ReliefDialog(QtWidgets.QDialog):
                 self._size_px = (img.width(), img.height())
                 self.preview.setPixmap(QtGui.QPixmap.fromImage(img).scaled(
                     220, 120, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(self._size_px is not None)
+        if hasattr(self, "hint"):  # OK : image lue (et modèle d'IA présent pour la profondeur)
+            self._update_source()
         self._update_length()
 
     def _update_length(self, *_args):
@@ -126,6 +139,33 @@ class ReliefDialog(QtWidgets.QDialog):
             return
         w, h = self._size_px
         self.length.setText("%.1f mm  (%d x %d px)" % (self.width.value() * h / float(w), w, h))
+
+    def install_depth(self):
+        """Téléchargement du modèle de profondeur, seulement après l'accord de l'utilisateur."""
+        answer = QtWidgets.QMessageBox.question(
+            self, tr("AI depth"),
+            tr("Download onnxruntime (about 12 MB) and the Depth Anything V2 Small model (about 100 MB, Apache 2.0 licence) from the Internet into {folder}? The model then runs on this computer; no image is sent.", folder=relief.depth_dir()))
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+        wait = QtWidgets.QProgressDialog(tr("Downloading the AI model..."), "", 0, 0, self)
+        wait.setCancelButton(None)
+        wait.setWindowModality(QtCore.Qt.WindowModal)
+        wait.show()
+
+        def progress(text):
+            wait.setLabelText(tr("Downloading the AI model...") + chr(10) + text)
+            QtWidgets.QApplication.processEvents()
+
+        try:
+            relief.install_depth(progress)
+        except Exception as exc:
+            wait.close()
+            from ..i18n import tr_msg
+
+            QtWidgets.QMessageBox.warning(self, tr("AI depth"), tr_msg(exc))
+            return
+        wait.close()
+        self._update_source()
 
     def options(self):
         """Arguments de ``Project.import_relief``."""

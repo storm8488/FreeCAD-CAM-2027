@@ -82,7 +82,118 @@ def load_heightmap(path, cells=DEFAULT_CELLS):
 
 #: plus grand côté (px) de l'image analysée pour le gonflage (distance au bord à la résolution de l'image)
 INFLATE_MAX_PX = 1600
-SOURCES = ("grey", "inflate")
+SOURCES = ("grey", "inflate", "depth")
+
+# -- profondeur par IA (Depth Anything V2 Small, Apache-2.0), installée à la demande -------------------------------
+#: modèle ONNX et paquet onnxruntime, hors du Python de FreeCAD (dossier de l'utilisateur)
+DEPTH_MODEL_URL = "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx"
+DEPTH_MODEL_FILE = "depth_anything_v2_small.onnx"
+DEPTH_RUNTIME = "onnxruntime==1.20.1"
+DEPTH_SIZE = 518  # côté de l'image vue par le modèle (multiple de 14)
+
+
+def depth_dir():
+    """Dossier du modèle et d'onnxruntime : ``CAM2027_DEPTH_DIR`` ou ``%LOCALAPPDATA%/CAM2027/depth``."""
+    if os.environ.get("CAM2027_DEPTH_DIR"):
+        return os.environ["CAM2027_DEPTH_DIR"]
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "CAM2027", "depth")
+
+
+def _onnxruntime():
+    import sys
+
+    site = os.path.join(depth_dir(), "site")
+    if os.path.isdir(site) and site not in sys.path:
+        sys.path.insert(0, site)
+    import onnxruntime
+
+    return onnxruntime
+
+
+def depth_available():
+    """True si le modèle et onnxruntime sont installés (rien n'est téléchargé ici)."""
+    if not os.path.isfile(os.path.join(depth_dir(), DEPTH_MODEL_FILE)):
+        return False
+    try:
+        _onnxruntime()
+    except Exception:
+        return False
+    return True
+
+
+def install_depth(progress=None):
+    """Installe onnxruntime (pip, dossier à part, sans dépendances : numpy suffit) et télécharge le modèle (~100 Mo).
+    À appeler seulement après l'accord de l'utilisateur. ``progress(texte)`` est appelé pendant le travail."""
+    import subprocess
+    import urllib.request
+
+    folder = depth_dir()
+    os.makedirs(folder, exist_ok=True)
+    say = progress or (lambda _text: None)
+    try:
+        _onnxruntime()
+    except Exception:
+        say("onnxruntime")
+        python = os.path.join(FreeCAD.getHomePath(), "bin", "python.exe")
+        proc = subprocess.run([python, "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "--target",
+                               os.path.join(folder, "site"), DEPTH_RUNTIME], capture_output=True, text=True,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if proc.returncode != 0:
+            raise UserError("onnxruntime could not be installed: {error}", error=(proc.stderr or proc.stdout)[-300:])
+    model = os.path.join(folder, DEPTH_MODEL_FILE)
+    if not os.path.isfile(model):
+        part = model + ".part"
+        with urllib.request.urlopen(DEPTH_MODEL_URL, timeout=60) as response, open(part, "wb") as fp:
+            total = int(response.headers.get("Content-Length") or 0)
+            done = 0
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                fp.write(chunk)
+                done += len(chunk)
+                say("model %d / %d MB" % (done >> 20, total >> 20) if total else "model %d MB" % (done >> 20))
+        os.replace(part, model)
+    if not depth_available():
+        raise UserError("the AI depth model is not usable after installation")
+
+
+def depth_grid(path, cells=DEFAULT_CELLS, grey_mix=0.0):
+    """Hauteurs [0, 1] estimées par Depth Anything V2 Small (proche = haut) : le volume d'une photo ou d'une
+    illustration ; ``grey_mix`` (0..1) y ajoute les niveaux de gris (clair = haut : les traits sombres d'un dessin
+    se creusent dans le volume). Même grille que ``load_heightmap``."""
+    import numpy as np
+    from scipy import ndimage
+
+    if not depth_available():
+        raise UserError("the AI depth model is not installed")
+    grey, (w_px, h_px) = load_grey_array(path)
+    QtCore, QtGui = _qt()
+    img = QtGui.QImage(path).convertToFormat(QtGui.QImage.Format_RGB888)
+    scale = float(DEPTH_SIZE) / max(w_px, h_px)
+    mw, mh = (max(14, int(round(v * scale / 14.0)) * 14) for v in (w_px, h_px))
+    img = img.scaled(mw, mh, QtCore.Qt.IgnoreAspectRatio, QtCore.Qt.SmoothTransformation)
+    rgb = np.frombuffer(bytes(img.constBits()), np.uint8).reshape(mh, img.bytesPerLine())[:, :mw * 3]
+    rgb = rgb.reshape(mh, mw, 3) / 255.0
+    x = ((rgb - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]).transpose(2, 0, 1)[None].astype(np.float32)
+    ort = _onnxruntime()
+    session = ort.InferenceSession(os.path.join(depth_dir(), DEPTH_MODEL_FILE), providers=["CPUExecutionProvider"])
+    depth = session.run(None, {session.get_inputs()[0].name: x})[0].reshape(mh, mw).astype(np.float64)
+    span = depth.max() - depth.min()
+    depth = (depth - depth.min()) / span if span > 0 else np.zeros_like(depth)
+    cells = max(MIN_CELLS, min(MAX_CELLS, int(cells)))
+    s = min(1.0, float(cells) / max(w_px, h_px))
+    nx, ny = max(2, int(round(w_px * s))), max(2, int(round(h_px * s)))
+    small = ndimage.zoom(depth, (ny / float(mh), nx / float(mw)), order=1)[:ny, :nx]
+    mix = min(1.0, max(0.0, float(grey_mix)))
+    if mix:
+        factor = grey.shape[1] / float(nx)
+        g = ndimage.gaussian_filter(grey, sigma=0.5 * factor) if factor > 1.0 else grey
+        g = ndimage.zoom(g, (ny / float(grey.shape[0]), nx / float(grey.shape[1])), order=1)[:ny, :nx]
+        small = (1.0 - mix) * small + mix * g
+    small = np.clip(small, 0.0, 1.0)
+    return [[float(small[ny - 1 - j, i]) for j in range(ny)] for i in range(nx)], (w_px, h_px)
 
 
 def load_grey_array(path, max_px=INFLATE_MAX_PX):
@@ -227,8 +338,8 @@ def build_shape(heights, width, length, z_bottom=0.0):
 def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothing=1, cells=DEFAULT_CELLS,
                 z_bottom=0.0, label=None, source="grey", threshold=0.5, rounding=3.0, grey_mix=0.0):
     """Crée l'objet « Relief » (Part::Feature) ; retourne ``(objet, avertissements)``. ``source`` : ``grey``
-    (niveau de gris = hauteur) ou ``inflate`` (formes gonflées, voir ``inflate_grid`` ; ``invert`` y lève les
-    zones claires au lieu des sombres)."""
+    (niveau de gris = hauteur), ``inflate`` (formes gonflées, voir ``inflate_grid`` ; ``invert`` y lève les zones
+    claires au lieu des sombres) ou ``depth`` (profondeur estimée par l'IA, voir ``depth_grid``)."""
     if width <= 0 or relief_height <= 0:
         raise UserError("width and relief height must be positive")
     if base <= 0:
@@ -238,6 +349,9 @@ def make_relief(doc, path, width, relief_height, base=2.0, invert=False, smoothi
     if source == "inflate":
         grid, (w_px, h_px) = inflate_grid(path, width, relief_height, cells, threshold, invert, rounding, grey_mix)
         heights = relief_heights(grid, relief_height, base, False, smoothing, z_bottom)
+    elif source == "depth":
+        grid, (w_px, h_px) = depth_grid(path, cells, grey_mix)
+        heights = relief_heights(grid, relief_height, base, invert, smoothing, z_bottom)
     else:
         grid, (w_px, h_px) = load_heightmap(path, cells)
         heights = relief_heights(grid, relief_height, base, invert, smoothing, z_bottom)
