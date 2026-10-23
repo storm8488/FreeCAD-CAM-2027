@@ -300,6 +300,55 @@ class TestBitmap(unittest.TestCase):
         self.assertEqual(len(face.Faces), 2)
         self.assertTrue(face.isValid())
 
+    def test_vcarve_face_domain_matches_freecad(self):
+        """V-carving : le classement dedans / dehors rapide (25 min -> 16 s sur le dragon vectorisé) est installé
+        sur FreeCAD 1.1.4 et donne la réponse de ``Face.isPartOfDomain`` (face trouée, points sur les bords)."""
+        from cam2027.project import operations
+
+        mod = operations.strategy_module("vcarve")
+        self.assertTrue(getattr(mod.ObjectVcarve.buildMedialWires, "cam2027_patched", False))
+        outer = Part.makePolygon([V(0, 0, 0), V(40, 0, 0), V(40, 30, 0), V(20, 45, 0), V(0, 30, 0), V(0, 0, 0)])
+        hole = Part.makePolygon([V(10, 10, 0), V(25, 10, 0), V(25, 20, 0), V(10, 20, 0), V(10, 10, 0)])
+        face = Part.makeFace([outer, hole], "Part::FaceMakerBullseye")
+        loops = [[v.Point for v in w.OrderedVertexes] for w in face.Wires]
+        loops = [pts + [pts[0]] for pts in loops]
+        domain = operations._FaceDomain(loops)
+        points = [(x * 0.5, y * 0.5) for x in range(-4, 86) for y in range(-4, 96)]
+        points += [(0.0, 15.0), (10.0, 15.0), (17.5, 10.0), (30.0, 37.5), (40.0, 0.0)]  # sur les bords
+        for x, y in points:
+            u, v = face.Surface.parameter(V(x, y, 0))
+            self.assertEqual(domain.exterior(x, y), not face.isPartOfDomain(u, v), (x, y))
+
+    def test_vcarve_depth_stays_inside_corners(self):
+        """V-carving d'un L (coin rentrant) au V-bit 60° : FreeCAD interpole la profondeur en ligne droite le long
+        des arêtes qui touchent le coin et le V-bit mordait le bord ; recalculée le long de ces arêtes, la largeur
+        du V à chaque point reste dans la face (à 0,005 mm près)."""
+        import types
+        from cam2027.project import operations
+
+        mod = operations.strategy_module("vcarve")
+        self.assertTrue(getattr(mod._getPartEdges, "cam2027_patched", False))
+        outer = Part.makePolygon([V(0, 0, 0), V(30, 0, 0), V(30, 12, 0), V(12, 12, 0), V(12, 30, 0), V(0, 30, 0),
+                                  V(0, 0, 0)])
+        face = Part.Face(outer)
+        scale = 1.0 / math.tan(math.radians(30.0))
+        obj = types.SimpleNamespace(Discretize=0.25, Colinear=10.0)
+        wires = mod.ObjectVcarve.buildMedialWires(types.SimpleNamespace(), obj, [face])[face]
+        self.assertTrue(wires)
+
+        def worst(get_edges):
+            geom = mod._Geometry(0.0, -100.0, scale, 0)
+            out = 0.0
+            for w in wires:
+                for edge in get_edges(obj, w, geom):
+                    for u in [edge.FirstParameter + k * (edge.LastParameter - edge.FirstParameter) / 8 for k in range(9)]:
+                        p = edge.valueAt(u)
+                        out = max(out, -p.z / scale - outer.distToShape(Part.Vertex(V(p.x, p.y, 0)))[0])
+            return out
+
+        self.assertLess(worst(mod._getPartEdges), 0.005)
+        self.assertGreater(worst(mod._getPartEdges.cam2027_original), 0.05)  # FreeCAD seul mordait le bord
+
     def test_photo_vcarve_depth_follows_grey(self):
         """Dégradé blanc -> noir de gauche à droite, 60 x 40 mm, profondeur maximale 2 mm au V-bit 60° : sur la
         carte de hauteur simulée, profondeur du trait = 2 x sombre (± 0,1), jamais plus de 2 mm, rien dans le blanc."""

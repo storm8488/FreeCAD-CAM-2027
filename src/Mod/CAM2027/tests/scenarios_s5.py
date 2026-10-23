@@ -300,12 +300,65 @@ def scenario_decor(gs, scenario, files):
     gs.pump(0.3)
 
 
+#: dessin de l'utilisateur (hors dépôt) : V-carving en « Échec » sur son tracé, puis 25 min de calcul
+DRAGON_PNG = os.path.join(os.path.expanduser("~"), "Downloads", "Nano Banana-2026-10-10-21-02-54.png")
+
+
+def scenario_dragon_vcarve(gs, scenario):
+    """Comme l'utilisateur : vectoriser le dragon (94,8 mm), panneau, V-carving du tracé, calcul : opération
+    calculée (pas « Échec ») en moins de 2 minutes."""
+    import time
+
+    if not os.path.exists(DRAGON_PNG):
+        gs.log("  skipped: %s not found" % DRAGON_PNG)
+        return
+    proj = gs.new_project(scenario, "Dragon")
+    if proj is None:
+        return
+
+    def trace(dlg):
+        dlg.width.setValue(94.8)
+        return True
+
+    gs.driver.open_files.append(DRAGON_PNG)
+    gs.driver.handlers[gs.tr("Trace bitmap")] = trace
+    gs.run_command(scenario, "CAM2027_TraceBitmap")
+    proj = gs.project()
+    traced = [o for o in proj.doc.Objects if o.Label == os.path.splitext(os.path.basename(DRAGON_PNG))[0]]
+    if not traced:
+        gs.problem(scenario, "Trace bitmap created no vector")
+        return
+    gs.driver.handlers[gs.tr("Stock & fixture")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "sheet"), "sheet"), True)[1]
+    gs.run_command(scenario, "CAM2027_StockFixture")
+    proj = gs.project()
+    if not proj.has_job:
+        gs.problem(scenario, "sheet job not created under the traced image")
+        return
+    FreeCADGui.Selection.clearSelection()
+    FreeCADGui.Selection.addSelection(traced[0])
+    gs.driver.handlers[gs.tr("Add operation")] = lambda dlg: (gs.combo_select(gs.find_combo_with(dlg, "vcarve"), "vcarve"), True)[1]
+    t = time.time()
+    gs.run_command(scenario, "CAM2027_AddOperation")
+    gs.accept_open_editors(scenario)
+    gs.run_command(scenario, "CAM2027_Compute")
+    proj = gs.project()
+    states = [(o.Label, proj.operation_state(o), len(o.Path.Commands)) for o in proj.operations()]
+    gs.log("  dragon V-carve: %s in %.1f s" % (states, time.time() - t))
+    if len(states) != 1 or states[0][1] != "computed" or states[0][2] < 1000:
+        gs.problem(scenario, "V-carve of the traced dragon not computed: %s" % states)
+    if time.time() - t > 120.0:
+        gs.problem(scenario, "V-carve of the traced dragon took %.0f s" % (time.time() - t))
+    FreeCAD.closeDocument(proj.doc.Name)
+    gs.pump(0.3)
+
+
 def entries(gs, files, tmp):
     """(nom, fonction) des scénarios S5 pour la boucle de ``gui_scenarios.main``."""
     return (
         ("s5-templates", lambda: scenario_templates(gs, "s5-templates", tmp)),
         ("s5-vectors", lambda: scenario_vectors(gs, "s5-vectors")),
         ("s5-bitmap", lambda: scenario_bitmap(gs, "s5-bitmap", tmp)),
+        ("s5-dragon-vcarve", lambda: scenario_dragon_vcarve(gs, "s5-dragon-vcarve")),
         ("s5-setup-pdf", lambda: scenario_setup_pdf(gs, "s5-setup-pdf", files, tmp)),
         ("s5-decor", lambda: scenario_decor(gs, "s5-decor", files)),
     )

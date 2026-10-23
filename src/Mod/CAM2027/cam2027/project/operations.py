@@ -16,6 +16,7 @@ FreeCAD, engagement contrôlé en 2D).
 from ..i18n import UserError
 import csv
 import importlib
+import math
 import os
 
 STRATEGIES = {
@@ -549,6 +550,8 @@ def strategy_module(kind):
         patch_combine_faces()
     if kind == "pocket2d":
         patch_pocket2d(mod)
+    if kind == "vcarve":
+        patch_vcarve(mod)
     return mod
 
 
@@ -1218,6 +1221,160 @@ def patch_combine_faces():
 
     combine.cam2027_patched = True
     geom.combineHorizontalFaces = combine
+
+
+#: empreinte SHA-1 de ``ObjectVcarve.buildMedialWires`` (FreeCAD 1.1.4)
+VCARVE_MEDIAL_SHA1 = "683dd0b61d57a4f77e67c38515bec448c2c30180"
+#: empreinte SHA-1 de ``Path.Op.Vcarve._getPartEdges`` (FreeCAD 1.1.4)
+VCARVE_EDGES_SHA1 = "268676f93eb4a95dda49d9cfa232a22393a3348d"
+#: pas (mm) des points où la profondeur du V-carving est recalculée le long d'une arête qui touche un coin
+VCARVE_EXACT_STEP = 0.2
+
+
+def _site_distance(cell, p):
+    """Distance de ``p`` à la source d'une cellule de Voronoï (point ou segment du dessin)."""
+    src = cell.getSource(0.0)
+    if cell.containsPoint():
+        return math.hypot(p.x - src.x, p.y - src.y)
+    (a, b) = src
+    dx, dy = b.x - a.x, b.y - a.y
+    n = dx * dx + dy * dy
+    t = 0.0 if n < 1e-24 else min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / n, 0.0), 1.0)
+    return math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y)
+
+
+class _FaceDomain:
+    """Point dans une face plane horizontale, d'après les segments donnés au diagramme de Voronoï (pair-impair,
+    trous compris) ; un point sur un bord (à 1e-7 près) est dans la face, comme pour ``isPartOfDomain``."""
+
+    def __init__(self, loops):
+        import numpy as np
+
+        seg = np.array([(a.x, a.y, b.x, b.y) for ptv in loops for a, b in zip(ptv[:-1], ptv[1:])], dtype=float)
+        self.x0, self.y0, self.x1, self.y1 = seg.T if len(seg) else (np.zeros(0),) * 4
+        self.dx, self.dy = self.x1 - self.x0, self.y1 - self.y0
+        self.len2 = np.maximum(self.dx * self.dx + self.dy * self.dy, 1e-300)
+
+    def exterior(self, x, y):
+        import numpy as np
+
+        t = np.clip(((x - self.x0) * self.dx + (y - self.y0) * self.dy) / self.len2, 0.0, 1.0)
+        d2 = (self.x0 + t * self.dx - x) ** 2 + (self.y0 + t * self.dy - y) ** 2
+        if len(d2) and d2.min() <= 1e-14:
+            return False
+        span = (self.y0 > y) != (self.y1 > y)
+        xs = self.x0[span] + (y - self.y0[span]) * self.dx[span] / self.dy[span]
+        return int(np.count_nonzero(xs > x)) % 2 == 0
+
+
+def patch_vcarve(mod):
+    """V-carving : FreeCAD classe chaque sommet du diagramme de Voronoï (dedans / dehors) avec
+    ``Face.isPartOfDomain``, qui reconstruit son classificateur à chaque appel : 56 ms par sommet sur une face de
+    milliers d'arêtes, 25 min pour un dessin vectorisé (dragon : 20 000 sommets). Copie de ``buildMedialWires``
+    où les faces planes horizontales sont classées sur les segments mêmes du diagramme (numpy) ; les autres
+    gardent le test de FreeCAD.
+
+    Profondeur : FreeCAD la calcule aux deux bouts de chaque arête du diagramme et l'interpole en ligne droite.
+    Le long d'une arête qui touche un coin du dessin (arc de parabole, ou médiatrice de deux coins), la distance
+    au bord est plus petite au milieu qu'aux bouts : le V-bit descendait trop et mordait le bord (0,83 mm sur le
+    dragon vectorisé, fait de milliers de coins). Ces arêtes sont découpées tous les ``VCARVE_EXACT_STEP`` mm,
+    profondeur calculée à chaque point d'après la distance au coin ; les arêtes entre deux segments (distance
+    linéaire) restent celles de FreeCAD. Installée seulement si le code d'origine est exactement celui attendu."""
+    _patch_vcarve_depth(mod)
+    cls = getattr(mod, "ObjectVcarve", None)
+    original = getattr(cls, "buildMedialWires", None)
+    if original is None or getattr(original, "cam2027_patched", False) or _sha1(original) != VCARVE_MEDIAL_SHA1:
+        return
+    import FreeCAD
+    import Path
+
+    def buildMedialWires(self, obj, faces):
+        wires_by_face = dict()
+        self.voronoiDebugCache = dict()
+
+        def is_exterior(vertex, face):
+            vector = FreeCAD.Vector(vertex.toPoint(face.BoundBox.ZMin))
+            (u, v) = face.Surface.parameter(vector)
+            return not face.isPartOfDomain(u, v)
+
+        def insert_many_wires(vd, wires):
+            loops = []
+            for wire in wires:
+                pts = wire.discretize(QuasiDeflection=obj.Discretize)
+                ptv = [FreeCAD.Vector(p.x, p.y) for p in pts]
+                if len(ptv) > 0:
+                    dist = ptv[-1].distanceToPoint(ptv[0])
+                    if dist < FreeCAD.Base.Precision.confusion():
+                        del ptv[-1]
+                ptv.append(ptv[0])
+                for i in range(len(ptv) - 1):
+                    vd.addSegment(ptv[i], ptv[i + 1])
+                loops.append(ptv)
+            return loops
+
+        for f in faces:
+            voronoiWires = []
+            vd = Path.Voronoi.Diagram()
+            loops = insert_many_wires(vd, f.Wires)
+            vd.construct()
+            for e in vd.Edges:
+                if e.isPrimary():
+                    e.Color = mod.BORDERLINE if e.isBorderline() else mod.PRIMARY
+                else:
+                    e.Color = mod.SECONDARY
+            vd.colorColinear(mod.COLINEAR, obj.Colinear)
+            vd.colorExterior(mod.EXTERIOR1)
+            normal = getattr(f.Surface, "Axis", None)
+            if normal is not None and abs(abs(normal.z) - 1.0) < 1e-9:  # CAM2027 : face plane horizontale
+                domain = _FaceDomain(loops)
+                vd.colorExterior(mod.EXTERIOR2, lambda v: domain.exterior(v.toPoint(0.0).x, v.toPoint(0.0).y))
+            else:
+                vd.colorExterior(mod.EXTERIOR2, lambda v: is_exterior(v, f))
+            vd.colorTwins(mod.TWIN)
+            wires = mod._collectVoronoiWires(vd)
+            wires = mod._sortVoronoiWires(wires)
+            voronoiWires.extend(wires)
+            wires_by_face[f] = voronoiWires
+            self.voronoiDebugCache = wires_by_face
+        return wires_by_face
+
+    buildMedialWires.cam2027_patched = True
+    buildMedialWires.cam2027_original = original
+    cls.buildMedialWires = buildMedialWires
+
+
+def _patch_vcarve_depth(mod):
+    original = getattr(mod, "_getPartEdges", None)
+    if original is None or getattr(original, "cam2027_patched", False) or _sha1(original) != VCARVE_EDGES_SHA1:
+        return
+    import FreeCAD
+    import Part
+
+    def exact_edges(e, geom):
+        flat = e.toShape(0.0, 0.0)
+        cell = e.Cell if e.Cell.containsPoint() else e.Twin.Cell
+        n = max(2, int(math.ceil(flat.Length / VCARVE_EXACT_STEP)))
+        params = [flat.FirstParameter + k * (flat.LastParameter - flat.FirstParameter) / n for k in range(n + 1)]
+        d0, d1 = e.getDistances()
+        pts = []
+        for k, u in enumerate(params):
+            p = flat.valueAt(u)
+            d = d0 if k == 0 else d1 if k == n else _site_distance(cell, p)
+            pts.append(FreeCAD.Vector(p.x, p.y, mod._calculate_depth(d, geom)))
+        return [Part.Edge(Part.LineSegment(a, b)) for a, b in zip(pts[:-1], pts[1:]) if (b - a).Length > 1e-9]
+
+    def _getPartEdges(obj, vWire, geom):
+        edges = []
+        for e in vWire:
+            if e.Cell.containsSegment() and e.Twin.Cell.containsSegment():
+                edges.append(mod._getPartEdge(e, geom))  # entre deux segments : distance linéaire, exacte
+            else:
+                edges.extend(exact_edges(e, geom) or [mod._getPartEdge(e, geom)])
+        return edges
+
+    _getPartEdges.cam2027_patched = True
+    _getPartEdges.cam2027_original = original
+    mod._getPartEdges = _getPartEdges
 
 
 def _sha1(fn):

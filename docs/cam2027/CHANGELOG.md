@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **V-carving : 25 min -> 20 s sur un dessin vectorisé, et plus de morsure dans les coins**. FreeCAD classe chaque
+  sommet du diagramme de Voronoï (dedans / dehors) en reconstruisant son classificateur à chaque appel : 56 ms par
+  sommet, 1 505 s pour le dragon vectorisé. Classement refait sur les segments mêmes du diagramme (numpy), G-code
+  identique octet pour octet (133 090 lignes) en 16 s. FreeCAD interpole aussi la profondeur en ligne droite le long
+  des arêtes qui touchent un coin du dessin, où la vraie distance au bord est plus petite au milieu : le V-bit
+  mordait le bord jusqu'à 0,83 mm (contrôle matière : 0,91 mm sur 143 cellules). Ces arêtes sont recalculées tous
+  les 0,2 mm : écart au bord 0,025 mm au plus (mesure), contrôle matière sans entaille, 20 s. Correctifs installés
+  sur FreeCAD 1.1.4 seulement si son code est exactement celui attendu.
 - **Vectorisation d'image : contours qui se croisaient**. La simplification des contours (écart 0,05 mm) faisait
   parfois se recouper un contour (bords proches d'un dessin détaillé) : la face du vecteur était invalide et le
   V-carving du dragon vectorisé finissait en « Échec » (2 669 commandes, parcours incomplet). Les contours recoupés
