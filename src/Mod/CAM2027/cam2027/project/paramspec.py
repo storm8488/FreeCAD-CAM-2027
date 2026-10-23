@@ -35,6 +35,8 @@ PARAM_SPECS = {
     "ExtraOffset": ("Extra offset", "passes", "Material left on the walls (pocket) or added outside (facing)."),
     "OffsetExtra": ("Extra offset", "passes", "Material left on the profile walls (positive = oversize)."),
     "StockToLeave": ("Stock to leave", "passes", "Material left for a finishing operation."),
+    "Resolution": ("Resolution", "passes", "Cell size of the stock model (mm): smaller is more accurate and slower."),
+    "WallPass": ("Wall pass", "passes", "Follow the walls of each region after the raster passes."),
     "Passes": ("Number of passes", "passes", "Radial passes used to reach the full thread depth."),
     "UseComp": ("Cutter compensation", "passes", "Offset the path by the tool radius (G41/G42 not emitted)."),
     "KeepToolDown": ("Keep tool down", "passes", "Avoid retracts between adjacent pocket passes."),

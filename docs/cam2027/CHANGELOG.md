@@ -2,6 +2,17 @@
 
 ## Non publié
 
+- **Ébauche 2,5D sur le modèle de brut** (nouvelle stratégie `stockrough`, fraise plate). Le brut est la carte de
+  hauteur du contrôle matière, mise à jour niveau par niveau ; la pièce entière (tous les corps) borne la
+  descente de la fraise : fonds de poche à toutes les profondeurs en une seule opération (les hauteurs des zones
+  plates deviennent des niveaux), un second corps n'est jamais entaillé. Régions connexes usinées une à une,
+  balayage puis passe le long des parois, entrées en hélice (arcs G2, plongée droite seulement si l'hélice ne
+  tient pas, comptée dans le rapport). Mesuré contre l'ébauche adaptative de FreeCAD (`rough3d`, mêmes pas, fraise
+  6 mm, aucune entaille des deux côtés) : plateau à alvéoles 8,6 s / 117 000 commandes / 717 cm³ enlevés contre
+  33,5 s / 294 000 / 620 cm³ ; chauffage multi-corps 20 s / 139 000 / 2 629 cm³ contre 44 s / 345 000 / 2 534 cm³ ;
+  disque 0,5 s contre 25 s ; surface maillée ER16 : acceptée (l'adaptative la refuse). Limites : marches sur les
+  pentes, pas de contrôle d'engagement, jusqu'à 0,4 mm de plus le long des parois (pièce vue aux centres des
+  cellules, 0,5 mm).
 - **Interface en anglais**. Le logiciel ne force plus le français au premier lancement : la langue suit celle de
   Windows (français sur un Windows français, anglais sinon), et **Affichage > Langue : English / Français** la change
   (appliquée au prochain démarrage). Les 100 messages d'erreur encore écrits en français dans le code (outils,

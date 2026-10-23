@@ -36,7 +36,7 @@ PENDING_SEGMENTS = 4096
 #: en dessous, un niveau de profondeur n'est pas balayé seul (fraise plate)
 LEVEL_BATCH_MIN = 64
 #: strategies qui acceptent une surface 3D issue d'un maillage (pas un solide)
-SURFACE_STRATEGIES = ("surface3d", "waterline", "millface", "scallop")  # surfaçage : le dessus du brut (voir commands)
+SURFACE_STRATEGIES = ("surface3d", "waterline", "millface", "scallop", "stockrough")  # surfaçage : le dessus du brut (voir commands)
 from .machine import MachineProfile, lunyee_4040_nova
 
 

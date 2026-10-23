@@ -873,7 +873,7 @@ def default_params(kind, tool, values):
     params = {"StepDown": values["axial_engagement_mm"]}
     stepover = max(1, min(100, int(round(100.0 * (values["radial_engagement_mm"] or tool.geometry.diameter * 0.4)
                                          / tool.geometry.diameter))))
-    if kind in ("pocket", "millface", "adaptive", "helix", "rough3d"):
+    if kind in ("pocket", "millface", "adaptive", "helix", "rough3d", "stockrough"):
         params["StepOver"] = stepover
     if kind in ("adaptive", "rough3d"):
         # liaisons de l'adaptative « en zone dégagée » remontées d'une passe : à 0 (défaut FreeCAD) elles se font
@@ -894,6 +894,8 @@ def default_params(kind, tool, values):
         params.pop("StepDown", None)  # finition : crête maximale, pas de passe axiale
     if kind == "chamfer":
         params["Width"] = 1.0
+    if kind == "stockrough":
+        params["StockToLeave"] = 0.5
     if kind == "flat3d":
         params = {"StepOver": stepover}  # une seule passe, à la hauteur de chaque plat
     if kind == "pencil":
