@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- **[C1]** Palpage de l'origine : le parcours changeait à la réouverture du projet (coin : 29 commandes, 28 après
+  enregistrement). FreeCAD relit le parcours enregistré comme du G-code et y efface `G21` ; le libellé « Palper
+  l'origine (coin) » donnait aussi un commentaire à parenthèses imbriquées, relu autrement. L'opération ne porte
+  plus `G21` (le postprocesseur l'écrit en tête du programme) et s'appelle « Palper l'origine : coin ».
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule

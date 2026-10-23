@@ -240,7 +240,9 @@ def add_probe(proj, mode, label=None, **kw):
     from ..tools import bridge
     from . import wrap as wrapmod
 
-    lines = probe_gcode(proj.machine, mode, **kw)
+    # sans G20 / G21 : FreeCAD les efface en relisant un parcours enregistré (29 commandes, 28 après réouverture) ;
+    # le postprocesseur écrit G21 en tête du programme
+    lines = [l for l in probe_gcode(proj.machine, mode, **kw) if l not in ("G20", "G21")]
     job = proj.job
     asm, tool, preset = probe_tool(proj)
     values = preset.resolve(tool)
@@ -257,7 +259,10 @@ def add_probe(proj, mode, label=None, **kw):
     finally:
         if previous is not None and previous.Name != proj.doc.Name:
             FreeCAD.setActiveDocument(previous.Name)
-    op.Label = label or tr("Probe the origin ({mode})", mode=tr(MODE_LABELS[mode]))
+    # sans parenthèses : FreeCAD met le libellé en commentaire du parcours, « (Probe the origin (corner)) » est
+    # relu autrement à la réouverture (et fermé à la première « ) » par GRBL)
+    label = label or tr("Probe the origin: {mode}", mode=tr(MODE_LABELS[mode]).split(" (")[0])
+    op.Label = label.replace("(", "[").replace(")", "]")
     op.ToolController = tc
     if "Source" in op.PropertiesList:
         op.Source = "Text"
