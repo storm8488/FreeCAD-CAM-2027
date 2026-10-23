@@ -21,6 +21,7 @@ IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp")
 DEFAULT_CELLS = 120
 MIN_CELLS = 8
 MAX_CELLS = 400
+TILE_CELLS = 8  # points par côté d'une face du dessus (voir ``top_tiles``)
 
 
 def _qt():
@@ -104,8 +105,28 @@ def relief_heights(grid, relief_height, base, invert=False, smoothing=1, z_botto
     return [[z_bottom + base + relief_height * v for v in col] for col in grid]
 
 
+def top_tiles(surf, nx, ny, cells=TILE_CELLS):
+    """Faces du dessus : la B-spline découpée en tuiles d'environ ``cells`` × ``cells`` points (même surface).
+    OpenCascade triangule une grande face B-spline en un temps et une mémoire bien plus que proportionnels :
+    à l'écart de la finition 3D (0,0025 mm), le relief 80 × 60 du test prenait 23 s et 3,1 Go d'un seul tenant,
+    0,3 s et 0,25 Go en 10 × 10 tuiles."""
+    import Part
+
+    nu, nv = max(1, -(-(nx - 1) // cells)), max(1, -(-(ny - 1) // cells))
+    u0, u1, v0, v1 = surf.bounds()
+    us = [u0 + (u1 - u0) * k / float(nu) for k in range(nu + 1)]
+    vs = [v0 + (v1 - v0) * k / float(nv) for k in range(nv + 1)]
+    faces = []
+    for a in range(nu):
+        for b in range(nv):
+            tile = surf.copy()
+            tile.segment(us[a], us[a + 1], vs[b], vs[b + 1])
+            faces.append(Part.Face(tile))
+    return faces
+
+
 def build_shape(heights, width, length, z_bottom=0.0):
-    """Solide fermé : surface B-spline par les hauteurs, parois réglées, fond plan."""
+    """Solide fermé : surface B-spline par les hauteurs (en tuiles), parois réglées, fond plan."""
     import Part
 
     V = FreeCAD.Vector
@@ -113,13 +134,19 @@ def build_shape(heights, width, length, z_bottom=0.0):
     dx, dy = width / (nx - 1.0), length / (ny - 1.0)
     surf = Part.BSplineSurface()
     surf.interpolate(heights, 0.0, dx, 0.0, dy)
-    top = Part.Face(surf)
-    faces = [top]
-    for edge in top.Edges:
-        a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
-        faces.append(Part.makeRuledSurface(edge, Part.makeLine(V(a.x, a.y, z_bottom), V(b.x, b.y, z_bottom))))
-    corners = [V(0, 0, z_bottom), V(width, 0, z_bottom), V(width, length, z_bottom), V(0, length, z_bottom)]
-    faces.append(Part.Face(Part.makePolygon(corners + corners[:1])))
+    faces = top_tiles(surf, nx, ny)
+    eps = 1e-6 * max(width, length)
+    bottom = []
+    for tile in list(faces):
+        for edge in tile.Edges:
+            a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+            if not any(abs(a[k] - c) < eps and abs(b[k] - c) < eps for k, c in ((0, 0.0), (0, width), (1, 0.0),
+                                                                                (1, length))):
+                continue  # arête entre deux tuiles
+            line = Part.makeLine(V(a.x, a.y, z_bottom), V(b.x, b.y, z_bottom))
+            faces.append(Part.makeRuledSurface(edge, line))
+            bottom.append(line)
+    faces.append(Part.Face(Part.Wire(Part.__sortEdges__(bottom))))
     shell = Part.Shell(faces)
     shell.sewShape()
     solid = Part.Solid(shell)

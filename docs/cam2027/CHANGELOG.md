@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **[C3]** Relief depuis une image : la surface du dessus (la même B-spline par les points de la grille) est
+  découpée en tuiles d'environ 8 × 8 points. OpenCascade triangulait la grande face d'un seul tenant en un temps
+  et une mémoire bien plus que proportionnels : à l'écart de la finition 3D (tolérance du job / 4), 23 s et
+  3,1 Go pour le relief 80 × 60 du test (`test_relief_from_image` culminait à 6,0 Go), plus de 6 Go pour un
+  disque à bord franc. Maintenant 0,3 s et 0,25 Go ; le test passe à 3,5 Go (dont 3 Go réservés sans être utilisés par
+  OpenBLAS au chargement de numpy, un tampon par cœur) en 19 s au lieu de 29. Hauteurs identiques à 10⁻¹⁴ mm près ; le volume
+  calculé suit maintenant celui du maillage (l'intégration d'une seule grande face se trompait de 0,13 %).
+  Tests `test_jour4_c3`.
 - **[B1]** Finition 3D et Z constant sur une pièce à **plusieurs corps** : FreeCAD calculait chaque corps contre
   lui seul (modèle OpenCamLib d'un corps) ; sur le socle du chauffage Vz330 la boule descendait dans la cavité à
   travers le couvercle posé dessus (entaille de 41,1 mm en finition 3D, 40,0 mm en Z constant, centre de la boule
