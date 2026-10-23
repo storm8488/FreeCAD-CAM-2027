@@ -28,12 +28,14 @@ FREEZE_S = 0.5
 #: délai maximal entre le clic sur « Arrêter » et le retour de la commande
 STOP_S = 2.0
 DEFAULT_PART = r"C:\Users\damou\Downloads\bitTray3030+v7.stl"
-#: appels C++ d'un seul tenant, mesurés et documentés (LIMITS) : la main ne revient qu'à leur fin. Une pause
-#: au-delà de ``FREEZE_S`` dont la pile relevée est dans l'un d'eux est notée, pas signalée comme problème.
+#: pauses mesurées et documentées (LIMITS, bilan C2) : appels C++ d'un seul tenant, la main ne revient qu'à leur fin,
+#: et construction de l'éditeur. Une pause au-delà de ``FREEZE_S`` dont la pile relevée est dans l'une d'elles est
+#: notée, pas signalée comme problème.
 KNOWN_CPP = ("getEnvelope",  # poche 3D : enveloppe des fonds (Path.Area), 0,7-1,1 s sur le plateau
              "mesh_to_solid",  # import d'un STL : maillage -> solide, affinage (OpenCascade), 0,6-1,3 s
              "import_file",  # import : vérification du solide importé (OpenCascade), 0,6 s
-             "_buildPathArea")  # poche 3D : découpe d'un niveau par Path.Area (machine chargée : 0,7-0,8 s)
+             "_buildPathArea",  # poche 3D : découpe d'un niveau par Path.Area (machine chargée : 0,7-0,8 s)
+             "open_editor")  # hors calcul : construction de l'éditeur d'opération (zone C1), 0,45-0,6 s
 
 freezes = []  # (scénario, commande, pause)
 _scenario = [""]
