@@ -235,8 +235,11 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
         small_cells = math.pi * rc * rc
         pos = None  # (x, y) de la pointe au niveau courant, None = en l'air
         P0, P1 = [], []
-        todo = list(range(1, n + 1))
         along_x = k % 2 == 0
+        # coin (x, y) de chaque région : la région suivante est la plus proche de la position courante (recherche
+        # vectorisée : 57 000 régions en reprise sur le chauffage, 22 s en Python pur)
+        corners = np.array([(zmap.xs[i0 + b[0].start], zmap.ys[j0 + b[1].start]) for b in boxes], dtype=float)
+        remaining = np.ones(n, dtype=bool)
 
         def helix_centre(a, sl, mask):
             """Centre d'hélice dans la région : cellule permise à ``hr`` à la ronde la plus proche de ``a``."""
@@ -249,13 +252,13 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
                     return hr, (float(cx[best]), float(cy[best]))
             return None, None
 
-        while todo:
+        while remaining.any():
             if pos is None:
-                c = todo[0]
+                c = int(np.argmax(remaining)) + 1
             else:  # région la plus proche
-                c = min(todo, key=lambda c: (zmap.xs[i0 + boxes[c - 1][0].start] - pos[0]) ** 2
-                        + (zmap.ys[j0 + boxes[c - 1][1].start] - pos[1]) ** 2)
-            todo.remove(c)
+                d2 = (corners[:, 0] - pos[0]) ** 2 + (corners[:, 1] - pos[1]) ** 2
+                c = int(np.argmin(np.where(remaining, d2, np.inf))) + 1
+            remaining[c - 1] = False
             stats["regions"] += 1
             sl = boxes[c - 1]
             gi, gj = i0 + sl[0].start, j0 + sl[1].start  # origine de la région dans la grille entière

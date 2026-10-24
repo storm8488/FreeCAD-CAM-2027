@@ -9,7 +9,9 @@
   coins) sont prises en plongée droite sans passe de paroi. Dilatations calculées par fenêtre autour des cellules
   candidates : un niveau de zone plate ne coûte plus un passage sur toute la grille. Mesuré (fraise 3 mm après la
   6 mm, mêmes pas, aucune entaille) : plateau 98 000 commandes / 31 s contre 339 000 / 34 s pour la 3 mm seule ;
-  chauffage 90 000 / 50 s contre 306 000 / 43 s (57 000 régions : le temps est dans le découpage, à améliorer).
+  chauffage 90 000 / 14 s contre 306 000 / 22 s. La recherche de la région la plus proche, en Python pur, prenait
+  22 des 41 s de la reprise du chauffage (57 000 régions) : vectorisée, mêmes parcours à la commande près ;
+  l'ébauche simple du chauffage passe de 21 à 11 s.
 - **Poche 2D par décalages, moteur CAM2027** (nouvelle stratégie `offsetpocket`). Faces d'un dessin ou fonds de
   poche d'un solide : décalages de l'intérieur vers l'extérieur, dernière passe exactement le long des parois,
   chaque fond creusé à sa propre hauteur dans la même opération, entrée en hélice (arcs G2) depuis le niveau
