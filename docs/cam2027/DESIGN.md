@@ -15,6 +15,8 @@ FreeCAD et son atelier CAM.
 | Icônes | `Resources/icons/atelier/{dark,light}/*.svg` (32 × 2, copie exacte) | variante choisie selon le thème effectif ; commandes, étapes du flux, stratégies, actions de liste, opération invalide |
 | Boutons | vrais `QPushButton` avec rôles `primary` / `danger` (pas d'images) | l'étape suivante du flux de travail est l'action principale (bleu cobalt) |
 | États de calcul | colonne « État » de la liste d'opérations (`operations.compute_state`) | lus sur l'objet FreeCAD (Touched / Invalid / mouvements de coupe), jamais un statut parallèle ; « Calculé » ≠ vérifié |
+| Éditeur d'opération | onglets dans l'ordre de la charte (Géométrie, Outil, Hauteurs, Passes, Avances et vitesses, Entrée / sortie, Stratégie) ; onglet « Avances et vitesses » : valeur + source (préréglage / modifiée pour l'opération), retour au préréglage | `gui/opeditor.py`, `Project.set_operation_feeds` |
+| Panneau de vérification | contrôle matière : tableau contrôle / statut / résultat / portée, statut d'ensemble (problème / incomplet / OK), contrôle non exécuté jamais « réussi » | `gui/verification.py` |
 | États | statut d'étape = symbole (✔ / ○) + couleur + info-bulle ; opération invalide = icône d'alerte + couleur + info-bulle ; contrôles d'export = niveau en texte + couleur | jamais la couleur seule |
 
 ## Non intégré / à faire

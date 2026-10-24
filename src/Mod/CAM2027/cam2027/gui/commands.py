@@ -1288,7 +1288,9 @@ class MaterialCheck(_Base):
             return
         if b.stopped:
             return
-        _info(material_report_text(rep))
+        from .verification import VerificationDialog
+
+        exec_dialog(VerificationDialog(rep, material_report_text(rep), FreeCADGui.getMainWindow()))
 
 
 def show_material_result(proj, rep):

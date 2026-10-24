@@ -295,9 +295,13 @@ def scenario_solid(scenario, path, tmp, strategy="profile"):
         problem(scenario, "operation states after compute: %s" % states)
     if not steps_done().get("ops"):
         problem(scenario, "step 3 (operations) not checked")
-    msgs = run_command(scenario, "CAM2027_MaterialCheck")
-    if not any(k == "info" and tr("Removed: {v} cm3", v="").split("{")[0][:6] in t for k, t in msgs):
-        problem(scenario, "material check showed no report")
+    seen = []  # panneau de vérification : statut d'ensemble et lignes contrôle / statut / résultat / portée
+    driver.handlers[tr("Verification")] = lambda dlg: (seen.append((dlg.status, dlg.rows)), True)[1]
+    run_command(scenario, "CAM2027_MaterialCheck")
+    if not seen:
+        problem(scenario, "material check showed no verification panel")
+    elif seen[0][0] == "danger" or not any(c == tr("Removed volume") for c, _s, _r, _p in seen[0][1]):
+        problem(scenario, "verification panel: status %s, rows %s" % (seen[0][0], [c for c, _s, _r, _p in seen[0][1]]))
     out = os.path.join(tmp, "%s.nc" % scenario)
     driver.handlers[tr("Export G-code")] = lambda dlg: _export(dlg, out)
     msgs = run_command(scenario, "CAM2027_Export")

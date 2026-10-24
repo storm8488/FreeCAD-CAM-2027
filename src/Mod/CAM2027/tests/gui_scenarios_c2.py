@@ -261,6 +261,7 @@ def scenario_stop(scenario, tmp):
         if stop:
             _click_stop_after(1.0, clicked)
         t0 = time.perf_counter()
+        n_dialogs = len(G.driver.dialogs)
         msgs = G.run_command(scenario, command)
         end = time.perf_counter()
         if not stop:
@@ -280,7 +281,7 @@ def scenario_stop(scenario, tmp):
             G.problem(scenario, "C2 %s: returned %.1f s after Stop" % (command, end - clicked[0]))
         if not any(t.startswith(stopped) for _k, t in msgs):
             G.problem(scenario, "C2 %s: no 'computation stopped' message: %s" % (command, msgs))
-        if any(t.startswith(G.tr("Material check (height map, {res} mm grid, 3 axes)", res="")[:15]) for _k, t in msgs):
+        if G.tr("Verification") in G.driver.dialogs[n_dialogs:]:
             G.problem(scenario, "C2 %s: a report was shown after Stop" % command)
     FreeCAD.closeDocument(proj.doc.Name)
     G.pump(0.3)

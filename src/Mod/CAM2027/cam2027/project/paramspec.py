@@ -15,9 +15,9 @@ stratégie), ``thread`` (filetage), ``entry`` (entrées, sorties, attaches).
 GROUPS = (
     ("heights", "Heights and depths"),
     ("passes", "Passes"),
+    ("entry", "Entry, exit and tabs"),
     ("strategy", "Strategy"),
     ("thread", "Thread"),
-    ("entry", "Entry, exit and tabs"),
 )
 
 #: nom de propriété FreeCAD -> (libellé, groupe, aide)

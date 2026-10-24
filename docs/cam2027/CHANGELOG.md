@@ -2,6 +2,16 @@
 
 ## Non publié
 
+- **Charte « Atelier », trois écarts comblés**. (1) Éditeur d'opération dans l'ordre de la charte : Géométrie,
+  Outil, Hauteurs, Passes, **Avances et vitesses** (nouvel onglet), Entrée / sortie, Stratégie. (2) Origine des
+  valeurs : broche, avance et plongée affichées avec leur source (« Du préréglage : … ») et modifiables pour
+  l'opération seule (« Modifiée pour cette opération (préréglage : …) »), bouton « Revenir aux valeurs du
+  préréglage » ; la surcharge est gardée dans le registre, appliquée au contrôleur d'outil, effacée par un
+  changement d'outil ou de préréglage. (3) Le contrôle matière ouvre un **panneau de vérification** : un tableau
+  contrôle / statut / résultat / portée (entailles, matière restante, rapides, longueur de coupe, porte-outil,
+  brides, opérations non simulées, limites machine « contrôlées à l'export », ce qui n'est pas contrôlé ici), avec
+  un statut d'ensemble : un contrôle non exécuté rend la vérification « incomplète », jamais « réussie » ; bouton
+  « Copier le rapport ». Tests `test_ui_verification` (7).
 - **Reprise de matière dans l'ébauche sur le modèle de brut** (case « Reprise de matière » de `stockrough`). Le brut
   de départ est la carte simulée des opérations précédentes (liste tenue à jour avec l'ordre et l'activation,
   comme l'habillage de reprise) : une petite fraise après une grosse ne travaille que ce qui reste (coins, détails

@@ -99,11 +99,13 @@ def scenario_rotary_radial(h, scenario, tmp):
     log("  params %s, %d XYZA lines" % (rec["params"], len(xyza)))
     if not rec["params"].get("radial_walls") or len(xyza) < 50:
         problem(scenario, "radial walls not applied (%d XYZA lines)" % len(xyza))
-    msgs = h["run_command"](scenario, "CAM2027_MaterialCheck")
-    text = " | ".join(t for _k, t in msgs)
+    seen = []  # panneau de vérification (statut d'ensemble, lignes contrôle / statut / résultat / portée)
+    h["driver"].handlers[tr("Verification")] = lambda dlg: (seen.append((dlg.status, dlg.rows)), True)[1]
+    h["run_command"](scenario, "CAM2027_MaterialCheck")
     rep = proj.last_check() or {}
-    if tr("Material check (radius map around the A axis, {res} mm grid)", res="0.5") not in text:
-        problem(scenario, "material check report is not the rotary one: %s" % text[:300])
+    rotary_scope = tr("radius map around the A axis, {res} mm grid", res="0.5")
+    if not seen or not any(rotary_scope in p for _c, _s, _r, p in seen[0][1]):
+        problem(scenario, "material check report is not the rotary one: %s" % (seen[:1],))
     if rep.get("gouge_max") != 0.0:
         problem(scenario, "gouge reported on the radial-wall pocket: %s" % rep.get("gouge_max"))
     stock = proj.doc.getObject("CAM2027SimStock")
@@ -121,14 +123,16 @@ def scenario_rotary_radial(h, scenario, tmp):
         problem(scenario, "edit dialog lost the radial walls option")
     dlg.apply()
     h["qt_dispose"](dlg)
-    msgs = h["run_command"](scenario, "CAM2027_MaterialCheck")
+    seen = []
+    h["driver"].handlers[tr("Verification")] = lambda dlg: (seen.append((dlg.status, dlg.rows)), True)[1]
+    h["run_command"](scenario, "CAM2027_MaterialCheck")
     gouge = (h["project"]().last_check() or {}).get("gouge_max")
     log("  after 0.4 mm too deep: gouge %s" % gouge)
     if not gouge or abs(gouge - 0.4) > 0.05:
         problem(scenario, "intentional 0.4 mm gouge not found: %s" % gouge)
-    if not any(tr("GOUGE: the tool cuts {d} mm into the part (worst at X {x} Y {y}, {n} cells)", d="0.40", x="X",
-                  y="Y", n="N").split("0.40")[0] in t for _k, t in msgs):
-        problem(scenario, "gouge not reported in the message")
+    gouge_rows = [r for c, s, r, _p in seen[0][1] if c == tr("Gouges on the part")] if seen else []
+    if not seen or seen[0][0] != "danger" or not any("0.40" in r for r in gouge_rows):
+        problem(scenario, "gouge not reported in the verification panel: %s" % (seen[:1],))
     FreeCAD.closeDocument(proj.doc.Name)
     h["pump"](0.3)
 

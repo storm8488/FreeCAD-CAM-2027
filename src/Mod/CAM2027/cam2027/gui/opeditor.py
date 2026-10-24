@@ -147,8 +147,9 @@ class OperationEditor(QtWidgets.QDialog):
         lay.addLayout(head)
 
         self.tabs = QtWidgets.QTabWidget()
-        self.tabs.addTab(_scrolled(self._tool_tab()), tr("Tool"))
+        # ordre de la charte « Atelier » : géométrie, outil, hauteurs, passes, avances et vitesses, liaisons, options
         self.tabs.addTab(_scrolled(self._geometry_tab()), tr("Geometry"))
+        self.tabs.addTab(_scrolled(self._tool_tab()), tr("Tool"))
         names = list(meta.get("params", ()))
         by_group = {}
         for n in names:
@@ -156,9 +157,15 @@ class OperationEditor(QtWidgets.QDialog):
                 continue
             _label, group, _help = paramspec.spec(n)
             by_group.setdefault(group, []).append(n)
+        feeds_added = False
         for key, label in paramspec.GROUPS:
             if by_group.get(key):
                 self.tabs.addTab(_scrolled(self._params_tab(by_group[key])), tr(label))
+            if key == "passes" and not feeds_added:
+                self.tabs.addTab(_scrolled(self._feeds_tab()), tr("Feeds and speeds"))
+                feeds_added = True
+        if not feeds_added:
+            self.tabs.addTab(_scrolled(self._feeds_tab()), tr("Feeds and speeds"))
         self.dressup_boxes = {}
         if self.kind in _DRESSUP_KINDS:
             self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit and tabs"))
@@ -192,7 +199,7 @@ class OperationEditor(QtWidgets.QDialog):
         self.preset_combo = QtWidgets.QComboBox()
         form.addRow(tr("Cutting preset"), self.preset_combo)
         self.values_grid = QtWidgets.QGridLayout()
-        box = QtWidgets.QGroupBox(tr("Values used by this operation (copied from the preset)"))
+        box = QtWidgets.QGroupBox(tr("Values of the cutting preset"))
         box.setLayout(self.values_grid)
         form.addRow(box)
         tc = getattr(self.op, "ToolController", None)
@@ -200,7 +207,7 @@ class OperationEditor(QtWidgets.QDialog):
             v = bridge.tool_controller_values(tc)
             form.addRow(tr("Tool controller"), QtWidgets.QLabel("%s (T%d, F%.0f, S%.0f)" % (
                 tc.Label, v["tool_number"], v["feed_mm_min"], v["spindle_rpm"])))
-        note = QtWidgets.QLabel(tr("Values are frozen at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept)."))
+        note = QtWidgets.QLabel(tr("Values are copied at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept). Spindle speed and feeds can be changed for this operation only in the Feeds and speeds tab."))
         note.setWordWrap(True)
         note.setProperty("role", "muted")
         form.addRow(note)
@@ -251,6 +258,71 @@ class OperationEditor(QtWidgets.QDialog):
         for i, (k, v) in enumerate(rows):
             self.values_grid.addWidget(QtWidgets.QLabel(k), i, 0)
             self.values_grid.addWidget(QtWidgets.QLabel("<b>%s</b>" % v), i, 1)
+        self._preset_values = values
+        self._preset_name = preset_label(tool.preset(preset_id))
+        if hasattr(self, "feed_widgets"):
+            # autre outil ou préréglage : ses valeurs remplacent les surcharges de l'ancien
+            same = (asm_id, preset_id) == (self.rec.get("assembly_id"), self.rec.get("preset_id"))
+            self._load_feeds(self.proj.effective_values(self.rec) if same else values)
+
+    # -- avances et vitesses ----------------------------------------------------
+
+    FEEDS = (("spindle_rpm", "Spindle speed", "rpm"), ("feed_mm_min", "Cutting feed", "mm/min"),
+             ("plunge_feed_mm_min", "Plunge feed", "mm/min"))
+
+    def _feeds_tab(self):
+        """Broche, avance, plongée : valeur du préréglage ou surcharge propre à l'opération, source affichée."""
+        w = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(w)
+        self.feed_widgets = {}
+        for key, label, unit in self.FEEDS:
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(0.1, 1000000.0)
+            spin.setDecimals(0)
+            spin.setSuffix(" " + unit)
+            source = QtWidgets.QLabel()
+            source.setProperty("role", "muted")
+            row = QtWidgets.QHBoxLayout()
+            row.addWidget(spin)
+            row.addWidget(source, 1)
+            form.addRow(tr(label), row)
+            self.feed_widgets[key] = (spin, source)
+            spin.valueChanged.connect(lambda _v: self._refresh_feed_sources())
+        reset = QtWidgets.QPushButton(tr("Back to the preset values"))
+        reset.clicked.connect(lambda: self._load_feeds(getattr(self, "_preset_values", None) or self.rec.get("values") or {}))
+        form.addRow(reset)
+        note = QtWidgets.QLabel(tr("Values copied from the cutting preset when the operation was created. A value changed here is kept for this operation only and shown as overridden; choosing another tool or preset puts the preset values back. Engagements (step down, step over) are in the Passes tab."))
+        note.setWordWrap(True)
+        note.setProperty("role", "muted")
+        form.addRow(note)
+        self._load_feeds(self.proj.effective_values(self.rec))
+        return w
+
+    def _load_feeds(self, values):
+        for key, (spin, _src) in self.feed_widgets.items():
+            spin.blockSignals(True)
+            spin.setValue(float(values.get(key, spin.value())))
+            spin.blockSignals(False)
+        self._refresh_feed_sources()
+
+    def _refresh_feed_sources(self):
+        preset = getattr(self, "_preset_values", None) or self.rec.get("values") or {}
+        name = getattr(self, "_preset_name", "") or ""
+        for key, (spin, source) in self.feed_widgets.items():
+            base = preset.get(key)
+            if base is None:
+                source.setText("")
+            elif abs(spin.value() - float(base)) > 1e-9:
+                source.setText(tr("Overridden for this operation (preset: {v})", v="%.0f" % float(base)))
+                source.setProperty("role", "warning")
+            else:
+                source.setText(tr("From the preset: {name}", name=name))
+                source.setProperty("role", "muted")
+            source.style().unpolish(source)
+            source.style().polish(source)
+
+    def _feed_overrides(self):
+        return {key: spin.value() for key, (spin, _src) in self.feed_widgets.items()}
 
     def _apply_tool(self):
         asm_id, preset_id = self.asm_combo.currentData(), self.preset_combo.currentData()
@@ -476,6 +548,7 @@ class OperationEditor(QtWidgets.QDialog):
             if self._base is not None:
                 self.proj.set_operation_base(self.op, self._base)
             self._apply_tool()
+            self.rec = self.proj.set_operation_feeds(self.op, self._feed_overrides())
             wanted = self.index.value() if self.index.value() > self.index.minimum() else None
             if wanted != self.rec.get("index_deg"):
                 self.proj.set_operation_index(self.op, wanted)
@@ -518,6 +591,7 @@ class OperationEditor(QtWidgets.QDialog):
         for key, (box, widgets) in getattr(self, "dressup_boxes", {}).items():
             dressups[key] = (box.isChecked(), tuple(sorted(self._widget_values(widgets).items())))
         return (self.name.text(), self.index.value(), self.asm_combo.currentData(), self.preset_combo.currentData(),
+                tuple(sorted(self._feed_overrides().items())) if hasattr(self, "feed_widgets") else (),
                 tuple((o.Name, tuple(subs)) for o, subs in (self._base or ())),
                 tuple(sorted((k, repr(v)) for k, v in self.params().items())), tuple(sorted(dressups.items())),
                 self.rest_limit.state() if getattr(self, "rest_limit", None) is not None else None)

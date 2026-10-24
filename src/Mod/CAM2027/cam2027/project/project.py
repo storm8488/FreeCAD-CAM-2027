@@ -1152,6 +1152,44 @@ class Project(object):
             bridge.apply_preset_to_controller(tc, tool, values)
         rec.update({"assembly_id": asm.id, "tool_id": tool.id, "holder_id": holder.id if holder else None,
                     "preset_id": preset.id, "values": values, "warnings": warnings})
+        rec.pop("overrides", None)  # nouveau préréglage : les surcharges de l'ancien ne valent plus
+        self._save_registry(reg)
+        return rec
+
+    #: valeurs de coupe qu'une opération peut surcharger (les autres viennent toujours du préréglage)
+    FEED_KEYS = ("spindle_rpm", "feed_mm_min", "plunge_feed_mm_min")
+
+    def effective_values(self, rec):
+        """Valeurs de coupe de l'opération : préréglage copié, puis surcharges propres à l'opération."""
+        values = dict(rec.get("values") or {})
+        values.update({k: v for k, v in (rec.get("overrides") or {}).items() if k in self.FEED_KEYS})
+        return values
+
+    def set_operation_feeds(self, op, overrides):
+        """Surcharge (ou retire, valeur ``None``) la broche / l'avance / la plongée d'une opération : le
+        ToolController reçoit les valeurs effectives, le préréglage reste la source des autres valeurs."""
+        op = dressupmod.base_operation(op)
+        reg = self.registry
+        rec = reg.get(op.Name)
+        if rec is None:
+            raise UserError("operation {op} missing from the registry", op=op.Label)
+        current = dict(rec.get("overrides") or {})
+        for key, value in (overrides or {}).items():
+            if key not in self.FEED_KEYS:
+                raise UserError("feed override: unknown value {key}", key=repr(key))
+            if value is None or abs(float(value) - float(rec["values"][key])) < 1e-9:
+                current.pop(key, None)
+            else:
+                if float(value) <= 0:
+                    raise UserError("feed override: {key} must be above 0", key=key)
+                current[key] = float(value)
+        rec["overrides"] = current
+        if not current:
+            rec.pop("overrides", None)
+        tool = self.library.tool(rec["tool_id"])
+        tc = self.doc.getObject(rec["tool_controller"])
+        if tc is not None:
+            bridge.apply_preset_to_controller(tc, tool, self.effective_values(rec))
         self._save_registry(reg)
         return rec
 
