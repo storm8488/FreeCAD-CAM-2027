@@ -157,7 +157,7 @@ def _helix(a, h, z_from, z_to, angle_deg):
 
 
 def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, leave, resolution=0.5,
-         helix_angle=3.0, helix_limit=0.0, walls=True):
+         helix_angle=3.0, helix_limit=0.0, walls=True, previous=None):
     """Mouvements de l'ébauche : ``(genre, x, y, z)`` avec genre ``link`` (remontée + rapide), ``plunge``
     (descente en avance verticale), ``cut`` (avance de coupe), ou ``("arc", x, y, z, i, j)`` (demi-tour
     d'hélice G2, avance verticale).
@@ -173,6 +173,8 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
     zmap = sim.ZMap(bb.XMin, bb.YMin, bb.XMax, bb.YMax, start, resolution)
     stock_top = sim.model_heights(zmap, [stock_shape])
     zmap.top = np.minimum(stock_top, start)  # -inf hors du brut : pas de matière
+    if previous:  # reprise : brut tel que laissé par les opérations précédentes ``(commandes, profil)``
+        sim.simulate_paths(zmap, previous)
     part = sim.model_heights(zmap, part_shapes)
     target = np.where(np.isfinite(part), part + leave, final)
     # plancher de la pointe : la fraise entière au-dessus de la pièce ; + 0,75 cellule : la pièce est vue aux centres
@@ -202,21 +204,35 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
     row_step = max(1, int(round(step_over * 2.0 * radius / zmap.res)))
     moves = []
     stats = {"levels": 0, "regions": 0, "helix": 0, "plunges": 0, "air": 0}
+    pad = int(math.ceil(rc + h / zmap.res)) + 1
     for k, z in enumerate(levels):
         allowed = floor <= z + 1e-6
-        material = zmap.top > z + IGNORE
-        touch = sim.disc_max(np.where(material, 1.0, -np.inf), rc) > 0.5  # le disque de la fraise touche de la matière
-        cut = allowed & touch
+        cand = allowed
         if z in flats:  # niveau d'une zone plate : seulement cette zone (le reste attend le pas axial suivant)
-            cut &= floor >= z - 1e-3
+            cand = allowed & (floor >= z - 1e-3)
+        if not cand.any():
+            continue
+        # fenêtre autour des cellules candidates : les dilatations (matière touchée, place pour l'hélice, matière
+        # autour de l'entrée) coûtent cher sur toute la grille, et un niveau de zone plate n'en couvre qu'un coin
+        ii, jj = np.nonzero(cand)
+        i0, i1 = max(0, int(ii.min()) - pad), min(zmap.nx, int(ii.max()) + pad + 1)
+        j0, j1 = max(0, int(jj.min()) - pad), min(zmap.ny, int(jj.max()) + pad + 1)
+        win = (slice(i0, i1), slice(j0, j1))
+        top_w = zmap.top[win]
+        material = top_w > z + IGNORE
+        touch = sim.disc_max(np.where(material, 1.0, -np.inf), rc) > 0.5  # le disque de la fraise touche de la matière
+        cut = cand[win] & touch
         if not cut.any():
             continue
         stats["levels"] += 1
-        blocked = np.where(allowed, -np.inf, 1.0)
+        blocked = np.where(allowed[win], -np.inf, 1.0)
         helix_ok = [sim.disc_max(blocked, hr / zmap.res) < 0.5 for hr in radii]  # rien d'interdit à ``hr`` du centre
-        top_near = sim.disc_max(zmap.top, (radius + h) / zmap.res)  # matière la plus haute autour de l'entrée
+        top_near = sim.disc_max(top_w, (radius + h) / zmap.res)  # matière la plus haute autour de l'entrée
         labels, n = ndimage.label(cut)
         boxes = ndimage.find_objects(labels)
+        # région plus petite que le disque de la fraise (miette laissée dans un coin par une fraise plus grosse) :
+        # plongée droite (la fraise y est surtout en l'air) et pas de passe le long des parois (le balayage suffit)
+        small_cells = math.pi * rc * rc
         pos = None  # (x, y) de la pointe au niveau courant, None = en l'air
         P0, P1 = [], []
         todo = list(range(1, n + 1))
@@ -227,8 +243,8 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
             for hr, ok in zip(radii, helix_ok):
                 cells = np.argwhere(ok[sl] & mask)
                 if len(cells):
-                    cx = zmap.xs[sl[0].start + cells[:, 0]]
-                    cy = zmap.ys[sl[1].start + cells[:, 1]]
+                    cx = zmap.xs[i0 + sl[0].start + cells[:, 0]]
+                    cy = zmap.ys[j0 + sl[1].start + cells[:, 1]]
                     best = int(np.argmin((cx - a[0]) ** 2 + (cy - a[1]) ** 2))
                     return hr, (float(cx[best]), float(cy[best]))
             return None, None
@@ -237,16 +253,17 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
             if pos is None:
                 c = todo[0]
             else:  # région la plus proche
-                c = min(todo, key=lambda c: (zmap.xs[boxes[c - 1][0].start] - pos[0]) ** 2
-                        + (zmap.ys[boxes[c - 1][1].start] - pos[1]) ** 2)
+                c = min(todo, key=lambda c: (zmap.xs[i0 + boxes[c - 1][0].start] - pos[0]) ** 2
+                        + (zmap.ys[j0 + boxes[c - 1][1].start] - pos[1]) ** 2)
             todo.remove(c)
             stats["regions"] += 1
             sl = boxes[c - 1]
-            i0, j0 = sl[0].start, sl[1].start
+            gi, gj = i0 + sl[0].start, j0 + sl[1].start  # origine de la région dans la grille entière
             mask = labels[sl] == c
-            segs = _raster(mask, zmap, i0, j0, row_step, along_x, allowed, pos)
-            if walls:
-                for loop in _contours(mask, zmap, i0, j0):
+            tiny = mask.sum() < small_cells
+            segs = _raster(mask, zmap, gi, gj, row_step, along_x, allowed, pos)
+            if walls and not tiny:
+                for loop in _contours(mask, zmap, gi, gj):
                     segs.append((loop[0], loop[0]))
                     segs.extend(zip(loop, loop[1:] + loop[:1]))
             for a, b in segs:
@@ -256,20 +273,20 @@ def plan(stock_shape, part_shapes, radius, start, final, step_down, step_over, l
                         P0.append((pos[0], pos[1], z)); P1.append((a[0], a[1], z))
                 else:
                     i, j = _cell(zmap, a)
-                    z_from = min(start, float(top_near[i, j]) + ENTRY_MARGIN)
+                    z_from = min(start, float(top_near[i - i0, j - j0]) + ENTRY_MARGIN)
                     moves.append(("link", a[0], a[1], z))
                     if z_from <= z + IGNORE:  # pas de matière au-dessus : descente directe
                         moves.append(("plunge", a[0], a[1], z))
                         stats["air"] += 1
                     else:
-                        hr, c = helix_centre(a, sl, mask)
+                        hr, c = (None, None) if tiny else helix_centre(a, sl, mask)  # miette : plongée, la fraise est surtout en l'air
                         if hr is None or (c != a and not _link_allowed(allowed, zmap, c, a)):
                             moves.append(("plunge", a[0], a[1], z))
                             stats["plunges"] += 1
                             P0.append((a[0], a[1], z_from)); P1.append((a[0], a[1], z))
                         else:
                             ic, jc = _cell(zmap, c)
-                            z_from = min(start, float(top_near[ic, jc]) + ENTRY_MARGIN)
+                            z_from = min(start, float(top_near[ic - i0, jc - j0]) + ENTRY_MARGIN)
                             pts, arcs = _helix(c, hr, z_from, z, helix_angle)
                             moves[-1] = ("link", pts[0][0], pts[0][1], z)
                             moves.append(("plunge", pts[0][0], pts[0][1], z_from))
@@ -330,6 +347,8 @@ class ObjectStockRough(PathOp.ObjectOp):
         obj.addProperty("App::PropertyAngle", "HelixAngle", "StockRough", "Ramp angle of the helical entry (deg)")
         obj.addProperty("App::PropertyDistance", "HelixDiameterLimit", "StockRough", "Maximum helix diameter (0 = automatic)")
         obj.addProperty("App::PropertyBool", "WallPass", "StockRough", "Follow the walls after the raster passes")
+        obj.addProperty("App::PropertyBool", "RestMachining", "StockRough", "Start from the stock left by the previous operations")
+        obj.addProperty("App::PropertyLinkList", "Previous", "StockRough", "Previous operations simulated for rest machining")
         obj.addProperty("App::PropertyString", "Report", "StockRough", "Last computation")
         obj.StepOver = 40
         obj.StockToLeave = 0.5
@@ -337,6 +356,7 @@ class ObjectStockRough(PathOp.ObjectOp):
         obj.HelixAngle = 3.0
         obj.HelixDiameterLimit = 0.0
         obj.WallPass = True
+        obj.RestMachining = False
 
     def opUpdateDepths(self, obj):
         # FreeCAD déduit les profondeurs de la géométrie de base (faces) : ici, le brut entier
@@ -355,17 +375,41 @@ class ObjectStockRough(PathOp.ObjectOp):
         if self.stock is None or getattr(self.stock, "Shape", None) is None:
             raise UserError("stock roughing: the job has no stock")
         shapes = [m.Shape for m in self.model if getattr(m, "Shape", None) is not None]
+        previous = self._previous_paths(obj) if getattr(obj, "RestMachining", False) else []
         moves, stats = plan(self.stock.Shape, shapes, self.radius, float(obj.StartDepth.Value),
                             float(obj.FinalDepth.Value), float(obj.StepDown.Value),
                             max(1, min(100, int(obj.StepOver))) / 100.0, float(obj.StockToLeave.Value),
                             float(obj.Resolution.Value), float(obj.HelixAngle.Value),
-                            float(obj.HelixDiameterLimit.Value), bool(obj.WallPass))
+                            float(obj.HelixDiameterLimit.Value), bool(obj.WallPass), previous)
         cmds = moves_to_commands(moves, obj.ClearanceHeight.Value, obj.SafeHeight.Value, self.horizFeed, self.vertFeed)
         if cmds:
             self.commandlist.append(Path.Command("G0", {"Z": obj.ClearanceHeight.Value}))
         self.commandlist.extend(cmds)
         obj.Report = "%d level(s), %d region(s), %d helical entries, %d straight plunges, %d entries in air" % (
             stats["levels"], stats["regions"], stats["helix"], stats["plunges"], stats["air"])
+        if previous:
+            obj.Report += ", after %d previous operation(s)" % len(previous)
+
+    def _previous_paths(self, obj):
+        """``[(commandes, profil de fraise)]`` des opérations précédentes (liste ``Previous``, tenue à jour par
+        ``rest.sync``), comme le brut restant de la reprise de matière."""
+        from .project import Project
+        from . import dressups as dressupmod, holes as holesmod, rest
+
+        project = Project.from_document(obj.Document)
+        tops = [o for o in (obj.Previous or []) if o is not None] or rest.previous_tops(project, obj)
+        items = []
+        for o in tops:
+            rec = project.registry.get(dressupmod.base_operation(o).Name) or {}
+            if not rec.get("tool_id") or getattr(o, "Path", None) is None:
+                continue
+            _asm, tool, _holder = project.library.resolve_assembly(rec["assembly_id"])
+            profile, _note = sim.ToolProfile.from_library_tool(tool)
+            commands = o.Path.Commands
+            if holesmod.has_cycles(commands):
+                commands = holesmod.expand_cycles(commands)
+            items.append((commands, profile))
+        return items
 
 
 def Create(name, obj=None, parentJob=None):

@@ -37,6 +37,7 @@ PARAM_SPECS = {
     "StockToLeave": ("Stock to leave", "passes", "Material left for a finishing operation."),
     "Resolution": ("Resolution", "passes", "Cell size of the stock model (mm): smaller is more accurate and slower."),
     "WallPass": ("Wall pass", "passes", "Follow the walls of each region after the raster passes."),
+    "RestMachining": ("Rest machining", "passes", "Start from the stock left by the previous operations (smaller tool after a larger one)."),
     "Passes": ("Number of passes", "passes", "Radial passes used to reach the full thread depth."),
     "UseComp": ("Cutter compensation", "passes", "Offset the path by the tool radius (G41/G42 not emitted)."),
     "KeepToolDown": ("Keep tool down", "passes", "Avoid retracts between adjacent pocket passes."),

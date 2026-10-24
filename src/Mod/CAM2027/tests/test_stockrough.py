@@ -103,3 +103,49 @@ class TestStockRough(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStockRoughRest(unittest.TestCase):
+    """Reprise de matière : une fraise de 3 mm après la fraise de 6 mm ne travaille que ce qui reste (la rainure
+    de 4 mm au fond de la poche), sans entaille."""
+
+    def setUp(self):
+        self.lib = starter_library()
+        self.proj = Project.create("StockRoughRest", self.lib)
+        part = Part.makeBox(60, 50, 20).cut(Part.makeBox(30, 30, 10, V(15, 10, 10)))
+        part = part.cut(Part.makeBox(20, 4, 5, V(20, 23, 5)))  # rainure de 4 mm au fond de la poche
+        obj = self.proj.doc.addObject("Part::Feature", "Part")
+        obj.Shape = part
+        self.proj.doc.recompute()
+        self.proj.create_job([obj], stock={"kind": "box_margins", "xy": 0.0, "z_top": 0.0, "z_bottom": 0.0})
+
+    def tearDown(self):
+        for name in list(FreeCAD.listDocuments()):
+            FreeCAD.closeDocument(name)
+
+    def _add(self, name, tool_text, **extra):
+        tool = [t for t in self.lib.search(tool_text) if t.tool_type == "endmill"][0]
+        asm = self.lib.assemblies_for_tool(tool.id)[0]
+        preset = tool.presets[0]
+        params = default_params("stockrough", tool, preset.resolve(tool))
+        params["StockToLeave"] = 0.0
+        params.update(extra)
+        op, _rec = self.proj.add_operation("stockrough", name, asm.id, preset.id, params=params)
+        return op
+
+    def test_small_tool_after_large_one(self):
+        big = self._add("Rough 6", "6 mm flat end mill")
+        full = self._add("Rough 3 full", "3 mm flat end mill")
+        rest = self._add("Rough 3 rest", "3 mm flat end mill", RestMachining=True)
+        self.proj.compute()
+        n_full = len(full.Path.Commands)
+        n_rest = len(rest.Path.Commands)
+        self.assertGreater(n_full, 200)
+        self.assertLess(n_rest, 0.4 * n_full, (n_rest, n_full))  # seulement le reste de la grosse fraise
+        self.assertIn("2 previous operation(s)", rest.Report)
+        report = self.proj.material_check()
+        self.assertEqual(report["gouge_cells"], 0, report["gouge_at"])
+        zmap = self.proj.last_zmap
+        i = int((30 - zmap.x0) / zmap.res)
+        j = int((25 - zmap.y0) / zmap.res)
+        self.assertAlmostEqual(float(zmap.top[i, j]), 5.0, delta=0.05)  # fond de la rainure atteint

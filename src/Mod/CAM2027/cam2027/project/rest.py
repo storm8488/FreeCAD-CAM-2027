@@ -182,7 +182,8 @@ def sync(project):
     """Met à jour la liste des opérations précédentes de chaque reprise (ordre ou activation changés)."""
     for obj in project.operations():
         for d in [obj] + _chain(obj):
-            if is_rest(d) and hasattr(d, "Previous"):
+            # habillage « reprise », ou ébauche sur le modèle de brut en mode reprise (même liste)
+            if hasattr(d, "Previous") and (is_rest(d) or getattr(d, "RestMachining", False)):
                 tops = previous_tops(project, d)
                 if [o.Name for o in d.Previous] != [o.Name for o in tops]:
                     d.Previous = tops

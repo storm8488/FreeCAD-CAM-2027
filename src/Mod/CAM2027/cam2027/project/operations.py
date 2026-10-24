@@ -109,8 +109,8 @@ STRATEGIES = {
     "stockrough": {
         "module": "cam2027.project.stockrough",
         "label": "2.5D roughing on the stock model (all depths, every body protected)",
-        "params": ("StepDown", "StepOver", "StockToLeave", "Resolution", "HelixAngle", "HelixDiameterLimit", "WallPass",
-                   "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
+        "params": ("StepDown", "StepOver", "StockToLeave", "RestMachining", "Resolution", "HelixAngle", "HelixDiameterLimit",
+                   "WallPass", "StartDepth", "FinalDepth", "ClearanceHeight", "SafeHeight"),
         "limits": "Flat end mill; clears the whole stock above the part level by level on a height map shared with the "
                   "material check (pocket floors at every depth in one operation, other bodies never cut); helical "
                   "entries, raster passes then a wall pass; steps remain on slopes (use a 3D finishing).",

@@ -2,6 +2,14 @@
 
 ## Non publié
 
+- **Reprise de matière dans l'ébauche sur le modèle de brut** (case « Reprise de matière » de `stockrough`). Le brut
+  de départ est la carte simulée des opérations précédentes (liste tenue à jour avec l'ordre et l'activation,
+  comme l'habillage de reprise) : une petite fraise après une grosse ne travaille que ce qui reste (coins, détails
+  étroits), sans habillage ni double calcul. Les régions plus petites que la fraise (miettes laissées dans les
+  coins) sont prises en plongée droite sans passe de paroi. Dilatations calculées par fenêtre autour des cellules
+  candidates : un niveau de zone plate ne coûte plus un passage sur toute la grille. Mesuré (fraise 3 mm après la
+  6 mm, mêmes pas, aucune entaille) : plateau 98 000 commandes / 31 s contre 339 000 / 34 s pour la 3 mm seule ;
+  chauffage 90 000 / 50 s contre 306 000 / 43 s (57 000 régions : le temps est dans le découpage, à améliorer).
 - **Poche 2D par décalages, moteur CAM2027** (nouvelle stratégie `offsetpocket`). Faces d'un dessin ou fonds de
   poche d'un solide : décalages de l'intérieur vers l'extérieur, dernière passe exactement le long des parois,
   chaque fond creusé à sa propre hauteur dans la même opération, entrée en hélice (arcs G2) depuis le niveau

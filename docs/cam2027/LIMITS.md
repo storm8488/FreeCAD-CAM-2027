@@ -393,7 +393,8 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   dilaté de 0,75 cellule en plus du rayon, donc jusqu'à 0,4 mm de matière en plus le long des parois, et des marches
   d'un pas axial sur les pentes (prévoir une finition 3D) ; pas de contrôle d'engagement (balayage plein) ; hélice
   seulement là où elle tient (sinon plongée droite, comptée dans le rapport de l'opération) ; la sélection de faces
-  est ignorée (toute la pièce protège, tout le brut accessible est dégagé).
+  est ignorée (toute la pièce protège, tout le brut accessible est dégagé) ; reprise de matière : brut rectangulaire
+  seulement, opérations précédentes à A0 (indexées et enroulées ignorées), même résolution que l'opération.
 - **Finition des zones plates** (`flat3d`, `project/flatfinish.py`) : faces planes horizontales seulement (pas de
   plat incliné) ; passes décalées (pas de type « Parallel ») ; zone réduite du rayon de la fraise : une zone plus
   étroite que la fraise est sautée et comptée dans le rapport de l'opération (« zone(s) trop étroite(s) ») ; la
