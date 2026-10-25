@@ -122,6 +122,7 @@ class Navigator(QtWidgets.QWidget):
         super(Navigator, self).__init__(parent)
         self.setObjectName("CAM2027_Navigator")
         self._updating = False
+        self._vectors_dirty = True
         self.space = "prepare"
         # tout le contenu dans une zone défilante : la fenêtre ne grandit jamais à cause du navigateur
         outer = QtWidgets.QVBoxLayout(self)
@@ -398,6 +399,8 @@ class Navigator(QtWidgets.QWidget):
         self.space = key if key in self.SPACES else "prepare"
         self.stack.setCurrentWidget(self.pages[self.space])
         self.summary.setVisible(self.space != "prepare" and state.active_project() is not None)
+        if self.space == "draw" and self._vectors_dirty:
+            self._refresh_vectors(state.active_project())
 
     # -- rafraîchissement ------------------------------------------------------------------------------------------
 
@@ -479,11 +482,10 @@ class Navigator(QtWidgets.QWidget):
         self.machine_note.setToolTip(tr("Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'."))
         self.machine_note.setVisible(bool(missing) and self.space in ("prepare", "verify"))
 
-        # ---- Dessiner
-        for v in sheetmod.vector_objects(proj.doc):
-            item = QtWidgets.QListWidgetItem(v.Label)
-            item.setData(QtCore.Qt.UserRole, v.Name)
-            self.vectors.addItem(item)
+        # ---- Dessiner (liste des vecteurs : coûteuse sur un gros document, seulement dans cet espace)
+        self._vectors_dirty = True
+        if self.space == "draw":
+            self._refresh_vectors(proj)
 
         # ---- Usiner
         ops = proj.operations() if proj.has_job else []
@@ -625,6 +627,21 @@ class Navigator(QtWidgets.QWidget):
             bits.append('<a href="stock">%s</a>' % tr("Stock: to set"))
         bits.append('<a href="machine">%s</a> %s' % (tr("Machine"), proj.machine.name))
         self.summary.setText(" &nbsp;·&nbsp; ".join(bits))
+
+    def _refresh_vectors(self, proj):
+        from ..project import sheet as sheetmod
+
+        self._updating = True
+        try:
+            self.vectors.clear()
+            if proj is not None:
+                for v in sheetmod.vector_objects(proj.doc):
+                    item = QtWidgets.QListWidgetItem(v.Label)
+                    item.setData(QtCore.Qt.UserRole, v.Name)
+                    self.vectors.addItem(item)
+            self._vectors_dirty = False
+        finally:
+            self._updating = False
 
     def _add_problem(self, level, text, target):
         symbol = {"error": "✕", "warning": "△", "info": "•"}[level]

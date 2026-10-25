@@ -56,16 +56,24 @@ def set_preference(value):
     FreeCAD.ParamGet("User parameter:BaseApp/Preferences/CAM2027").SetString("Theme", value)
 
 
+_system_dark_cache = [None, 0.0]  # (valeur, horodatage) : la palette est relue au plus une fois par seconde
+
+
 def _system_is_dark():
+    import time
+
+    now = time.monotonic()
+    if _system_dark_cache[0] is not None and now - _system_dark_cache[1] < 1.0:
+        return _system_dark_cache[0]
     try:
         from .qt import QtGui, QtWidgets
 
         app = QtWidgets.QApplication.instance()
-        if app is None:
-            return True
-        return app.palette().color(QtGui.QPalette.Window).lightness() < 128
+        dark = True if app is None else app.palette().color(QtGui.QPalette.Window).lightness() < 128
     except Exception:
-        return True
+        dark = True
+    _system_dark_cache[0], _system_dark_cache[1] = dark, now
+    return dark
 
 
 def resolve(name=None):

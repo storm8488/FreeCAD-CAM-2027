@@ -143,3 +143,4 @@ class VerificationPage(Page):
         theme.apply(self)
         self.rows = rows
         self.status = status
+        self.report_text = report_text

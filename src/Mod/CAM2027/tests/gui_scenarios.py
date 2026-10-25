@@ -78,15 +78,19 @@ class Driver(object):
             mod._warn = warn
             mod._info = info
             mod.exec_dialog = self.exec_dialog
-        from cam2027.gui import inspector, navigator
-
-        navigator._warn = warn
-        navigator._info = info
-        # pages du panneau contextuel (brut, machine, ajout d'opération, export, vérification) : reçues comme
-        # les dialogues, remplies par le même handler (titre), acceptées sur place
-        inspector.page_hook = self.open_page
-        inspector.ask_hook = lambda box: next(b for b in box.buttons()
-                                              if box.buttonRole(b) == QtWidgets.QMessageBox.DestructiveRole)
+        try:
+            from cam2027.gui import inspector, navigator
+        except ImportError:  # module sans la coquille (comparaison avec une version précédente)
+            inspector = navigator = None
+        if navigator is not None:
+            navigator._warn = warn
+            navigator._info = info
+        if inspector is not None:
+            # pages du panneau contextuel (brut, machine, ajout d'opération, export, vérification) : reçues comme
+            # les dialogues, remplies par le même handler (titre), acceptées sur place
+            inspector.page_hook = self.open_page
+            inspector.ask_hook = lambda box: next(b for b in box.buttons()
+                                                  if box.buttonRole(b) == QtWidgets.QMessageBox.DestructiveRole)
         def question(*a, **k):
             buttons = a[3] if len(a) > 3 else k.get("buttons", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
             for b in (QtWidgets.QMessageBox.Discard, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.Ok):
@@ -192,7 +196,9 @@ def steps_done():
     p = panel()
     if p is None:
         return {}
-    return p.steps_done()
+    if hasattr(p, "steps_done"):
+        return p.steps_done()
+    return {key: row[0].toolTip() == tr("done") for key, row in p.step_rows.items()}  # version précédente (comparaison)
 
 
 def project():
@@ -348,6 +354,14 @@ def scenario_solid(scenario, path, tmp, strategy="profile"):
     run_command(scenario, "CAM2027_Compute")
     states = [proj.operation_state(o) for o in proj.operations()]
     log("  operations %s states %s" % ([o.Label for o in proj.operations()], states))
+    for o in proj.operations():  # outil, porte-outil et profondeurs : comparables d'une version à l'autre
+        base = proj.base_operation(o)
+        rec = proj.registry.get(base.Name, {})
+        asm = proj.library.assemblies.get(rec.get("assembly_id"))
+        log("  %s: tool %s, holder %s, stickout %s, depths %s..%s step %s, stock %s" % (
+            o.Label, getattr(base.ToolController, "Label", None), asm.holder_id if asm else None, asm.stickout if asm else None,
+            getattr(base, "StartDepth", None), getattr(base, "FinalDepth", None), getattr(base, "StepDown", None),
+            {k: round(v, 1) for k, v in proj.stock_bounds().items() if k in ("length", "width", "height", "zmin", "zmax")}))
     if any(o.Label.startswith(tr("Operation")) for o in proj.operations()):
         problem(scenario, "operations keep the generic name %r" % tr("Operation"))
     if any(s in ("failed", "todo") for s in states):

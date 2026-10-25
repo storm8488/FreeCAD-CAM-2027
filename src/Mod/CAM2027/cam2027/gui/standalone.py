@@ -377,8 +377,9 @@ def tidy_toolbars():
     return hidden
 
 
-#: panneaux FreeCAD masqués par la disposition par défaut
-HIDDEN_DOCKS = ("Report view", "Python console", "Selection view", "Model", "CAM2027_ToolLibrary", "Tasks")
+#: panneaux FreeCAD masqués par la disposition par défaut (partout), et dans le logiciel autonome seulement
+HIDDEN_DOCKS = ("Report view", "Python console", "Selection view")
+STANDALONE_HIDDEN_DOCKS = ("Model", "CAM2027_ToolLibrary", "Tasks")
 
 
 def reset_layout():
@@ -396,7 +397,7 @@ def reset_layout():
             dock.setFloating(False)
             mw.addDockWidget(areas[name], dock)
             dock.setVisible(name == "CAM2027_Project")
-        elif name in HIDDEN_DOCKS:
+        elif name in HIDDEN_DOCKS or (is_standalone() and name in STANDALONE_HIDDEN_DOCKS):
             dock.hide()
     s = shell.install()
     if s is not None:

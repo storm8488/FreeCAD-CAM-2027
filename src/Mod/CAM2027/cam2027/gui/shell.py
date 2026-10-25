@@ -84,7 +84,7 @@ class Shell(QtCore.QObject):
         area = mw.findChild(QtWidgets.QMdiArea)
         if area is not None:
             # document ouvert / fermé, page de démarrage fermée : panneaux masqués tant qu'il n'y a pas de document
-            area.subWindowActivated.connect(lambda _w: QtCore.QTimer.singleShot(0, self.refresh))
+            area.subWindowActivated.connect(lambda _w: QtCore.QTimer.singleShot(0, self.refresh_visibility))
         self._observer = _SelectionObserver(self)
         FreeCADGui.Selection.addObserver(self._observer)
         self._shortcuts = []
@@ -298,13 +298,9 @@ class Shell(QtCore.QObject):
 
     # -- rafraîchissement ----------------------------------------------------------------------------------------
 
-    def refresh(self):
-        from . import state
-
-        proj = state.active_project()
+    def refresh_visibility(self):
+        """Panneaux latéraux masqués tant qu'aucune fenêtre de document n'est ouverte (logiciel autonome)."""
         docs = bool(FreeCAD.listDocuments())
-        for key, b in self.space_buttons.items():
-            b.setEnabled(proj is not None or key == "prepare")
         area = self.mw.findChild(QtWidgets.QMdiArea)
         if area is not None and not area.subWindowList():
             docs = False  # fenêtres de document fermées (le document peut rester listé un instant)
@@ -317,6 +313,15 @@ class Shell(QtCore.QObject):
             if not getattr(self, "_nav_sized", False):
                 self._nav_sized = True
                 QtCore.QTimer.singleShot(0, lambda: self._resize_dock(self.nav_dock, NAVIGATOR_WIDTH))
+        self._sync_toggles()
+
+    def refresh(self):
+        from . import state
+
+        proj = state.active_project()
+        for key, b in self.space_buttons.items():
+            b.setEnabled(proj is not None or key == "prepare")
+        self.refresh_visibility()
         self.navigator.refresh()
         self.refresh_project_label()
         self.refresh_selection()
@@ -425,8 +430,8 @@ def refresh():
 
 
 def document_activated(doc):
-    """Document activé (ouverture, onglet) : espace mémorisé pour ce document ou espace proposé."""
+    """Document activé (ouverture, onglet) : espace mémorisé pour ce document ou espace proposé (le
+    rafraîchissement suit, par ``panels.refresh_project_panel``)."""
     if _shell is None:
         return
     _shell.show_space(_shell.space_for_document(doc))
-    _shell.refresh()

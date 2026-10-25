@@ -1041,8 +1041,11 @@ def scenario_reopen_dome(scenario, tmp, undo_stock=False):
 
 
 def _panel_title():
-    p = G.panel()
-    return p.title.text() if p is not None else ""
+    """Nom du projet affiché par la coquille (barre des espaces) : le navigateur n'a plus de titre propre."""
+    from cam2027.gui import shell
+
+    s = shell._shell
+    return s.project_label.text() if s is not None else ""
 
 
 def _activate_tab(doc):

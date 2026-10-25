@@ -321,7 +321,7 @@ def check_copies(base, params, stock=None, centre=(0.0, 0.0), tol=1e-3):
     for i, b in enumerate(boxes):
         out = max(allowed[0] - b[0], allowed[1] - b[1], b[2] - allowed[2], b[3] - allowed[3])
         if out > 0:
-            raise PatternError("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock & "
+            raise PatternError("Copy {n} of the pattern leaves the stock by {d:.1f} mm: enlarge the stock (Stock and "
                                "fixture) or use fewer copies.", n=i + 1, d=out + tol)
 
 

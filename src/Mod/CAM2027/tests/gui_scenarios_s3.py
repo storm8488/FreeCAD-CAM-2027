@@ -91,8 +91,10 @@ def scenario_two_sided(scenario, tmp):
     G.log("  operations per side %s" % names)
     if len(names["A"]) != 1 or len(names["B"]) != 1:
         G.problem(scenario, "expected one operation per side: %s" % names)
+    reports = []
+    G.driver.handlers[G.tr("Verification")] = lambda page: (reports.append(page.report_text), True)[1]
     msgs = G.run_command(scenario, "CAM2027_MaterialCheck")
-    report = " ".join(t for k, t in msgs if k == "info")
+    report = " ".join(reports) + " ".join(t for k, t in msgs if k == "info")
     side_b = G.tr("Side {s}: removed {v} cm3, gouge {g} mm, stock left max {m} mm", s="B", v="", g="", m="").split(":")[0]
     if side_b not in report:
         G.problem(scenario, "material check report has no side B line")
@@ -276,11 +278,12 @@ def scenario_bulk_edit(scenario, tmp):
     p = G.panel()
     from cam2027.gui.qt import QtWidgets
 
-    buttons = [b for b in p.findChildren(QtWidgets.QPushButton) if b.text() == G.tr("Compare and edit operations")]
-    if not buttons:
-        G.problem(scenario, "no Compare and edit button in the Project panel")
+    actions = [a for m in p.findChildren(QtWidgets.QMenu) for a in m.actions()
+               if a.text() == G.tr("Compare and edit operations...")]
+    if not actions:
+        G.problem(scenario, "no Compare and edit entry in the navigator's More menu")
         return
-    buttons[0].click()  # comme l'utilisateur, depuis le panneau
+    actions[0].trigger()  # comme l'utilisateur, depuis le menu « Plus... » du navigateur
     G.pump(0.5)
     for kind, text in G.driver.take():
         G.log("  bulk edit %s: %s" % (kind, text.replace("\n", " | ")[:200]))
