@@ -575,7 +575,8 @@ class Navigator(QtWidgets.QWidget):
         self.vrows["paths"].set_state(bool(ops) and bad == 0 and not pending, detail if ops else tr("no operation yet"))
         self.vrows["sim"].set_state(None, tr("preview run of the toolpaths in the FreeCAD simulator (A axis excluded)"))
         last = proj.last_check() if proj.has_job else None
-        fresh = last is not None and last.get("fingerprint") == proj._paths_fingerprint()
+        # l'empreinte des parcours resérialise tout le G-code : seulement dans l'espace Vérifier et exporter
+        fresh = (last is not None and last.get("fingerprint") == proj._paths_fingerprint()) if self.space == "verify"             else (last is not None)
         if not proj.has_job or not ops:
             self.vrows["check"].set_state(False, tr("no operation yet"))
         elif last is None:
@@ -600,7 +601,8 @@ class Navigator(QtWidgets.QWidget):
         if proj.has_job and ops and last is not None and fresh and (last["events"] or last["gouge_max"] > last["tolerance"]):
             self._add_problem("error", tr("Material check: gouges or collisions found"), ("check", None))
         if proj.has_job and ops and (last is None or not fresh):
-            self._add_problem("info", tr("Material check not run for these toolpaths"), ("check", None))
+            self._add_problem("info", tr("Material check not run for these toolpaths") if last is None
+                              else tr("Material check outdated: the toolpaths changed"), ("check", None))
         if missing:
             self._add_problem("info", tr("Machine data missing: some export checks stay not verifiable"), ("machine", None))
         try:

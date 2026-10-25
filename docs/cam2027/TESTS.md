@@ -65,6 +65,15 @@ journal `observe_<suffixe>.txt` (finit par `OK`, aucune ligne `PROBLEM` : vue ce
 fenêtre, boutons des espaces visibles, aucun défilement horizontal dans les panneaux). Dernier passage
 (2026-10-25, 1.1.4) : 1280 × 800 et 1920 × 1080, thèmes sombre et clair, `QT_SCALE_FACTOR` 1,5 et 2 : OK.
 
+Scénarios d'interface après la refonte (2026-10-25, 1.1.4, profil temporaire, `bitTray3030+v7.stl`) : passe
+complète de 68 scénarios puis relances ciblées : tous propres sauf deux déjà en échec sur la base 7e178335
+(vérifié sur la base) : `two-sided` (le rapport du contrôle matière n'est plus un message : lu désormais sur la
+page Vérification) et `c1-pattern-default` (chaîne du motif « Stock & fixture » absente du catalogue, corrigée) ;
+`user-0` est bloqué à l'export après le scénario `tool-library` qui réduit le dépassement de l'outil à 26,6 mm
+(même blocage sur la base : porte-outil dans la matière à Z −27, à raison). Les seuils de fluidité (`c2-*`,
+0,5 s) sont tenus en passe isolée ; l'empreinte des parcours n'est calculée que dans Vérifier et exporter et le
+cache des statistiques de parcours est passé de 64 à 256 entrées.
+
 ## Vérification graphique
 
 ```bat

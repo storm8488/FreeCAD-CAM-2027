@@ -1750,7 +1750,7 @@ def compute_state(obj, base=None, record=None):
 #: statistiques de parcours déjà lues : empreinte -> statistiques (le panneau Projet les relit à chaque
 #: rafraîchissement ; relire 350 000 commandes en Python prend environ une seconde)
 _PATH_STATS = {}
-_PATH_STATS_MAX = 64
+_PATH_STATS_MAX = 256  # le navigateur relit chaque opération à chaque rafraîchissement : au-delà de 64, le cache tournait
 
 
 def _feed_key(obj):

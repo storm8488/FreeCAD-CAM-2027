@@ -1904,5 +1904,6 @@
   "Scope: {s}": "Portée : {s}",
   "Summary": "Récapitulatif",
   "G-code": "G-code",
-  "Summary before export, checks, G-code preview, setup sheet": "Récapitulatif avant export, contrôles, aperçu du G-code, fiche de réglage"
+  "Summary before export, checks, G-code preview, setup sheet": "Récapitulatif avant export, contrôles, aperçu du G-code, fiche de réglage",
+  "Material check outdated: the toolpaths changed": "Contrôle matière périmé : les parcours ont changé"
 }
