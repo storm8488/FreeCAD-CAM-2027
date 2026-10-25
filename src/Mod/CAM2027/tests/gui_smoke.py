@@ -99,8 +99,16 @@ def run():
     QtWidgets.QApplication.processEvents()
     project_panel = panels._docks["Project"].widget()
     log("workflow rows: %d operations listed, steps: %s" % (
-        project_panel.tree.topLevelItemCount(),
-        [project_panel.step_rows[k][1].text()[:40] for k in ("model", "stock", "ops", "export")]))
+        project_panel.tree.topLevelItemCount(), project_panel.steps_done()))
+    from cam2027.gui import shell
+    sh = shell.shell()
+    log("shell: space %s, bar visible %s, navigator %s, inspector %s" % (
+        sh.space, sh.bar.isVisible(), sh.nav_dock.isVisible(), sh.insp_dock.isVisible()))
+    for key in ("prepare", "draw", "machine", "verify"):
+        sh.show_space(key)
+        QtWidgets.QApplication.processEvents()
+        grab(project_panel, "navigator_%s.png" % key)
+    sh.show_space("machine")
     project_panel.tree.setCurrentItem(project_panel.tree.topLevelItem(0))
     project_panel.duplicate_selected()
     log("after duplicate: %d operations" % len(proj.operations()))

@@ -78,6 +78,15 @@ class Driver(object):
             mod._warn = warn
             mod._info = info
             mod.exec_dialog = self.exec_dialog
+        from cam2027.gui import inspector, navigator
+
+        navigator._warn = warn
+        navigator._info = info
+        # pages du panneau contextuel (brut, machine, ajout d'opération, export, vérification) : reçues comme
+        # les dialogues, remplies par le même handler (titre), acceptées sur place
+        inspector.page_hook = self.open_page
+        inspector.ask_hook = lambda box: next(b for b in box.buttons()
+                                              if box.buttonRole(b) == QtWidgets.QMessageBox.DestructiveRole)
         def question(*a, **k):
             buttons = a[3] if len(a) > 3 else k.get("buttons", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
             for b in (QtWidgets.QMessageBox.Discard, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.Ok):
@@ -111,6 +120,28 @@ class Driver(object):
             return QtWidgets.QDialog.Accepted
         dlg.reject()
         return QtWidgets.QDialog.Rejected
+
+    def open_page(self, page):
+        """Page du panneau contextuel traitée comme un dialogue : handler par titre, puis accept / reject."""
+        title = page.windowTitle()
+        self.dialogs.append(title)
+        handler = self.handlers.pop(title, None)
+        page.resize(420, 640)
+        page.show()
+        pump(0.1)
+        if title not in self.grabbed:
+            self.grabbed.add(title)
+            safe = "".join(c if c.isalnum() else "_" for c in title)[:40]
+            os.makedirs(os.path.join(OUT, "dialogs"), exist_ok=True)
+            page.grab().save(os.path.join(OUT, "dialogs", "%02d_%s.png" % (len(self.grabbed), safe)))
+        ok = True if handler is None else handler(page)
+        if ok:
+            page.accept()
+        else:
+            page.reject()
+        page.hide()
+        page.deleteLater()
+        return True
 
     def take(self):
         out, self.messages = self.messages, []
@@ -161,7 +192,7 @@ def steps_done():
     p = panel()
     if p is None:
         return {}
-    return {key: row[0].toolTip() == tr("done") for key, row in p.step_rows.items()}
+    return p.steps_done()
 
 
 def project():
@@ -171,13 +202,41 @@ def project():
 
 
 def combo_select(combo, data):
+    if isinstance(combo, _StrategyChoice):
+        if not combo.select(data):
+            raise ValueError("choix %r absent" % (data,))
+        return
     i = combo.findData(data)
     if i < 0:
         raise ValueError("choix %r absent" % (data,))
     combo.setCurrentIndex(i)
 
 
+class _StrategyChoice(object):
+    """Page « Ajouter une opération » : la stratégie se choisit par famille, liste et moteur ; même interface
+    qu'une liste déroulante pour les scénarios (``findData`` / ``setCurrentIndex``)."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def findData(self, data):
+        from cam2027.project.operations import STRATEGIES
+
+        return 0 if data in STRATEGIES else -1
+
+    def setCurrentIndex(self, _index):
+        pass
+
+    def select(self, data):
+        return self.page.select_strategy(data)
+
+
 def find_combo_with(dlg, data):
+    if hasattr(dlg, "select_strategy"):
+        from cam2027.project.operations import STRATEGIES
+
+        if data in STRATEGIES:
+            return _StrategyChoice(dlg)
     for c in dlg.findChildren(QtWidgets.QComboBox):
         if c.findData(data) >= 0:
             return c

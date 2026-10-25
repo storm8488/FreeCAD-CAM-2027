@@ -2,6 +2,36 @@
 
 ## Non publié
 
+- **Refonte UX/UI : une organisation métier unique** (`gui/shell.py`, `navigator.py`, `inspector.py`, `addop.py`,
+  `preparepages.py`, `exportpage.py`, `opeditor.py`, `project/families.py`). Barre des espaces en haut
+  (identité, projet et état d'enregistrement, Nouveau / Ouvrir / Enregistrer / Annuler / Rétablir / Cadrer,
+  **PRÉPARER | DESSINER | USINER | VÉRIFIER ET EXPORTER**, Ctrl+1…4) ; navigateur métier à gauche adapté à
+  l'espace ; **un seul panneau de tâche** à droite (brut et repère, profil machine, ajout d'opération, éditeur,
+  vérification, export), fermé quand aucune tâche n'est ouverte ; barre d'état : sélection, calcul en cours,
+  problèmes à consulter. Sans document : accueil seul (plus de Nouveau / Ouvrir en double). En dessous de
+  1600 px un seul panneau latéral développé ; la vue centrale garde 834 px sur 1280. Arbre FreeCAD et
+  éditeur de propriétés en mode avancé seulement ; bibliothèque d'outils sur demande ; barres FreeCAD et
+  anciennes barres CAM2027 / Dessin rangées dans le logiciel (menus et raccourcis conservés).
+  **Ajouter une opération** : page par familles (Surfaçage, Poche, Contour / découpe, Perçage, Gravure /
+  V-carving, Ébauche, Finition 3D) → stratégie (nom court, usage, sélection attendue, outils compatibles)
+  → moteur alternatif en choix secondaire (« CAM2027 (recommandé) » / « Poche (moteur FreeCAD) ») → outil et
+  préréglage → nom ; « Créer l'opération » calcule puis ouvre **le même éditeur** à la même place.
+  **Éditeur** en sections dépliables dans l'ordre du métier (géométrie avec surbrillance, outil, profondeurs
+  et passes, avances, entrées / sorties / attaches, réglages de la stratégie repliés, filetage, reprise et
+  zone), bandeau des valeurs clés toujours visible (Ø, S, F, plongée, profondeur, passe, hauteurs), résumé
+  avant calcul, actions « Appliquer et calculer » / « Annuler les modifications » / « Fermer » ; les
+  modifications non appliquées sont demandées explicitement (appliquer / abandonner / rester), jamais perdues
+  par un changement d'espace. **Liste des opérations** : coche « inclure » (fabrication et export) et œil
+  « afficher » (parcours visible) séparés ; Recalculer en bleu quand des parcours sont périmés ; fonctions
+  spécialisées dans « Plus… ». **Vérifier et exporter** : parcours (calculés / périmés), simulation (aperçu
+  exécuté), contrôle matière (non exécuté / périmé / fait / problèmes), export, fiche ; problèmes classés
+  bloquant / avertissement / information avec accès direct au réglage ; vérification en cartes avec portée ;
+  export avec récapitulatif, contrôles, G-code, fiche, mêmes protections (`ExportBlocked`). Thème : styles de la
+  barre, des sections, des lignes ; icônes `space-*`, `panel-left/right`, `visibility-off`. Menus par espace.
+  Tests `test_families` (4), `test_shell_rules` (5) ; scénarios d'interface et `gui_smoke` adaptés (pages du
+  panneau pilotées comme les dialogues, `page.select_strategy`). Détails, relevé avant / après et
+  correspondance des anciennes commandes : DESIGN.md.
+
 - **Charte « Atelier », trois écarts comblés**. (1) Éditeur d'opération dans l'ordre de la charte : Géométrie,
   Outil, Hauteurs, Passes, **Avances et vitesses** (nouvel onglet), Entrée / sortie, Stratégie. (2) Origine des
   valeurs : broche, avance et plongée affichées avec leur source (« Du préréglage : … ») et modifiables pour

@@ -50,6 +50,21 @@ Dernier passage (2026-10-20) : **0 problème** dans la distribution (avec `bitTr
 d'assemblage de l'utilisateur) et sur FreeCAD 1.0.2 ; l'export de l'assemblage est **bloqué à raison**
 (le nez du porte-outil touche la pièce de 47 mm).
 
+## Relevé visuel de l'interface refondue (`tests/gui_observe.py`)
+
+```bat
+set FREECAD_USER_HOME=%TEMP%\cam2027-observe
+set CAM2027_OBS_SIZE=1280x800
+freecad.exe -M src\Mod\CAM2027 src\Mod\CAM2027\tests\gui_observe.py
+```
+
+Logiciel autonome simulé, parcours réel par les commandes et les pages du panneau de tâche (projet, import,
+brut, ajout d'opération, éditeur, état périmé, visibilité / inclusion, vérification, export, dessin,
+machine, mode avancé, disposition par défaut, fermeture). Captures `tests/screenshots/after/*_<taille>_<thème>_x<échelle>.png`,
+journal `observe_<suffixe>.txt` (finit par `OK`, aucune ligne `PROBLEM` : vue centrale au moins la moitié de la
+fenêtre, boutons des espaces visibles, aucun défilement horizontal dans les panneaux). Dernier passage
+(2026-10-25, 1.1.4) : 1280 × 800 et 1920 × 1080, thèmes sombre et clair, `QT_SCALE_FACTOR` 1,5 et 2 : OK.
+
 ## Vérification graphique
 
 ```bat

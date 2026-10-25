@@ -155,7 +155,7 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   sélectionnée, puis l'**éditeur d'opération** à onglets (Outil / Géométrie / Hauteurs et
   profondeurs / Passes / Stratégie / Filetage), non modal, généré depuis
   `project/paramspec.py` et les propriétés de l'objet FreeCAD ; il sert aussi à modifier une
-  opération existante (double-clic dans le panneau projet). Annuler à la création supprime
+  opération existante (double-clic dans le navigateur, espace Usiner). Annuler à la création supprime
   l'opération. Onglet Outil : changer de préréglage met à jour le ToolController, changer de
   coupant le remplace (ToolBit + ToolController) en conservant les réglages de stratégie ;
   rien ne change tant que l'utilisateur ne l'a pas demandé. Les propriétés non listées dans
@@ -163,7 +163,7 @@ Statuts utilisés : **implémenté** / **testé automatiquement** / **vérifié 
   L'éditeur est exercé par `gui_smoke` (onglets, application d'une passe axiale) ; la
   sélection 3D dans l'onglet Géométrie n'est vérifiée que visuellement.
 - Les paramètres non pris en charge par une stratégie sont listés (`ignored_params`) et
-  affichés dans le panneau projet.
+  affichés dans le navigateur (espace Usiner).
 - Habillages : attaches (contours fermés seulement), rampe d'entrée et dogbones. L'habillage
   **remplace** l'opération dans le groupe « Operations » du job (sinon FreeCAD exporterait
   le parcours deux fois) ; l'opération de base reste dans le document et le registre reste

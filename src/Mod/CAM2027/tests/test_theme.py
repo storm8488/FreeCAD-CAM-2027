@@ -39,9 +39,16 @@ class TestTheme(unittest.TestCase):
         with open(os.path.join(GUI, "commands.py"), "r", encoding="utf-8") as fp:
             src = fp.read()
         names |= set(re.findall(r'"[a-z0-9]+": "([a-z0-9-]+)"', src[src.index("STRATEGY_ICONS"):src.index("class _Base")]))
+        with open(os.path.join(GUI, "navigator.py"), "r", encoding="utf-8") as fp:
+            nav = fp.read()
+        names |= set(re.findall(r'"[a-z]+": "([a-z0-9-]+)"', nav[nav.index("_STATE_ICONS"):nav.index("COL_NAME")]))
+        names |= set(re.findall(r'"(cmd-[a-z0-9-]+|origin|recalculate|play|export-gcode|visibility|visibility-off|axis-a|settings|redo|delete|new-project|open-project)"', nav))
+        from cam2027.gui import shell
+        from cam2027.project import families
+
+        names |= {icon for _k, _l, icon in shell.SPACES} | {icon for _k, _l, icon, _s in families.FAMILIES}
         with open(os.path.join(GUI, "panels.py"), "r", encoding="utf-8") as fp:
             src = fp.read()
-        names |= set(re.findall(r'"[a-z]+": "([a-z0-9-]+)"', src[src.index("_STEP_ICONS"):src.index("class ProjectPanel")]))
         names |= set(re.findall(r'"[a-z]+": "([a-z0-9-]+)"', src[src.index("TOOL_TYPE_ICONS = {"):src.index("class ToolLibraryPanel")]))
         # chaque type d'outil du modèle a une icône
         from cam2027.tools.model import TOOL_TYPES

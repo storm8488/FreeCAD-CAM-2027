@@ -1,7 +1,7 @@
 # Annonce de la version alpha (Discord, forums)
 
 Textes prêts à coller. Discord : moins de 2 000 caractères (limite d'un message). Joindre 2 ou 3 captures
-(un V-carving, une simulation, le panneau Projet).
+(un V-carving, une simulation, le navigateur).
 
 ## Discord — français
 
