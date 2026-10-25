@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Éditeur d'opération à onglets (Outil / Géométrie / Hauteurs / Passes / Stratégie / Filetage).
+"""Éditeur d'opération : une page du panneau contextuel, en sections dépliables dans l'ordre du métier.
 
-Travaille toujours sur une opération FreeCAD existante : les genres de
-propriétés, les énumérations et les valeurs courantes sont lus sur l'objet
-(``operations.param_kind`` / ``read_params``), les libellés, groupes et aides
-viennent de ``project.paramspec``. Le dialogue est non modal pour laisser la
-sélection dans la vue 3D possible (onglet Géométrie).
+1. géométrie ciblée (résumé, surbrillance dans la vue) ; 2. outil et préréglage ; 3. profondeurs, passes,
+surépaisseur ; 4. avances et vitesses ; 5. entrées, sorties, dégagements, attaches ; 6. réglages spécialisés de
+la stratégie (section repliée) ; 7. filetage ; 8. reprise et zone. Un bandeau garde visibles le diamètre, la
+broche, les avances, la profondeur finale, la passe axiale et les hauteurs de sécurité ; un résumé concret
+précède le calcul (« 2 contours — fraise Ø 6 mm — profondeur 8 mm — passes 2 mm »).
+
+Travaille toujours sur une opération FreeCAD existante : les genres de propriétés, les énumérations et les
+valeurs courantes sont lus sur l'objet (``operations.param_kind`` / ``read_params``), les libellés, groupes et
+aides viennent de ``project.paramspec``. La même page sert à la création (ouverte juste après « Ajouter une
+opération ») et à la modification. ``tabs`` reste une façade sur les sections (scripts et scénarios).
 """
 
 import FreeCAD
@@ -19,6 +24,7 @@ from ..project.operations import STRATEGIES, param_kind, read_params, thread_nam
 from ..project import paramspec, undo
 from ..project import leads as _leads
 from . import state, panels, theme
+from .inspector import Page
 
 
 _DRESSUP_KINDS = ("profile", "pocket", "adaptive", "slot", "millface")
@@ -52,14 +58,88 @@ _DRESSUP_LABELS = {
     "AngleOut": "Lead-out sweep angle",
 }
 
+#: paramètres toujours visibles dans le bandeau (nom FreeCAD -> libellé court)
+_KEY_PARAMS = (("FinalDepth", "Depth"), ("StepDown", "Step down"), ("SafeHeight", "Safe"), ("ClearanceHeight", "Clearance"))
 
-def _scrolled(widget):
-    """Onglet dans une zone défilante : la boîte reste à la taille de l'écran (150 %, 200 %)."""
-    area = QtWidgets.QScrollArea()
-    area.setWidgetResizable(True)
-    area.setFrameShape(QtWidgets.QFrame.NoFrame)
-    area.setWidget(widget)
-    return area
+
+class Section(QtWidgets.QWidget):
+    """Section dépliable : en-tête (flèche + titre) et corps."""
+
+    def __init__(self, title, body, expanded=True, parent=None):
+        super(Section, self).__init__(parent)
+        self.title_text = title
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        self.header = QtWidgets.QToolButton()
+        self.header.setObjectName("sectionHeader")
+        self.header.setText(title)
+        self.header.setCheckable(True)
+        self.header.setChecked(expanded)
+        self.header.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self.header.setArrowType(QtCore.Qt.DownArrow if expanded else QtCore.Qt.RightArrow)
+        self.header.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.header.toggled.connect(self._toggled)
+        lay.addWidget(self.header)
+        self.body = body
+        body.setContentsMargins(8, 4, 8, 8)
+        body.setVisible(expanded)
+        lay.addWidget(body)
+
+    def _toggled(self, on):
+        self.header.setArrowType(QtCore.Qt.DownArrow if on else QtCore.Qt.RightArrow)
+        self.body.setVisible(on)
+
+    def set_expanded(self, on):
+        self.header.setChecked(bool(on))
+
+    def expanded(self):
+        return self.header.isChecked()
+
+
+class _Sections(object):
+    """Façade « onglets » sur les sections : ``count`` / ``tabText`` / ``setCurrentIndex`` / ``currentWidget`` /
+    ``addTab`` comme un ``QTabWidget`` (scripts, scénarios, modules qui ajoutent une section)."""
+
+    def __init__(self, editor):
+        self.editor = editor
+        self.sections = []
+        self._current = 0
+
+    def addTab(self, widget, title, expanded=False):
+        section = Section(title, widget, expanded)
+        self.editor.sections_layout.addWidget(section)
+        self.sections.append(section)
+        return len(self.sections) - 1
+
+    def count(self):
+        return len(self.sections)
+
+    def tabText(self, index):
+        return self.sections[index].title_text
+
+    def widget(self, index):
+        return self.sections[index].body
+
+    def currentIndex(self):
+        return self._current
+
+    def currentWidget(self):
+        return self.sections[self._current].body if self.sections else None
+
+    def setCurrentIndex(self, index):
+        if index < 0 or index >= len(self.sections):
+            return
+        self._current = index
+        section = self.sections[index]
+        section.set_expanded(True)
+        area = getattr(self.editor, "scroll_area", None)
+        if area is not None:
+            QtWidgets.QApplication.processEvents()
+            area.ensureWidgetVisible(section.header)
+
+    def section(self, index):
+        return self.sections[index]
 
 
 class _VectorWidget(QtWidgets.QWidget):
@@ -83,11 +163,13 @@ class _VectorWidget(QtWidgets.QWidget):
         return tuple(b.value() for b in self.boxes)
 
 
-class OperationEditor(QtWidgets.QDialog):
-    """Dialogue non modal ; ``on_close(accepted)`` est appelé à la fermeture."""
+class OperationEditor(Page):
+    """Page non modale ; ``on_close(accepted)`` est appelé à la fermeture."""
+
+    dialog_like = False
 
     def __init__(self, proj, op, parent=None, on_close=None, title=None):
-        super(OperationEditor, self).__init__(parent or FreeCADGui.getMainWindow())
+        super(OperationEditor, self).__init__(title or tr("Operation: {name}", name=op.Label), parent)
         self.proj = proj
         self.op = op
         self.op_key = (proj.doc.Name, op.Name)  # lisible même quand l'objet n'existe plus
@@ -95,37 +177,37 @@ class OperationEditor(QtWidgets.QDialog):
         self.kind = self.rec.get("kind", "?")
         self.on_close = on_close
         self.widgets = {}
-        self.setWindowTitle(title or tr("Operation: {name}", name=op.Label))
-        self.setMinimumWidth(720)
         self._build()
         theme.apply(self)
         self._snapshot = self._current_state()
-        # clavier : Ctrl+Entrée = OK ; le nom a le focus à l'ouverture
+        self._refresh_key_values()
+        # clavier : Ctrl+Entrée = appliquer ; le nom a le focus à l'ouverture
         shortcut_cls = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut  # Qt6 : QtGui, Qt5 : QtWidgets
         self._shortcuts = []
         for seq in ("Ctrl+Return", "Ctrl+Enter"):
             sc = shortcut_cls(QtGui.QKeySequence(seq), self)
-            sc.activated.connect(self.accept)
+            sc.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(self.apply)
             self._shortcuts.append(sc)
         self.name.setFocus()
         self.name.selectAll()
-        # jamais plus haut que 85 % de l'écran disponible (mise à l'échelle 150 / 200 %)
-        screen = self.screen() if hasattr(self, "screen") else None
-        if screen is None:
-            screen = QtWidgets.QApplication.primaryScreen()
-        if screen is not None:
-            limit = int(screen.availableGeometry().height() * 0.85)
-            self.resize(max(self.minimumWidth(), self.sizeHint().width()), min(self.sizeHint().height(), limit))
 
     # -- construction ----------------------------------------------------------
 
     def _build(self):
-        lay = QtWidgets.QVBoxLayout(self)
-        head = QtWidgets.QFormLayout()
+        meta = STRATEGIES.get(self.kind, {"label": extra_label(self.kind), "limits": ""})
+        from ..project import families
+
+        info = families.STRATEGY_INFO.get(self.kind)
+        head_w = QtWidgets.QWidget()
+        head_w.setObjectName("editorHead")
+        head = QtWidgets.QFormLayout(head_w)
+        head.setContentsMargins(10, 8, 10, 4)
+        head.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
         self.name = QtWidgets.QLineEdit(self.op.Label)
         head.addRow(tr("Name"), self.name)
-        meta = STRATEGIES.get(self.kind, {"label": extra_label(self.kind), "limits": ""})
-        strategy = QtWidgets.QLabel("<b>%s</b>" % tr(meta["label"]))
+        strategy = QtWidgets.QLabel("<b>%s</b>" % tr(info["short"] if info else meta["label"]))
+        strategy.setToolTip(tr(meta["label"]) + ((" - " + tr("engine: {name}", name=info["engine"])) if info else ""))
         head.addRow(tr("Strategy"), strategy)
         self.index = QtWidgets.QDoubleSpinBox()
         self.index.setRange(-361.0, 360.0)
@@ -139,17 +221,28 @@ class OperationEditor(QtWidgets.QDialog):
             head.addRow(tr("A index (deg)"), self.index)
         else:
             self.index.setVisible(False)
-        if meta.get("limits"):
-            limits = QtWidgets.QLabel(tr(meta["limits"]))
-            limits.setWordWrap(True)
-            limits.setProperty("role", "muted")
-            head.addRow(tr("Known limits"), limits)
-        lay.addLayout(head)
+        self.outer.addWidget(head_w)
+        # bandeau des valeurs clés (toujours visible) et résumé avant calcul
+        self.key_strip = QtWidgets.QLabel()
+        self.key_strip.setObjectName("keyStrip")
+        self.key_strip.setWordWrap(True)
+        self.key_strip.setContentsMargins(10, 2, 10, 2)
+        self.key_strip.setTextFormat(QtCore.Qt.RichText)
+        self.outer.addWidget(self.key_strip)
+        self.summary = QtWidgets.QLabel()
+        self.summary.setWordWrap(True)
+        self.summary.setContentsMargins(10, 0, 10, 6)
+        theme.set_role(self.summary, "muted")
+        self.outer.addWidget(self.summary)
 
-        self.tabs = QtWidgets.QTabWidget()
-        # ordre de la charte « Atelier » : géométrie, outil, hauteurs, passes, avances et vitesses, liaisons, options
-        self.tabs.addTab(_scrolled(self._geometry_tab()), tr("Geometry"))
-        self.tabs.addTab(_scrolled(self._tool_tab()), tr("Tool"))
+        body = self.scrolled_body()
+        self.sections_layout = QtWidgets.QVBoxLayout(body)
+        self.sections_layout.setContentsMargins(0, 0, 0, 0)
+        self.sections_layout.setSpacing(2)
+        self.tabs = _Sections(self)
+        # ordre du métier : géométrie, outil, profondeurs et passes, avances, liaisons, spécialisé, filetage
+        self.tabs.addTab(self._geometry_tab(), tr("Geometry"), expanded=True)
+        self.tabs.addTab(self._tool_tab(), tr("Tool"), expanded=True)
         names = list(meta.get("params", ()))
         by_group = {}
         for n in names:
@@ -157,36 +250,63 @@ class OperationEditor(QtWidgets.QDialog):
                 continue
             _label, group, _help = paramspec.spec(n)
             by_group.setdefault(group, []).append(n)
-        feeds_added = False
-        for key, label in paramspec.GROUPS:
-            if by_group.get(key):
-                self.tabs.addTab(_scrolled(self._params_tab(by_group[key])), tr(label))
-            if key == "passes" and not feeds_added:
-                self.tabs.addTab(_scrolled(self._feeds_tab()), tr("Feeds and speeds"))
-                feeds_added = True
-        if not feeds_added:
-            self.tabs.addTab(_scrolled(self._feeds_tab()), tr("Feeds and speeds"))
+        depth_names = by_group.get("heights", []) + by_group.get("passes", [])
+        if depth_names:
+            self.tabs.addTab(self._params_tab(depth_names), tr("Depths and passes"), expanded=True)
+        self.tabs.addTab(self._feeds_tab(), tr("Feeds and speeds"), expanded=False)
         self.dressup_boxes = {}
-        if self.kind in _DRESSUP_KINDS:
-            self.tabs.addTab(_scrolled(self._dressup_tab()), tr("Entry, exit and tabs"))
+        entry_names = by_group.get("entry", [])
+        if self.kind in _DRESSUP_KINDS or entry_names:
+            self.tabs.addTab(self._dressup_tab(entry_names), tr("Entry, exit and tabs"), expanded=False)
+        if by_group.get("strategy"):
+            self.tabs.addTab(self._params_tab(by_group["strategy"]), tr("Strategy settings"), expanded=False)
+        if by_group.get("thread"):
+            self.tabs.addTab(self._params_tab(by_group["thread"]), tr("Thread"), expanded=True)
         from . import restlimit
 
         self.rest_limit = restlimit.add_tab(self)  # reprise de matière, limiter à une zone
-        lay.addWidget(self.tabs)
+        if meta.get("limits"):
+            limits = QtWidgets.QLabel(tr(meta["limits"]))
+            limits.setWordWrap(True)
+            limits.setContentsMargins(10, 6, 10, 6)
+            limits.setProperty("role", "muted")
+            self.sections_layout.addWidget(limits)
+        self.sections_layout.addStretch(1)
 
         self.status = QtWidgets.QLabel()
         self.status.setWordWrap(True)
-        lay.addWidget(self.status)
-        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Apply
-                                             | QtWidgets.QDialogButtonBox.Cancel)
-        buttons.button(QtWidgets.QDialogButtonBox.Apply).clicked.connect(self.apply)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        lay.addWidget(buttons)
+        self.status.setContentsMargins(10, 4, 10, 0)
+        self.outer.addWidget(self.status)
+        self.add_buttons(tr("Apply and compute"), tr("Close"), extra=((tr("Discard changes"), self.revert),))
+        self.primary_button.clicked.disconnect()
+        self.primary_button.clicked.connect(self.apply)
+        self.cancel_button.clicked.disconnect()
+        self.cancel_button.clicked.connect(self.close_requested)
+        self.revert_button = self.extra_buttons[tr("Discard changes")]
+        self.revert_button.setEnabled(False)
+        self._watch_changes()
+
+    def _watch_changes(self):
+        """Chaque champ signale sa modification : bandeau, résumé et bouton « Annuler les modifications »."""
+        for w in self.findChildren(QtWidgets.QWidget):
+            for sig in ("valueChanged", "currentIndexChanged", "toggled", "textChanged"):
+                signal = getattr(w, sig, None)
+                if signal is not None and not isinstance(w, (QtWidgets.QScrollBar, QtWidgets.QAbstractScrollArea)):
+                    try:
+                        signal.connect(self._on_change)
+                    except (TypeError, RuntimeError):
+                        pass
+
+    def _on_change(self, *_a):
+        if not hasattr(self, "revert_button") or not hasattr(self, "_snapshot"):
+            return  # page en construction
+        self._refresh_key_values()
+        self.revert_button.setEnabled(self.has_unsaved_changes())
 
     def _tool_tab(self):
         w = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(w)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
         from .toolpicker import ToolField
 
         # comme Fusion : Sélectionner… (bibliothèque) / Éditer…, outils du document en liste déroulante
@@ -202,12 +322,7 @@ class OperationEditor(QtWidgets.QDialog):
         box = QtWidgets.QGroupBox(tr("Values of the cutting preset"))
         box.setLayout(self.values_grid)
         form.addRow(box)
-        tc = getattr(self.op, "ToolController", None)
-        if tc is not None:
-            v = bridge.tool_controller_values(tc)
-            form.addRow(tr("Tool controller"), QtWidgets.QLabel("%s (T%d, F%.0f, S%.0f)" % (
-                tc.Label, v["tool_number"], v["feed_mm_min"], v["spindle_rpm"])))
-        note = QtWidgets.QLabel(tr("Values are copied at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept). Spindle speed and feeds can be changed for this operation only in the Feeds and speeds tab."))
+        note = QtWidgets.QLabel(tr("Values are copied at creation time: a later change of the library never alters this operation. Choosing another tool or preset here and applying copies the new values (another cutter replaces the tool controller; strategy settings are kept). Spindle speed and feeds can be changed for this operation only in the Feeds and speeds section."))
         note.setWordWrap(True)
         note.setProperty("role", "muted")
         form.addRow(note)
@@ -264,6 +379,8 @@ class OperationEditor(QtWidgets.QDialog):
             # autre outil ou préréglage : ses valeurs remplacent les surcharges de l'ancien
             same = (asm_id, preset_id) == (self.rec.get("assembly_id"), self.rec.get("preset_id"))
             self._load_feeds(self.proj.effective_values(self.rec) if same else values)
+        if hasattr(self, "key_strip"):
+            self._refresh_key_values()
 
     # -- avances et vitesses ----------------------------------------------------
 
@@ -274,6 +391,7 @@ class OperationEditor(QtWidgets.QDialog):
         """Broche, avance, plongée : valeur du préréglage ou surcharge propre à l'opération, source affichée."""
         w = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(w)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
         self.feed_widgets = {}
         for key, label, unit in self.FEEDS:
             spin = QtWidgets.QDoubleSpinBox()
@@ -282,16 +400,19 @@ class OperationEditor(QtWidgets.QDialog):
             spin.setSuffix(" " + unit)
             source = QtWidgets.QLabel()
             source.setProperty("role", "muted")
-            row = QtWidgets.QHBoxLayout()
-            row.addWidget(spin)
-            row.addWidget(source, 1)
-            form.addRow(tr(label), row)
+            source.setWordWrap(True)
+            col = QtWidgets.QVBoxLayout()
+            col.setContentsMargins(0, 0, 0, 0)
+            col.setSpacing(0)
+            col.addWidget(spin)
+            col.addWidget(source)
+            form.addRow(tr(label), col)
             self.feed_widgets[key] = (spin, source)
             spin.valueChanged.connect(lambda _v: self._refresh_feed_sources())
         reset = QtWidgets.QPushButton(tr("Back to the preset values"))
         reset.clicked.connect(lambda: self._load_feeds(getattr(self, "_preset_values", None) or self.rec.get("values") or {}))
         form.addRow(reset)
-        note = QtWidgets.QLabel(tr("Values copied from the cutting preset when the operation was created. A value changed here is kept for this operation only and shown as overridden; choosing another tool or preset puts the preset values back. Engagements (step down, step over) are in the Passes tab."))
+        note = QtWidgets.QLabel(tr("Values copied from the cutting preset when the operation was created. A value changed here is kept for this operation only and shown as overridden; choosing another tool or preset puts the preset values back. Engagements (step down, step over) are in the Depths and passes section."))
         note.setWordWrap(True)
         note.setProperty("role", "muted")
         form.addRow(note)
@@ -304,6 +425,8 @@ class OperationEditor(QtWidgets.QDialog):
             spin.setValue(float(values.get(key, spin.value())))
             spin.blockSignals(False)
         self._refresh_feed_sources()
+        if hasattr(self, "key_strip"):
+            self._on_change()
 
     def _refresh_feed_sources(self):
         preset = getattr(self, "_preset_values", None) or self.rec.get("values") or {}
@@ -329,23 +452,31 @@ class OperationEditor(QtWidgets.QDialog):
         if asm_id and preset_id and (asm_id, preset_id) != (self.rec.get("assembly_id"), self.rec.get("preset_id")):
             self.rec = self.proj.change_operation_tool(self.op, asm_id, preset_id)
 
+    # -- géométrie -----------------------------------------------------------------
+
     def _geometry_tab(self):
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
         hint = QtWidgets.QLabel(tr("Faces, edges or vertices of the model the operation works on. Select them in the 3D view, then use the buttons below. No geometry = whole model."))
         hint.setWordWrap(True)
+        theme.set_role(hint, "muted")
         lay.addWidget(hint)
         self.base_list = QtWidgets.QListWidget()
+        self.base_list.setMaximumHeight(110)
+        self.base_list.setToolTip(tr("Click an item to highlight it in the 3D view"))
+        self.base_list.itemClicked.connect(self._highlight)
         lay.addWidget(self.base_list)
-        row = QtWidgets.QHBoxLayout()
+        row = QtWidgets.QGridLayout()
+        row.setSpacing(4)
         b_replace = QtWidgets.QPushButton(tr("Use the 3D selection"))
         b_add = QtWidgets.QPushButton(tr("Add the 3D selection"))
         b_clear = QtWidgets.QPushButton(tr("Whole model"))
         b_replace.clicked.connect(lambda: self._take_selection(replace=True))
         b_add.clicked.connect(lambda: self._take_selection(replace=False))
         b_clear.clicked.connect(self._clear_base)
-        for b in (b_replace, b_add, b_clear):
-            row.addWidget(b)
+        row.addWidget(b_replace, 0, 0)
+        row.addWidget(b_add, 0, 1)
+        row.addWidget(b_clear, 1, 0, 1, 2)
         lay.addLayout(row)
         if "Base" not in self.op.PropertiesList:
             # opération générée par sa commande (angles vifs du V-carving...) : pas de géométrie à choisir ici
@@ -364,7 +495,24 @@ class OperationEditor(QtWidgets.QDialog):
         if not self._base:
             self.base_list.addItem(tr("(whole model)"))
         for obj, subs in self._base:
-            self.base_list.addItem("%s: %s" % (obj.Label, " ".join(subs) or tr("whole")))
+            item = QtWidgets.QListWidgetItem("%s: %s" % (obj.Label, " ".join(subs) or tr("whole")))
+            item.setData(QtCore.Qt.UserRole, (obj.Name, list(subs)))
+            self.base_list.addItem(item)
+        if hasattr(self, "key_strip"):
+            self._on_change()
+
+    def _highlight(self, item):
+        """Surbrillance dans la vue 3D de la géométrie cliquée dans la liste."""
+        data = item.data(QtCore.Qt.UserRole)
+        if not data:
+            return
+        name, subs = data
+        try:
+            FreeCADGui.Selection.clearSelection()
+            for sub in subs or [""]:
+                FreeCADGui.Selection.addSelection(self.proj.doc.Name, name, sub)
+        except Exception:
+            pass
 
     def _take_selection(self, replace):
         picked = []
@@ -382,9 +530,28 @@ class OperationEditor(QtWidgets.QDialog):
         self._base = []
         self._refresh_base_list()
 
+    def geometry_summary(self):
+        """« 2 contours selected » / « whole part » / « 3 faces (Plate) »."""
+        if self._base is None:
+            return tr("generated geometry")
+        if not self._base:
+            return tr("whole part")
+        subs = [s for _o, ss in self._base for s in ss]
+        if not subs:
+            return tr("{n} object(s)", n=len(self._base))
+        kinds = {"Face": tr("face(s)"), "Edge": tr("edge(s)"), "Vertex": tr("vertex/vertices")}
+        counts = {}
+        for s in subs:
+            key = next((k for k in kinds if s.startswith(k)), "?")
+            counts[key] = counts.get(key, 0) + 1
+        return ", ".join("%d %s" % (n, kinds.get(k, k)) for k, n in counts.items())
+
+    # -- paramètres ----------------------------------------------------------------
+
     def _params_tab(self, names):
         w = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(w)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
         current = read_params(self.op, names)
         for n in names:
             label, _group, help_text = paramspec.spec(n)
@@ -445,16 +612,22 @@ class OperationEditor(QtWidgets.QDialog):
             return _VectorWidget(value)
         return None
 
-    def _dressup_tab(self):
+    def _dressup_tab(self, entry_names=()):
         from ..project import dressups as dressupmod
 
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
-        info = QtWidgets.QLabel(tr("Dressups transform the computed toolpath: holding tags keep the part attached to the stock on a profile cut, a ramp entry replaces vertical plunges. 0 = FreeCAD default value."))
-        info.setWordWrap(True)
-        lay.addWidget(info)
+        if entry_names:
+            lay.addWidget(self._params_tab(entry_names))
+        if self.kind in _DRESSUP_KINDS:
+            info = QtWidgets.QLabel(tr("Dressups transform the computed toolpath: holding tags keep the part attached to the stock on a profile cut, a ramp entry replaces vertical plunges. 0 = FreeCAD default value."))
+            info.setWordWrap(True)
+            theme.set_role(info, "muted")
+            lay.addWidget(info)
         existing = {dressupmod.dressup_kind(d): d for d in self.proj.dressups(self.op)}
         for key in ("tags", "ramp", "dogbone", "leads"):
+            if self.kind not in _DRESSUP_KINDS:
+                break
             if key == "tags" and self.kind != "profile":
                 continue
             if key == "leads" and self.kind not in ("profile", "slot"):
@@ -467,6 +640,7 @@ class OperationEditor(QtWidgets.QDialog):
             box.setCheckable(True)
             box.setChecked(key in existing)
             form = QtWidgets.QFormLayout(box)
+            form.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
             limits = QtWidgets.QLabel(tr(meta["limits"]))
             limits.setWordWrap(True)
             limits.setProperty("role", "muted")
@@ -491,7 +665,6 @@ class OperationEditor(QtWidgets.QDialog):
                 widgets[name] = (pkind, widget)
             lay.addWidget(box)
             self.dressup_boxes[key] = (box, widgets)
-        lay.addStretch(1)
         return w
 
     def _apply_dressups(self):
@@ -513,6 +686,34 @@ class OperationEditor(QtWidgets.QDialog):
                     obj.Proxy.generateTags(obj, int(count))
             elif key in existing:
                 self.proj.remove_dressup(self.op, key)
+
+    # -- bandeau et résumé ------------------------------------------------------------
+
+    def _refresh_key_values(self):
+        """Diamètre, broche, avance, plongée, profondeur finale, passe axiale, hauteurs : toujours lisibles."""
+        parts = []
+        tool = self.asm_combo.tool() if hasattr(self, "asm_combo") else None
+        if tool is not None:
+            parts.append("Ø <b>%.4g</b> mm" % tool.geometry.diameter)
+        if hasattr(self, "feed_widgets"):
+            f = {k: spin.value() for k, (spin, _s) in self.feed_widgets.items()}
+            parts.append("S <b>%.0f</b>" % f.get("spindle_rpm", 0))
+            parts.append("F <b>%.0f</b>" % f.get("feed_mm_min", 0))
+            parts.append(tr("plunge") + " <b>%.0f</b>" % f.get("plunge_feed_mm_min", 0))
+        for name, label in _KEY_PARAMS:
+            if name in self.widgets:
+                kind, w = self.widgets[name]
+                parts.append("%s <b>%.3g</b> mm" % (tr(label), w.value()))
+        self.key_strip.setText(" &nbsp;·&nbsp; ".join(parts))
+        # résumé concret avant calcul
+        summary = [self.geometry_summary()]
+        if tool is not None:
+            summary.append(tr("tool Ø {d} mm", d="%.4g" % tool.geometry.diameter))
+        if "FinalDepth" in self.widgets:
+            summary.append(tr("depth {z} mm", z="%.3g" % self.widgets["FinalDepth"][1].value()))
+        if "StepDown" in self.widgets:
+            summary.append(tr("step down {s} mm", s="%.3g" % self.widgets["StepDown"][1].value()))
+        self.summary.setText(" — ".join(summary))
 
     # -- lecture / application -------------------------------------------------
 
@@ -582,6 +783,7 @@ class OperationEditor(QtWidgets.QDialog):
         if ignored:
             text.append(tr("Ignored parameters: {p}", p=", ".join(ignored)))
         self.status.setText("<br>".join(text))
+        self.setWindowTitle(tr("Operation: {name}", name=self.op.Label))
         panels.refresh_project_panel()
         return True
 
@@ -603,29 +805,62 @@ class OperationEditor(QtWidgets.QDialog):
         ok = self._apply()
         if ok:
             self._snapshot = self._current_state()
+            self.revert_button.setEnabled(False)
         return ok
+
+    def revert(self):
+        """Annule les modifications non appliquées : la page est reconstruite depuis l'opération."""
+        if not self.has_unsaved_changes():
+            return
+        cb, self.on_close = self.on_close, None
+        self.done(0)
+        open_editor(self.proj, self.op, on_close=cb)
 
     def accept(self):
         if not self.has_unsaved_changes() or self.apply():  # rien à appliquer : pas d'étape d'annulation vide
-            super(OperationEditor, self).accept()
-            self._finish(True)
+            self.done(1)
 
     def reject(self):
-        # Échap / Annuler : ne pas perdre en silence des modifications non appliquées
+        # Échap / fermeture : ne pas perdre en silence des modifications non appliquées
         if self.has_unsaved_changes():
             answer = QtWidgets.QMessageBox.question(
                 self, "CAM2027", tr("Discard the changes that were not applied?"),
                 QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel, QtWidgets.QMessageBox.Cancel)
             if answer != QtWidgets.QMessageBox.Discard:
                 return
-        super(OperationEditor, self).reject()
-        self._finish(False)
+        self.done(0)
 
-    def _finish(self, accepted):
+    def close_requested(self):
+        """Bouton « Fermer » : applique d'abord s'il reste des modifications (question explicite)."""
+        if self.has_unsaved_changes():
+            box = QtWidgets.QMessageBox(self.window())
+            box.setWindowTitle("CAM2027")
+            box.setText(tr("Changes not applied yet."))
+            box.setInformativeText(tr("Apply them, discard them, or stay on this panel?"))
+            apply_b = box.addButton(tr("Apply"), QtWidgets.QMessageBox.AcceptRole)
+            discard = box.addButton(tr("Discard"), QtWidgets.QMessageBox.DestructiveRole)
+            stay = box.addButton(tr("Stay"), QtWidgets.QMessageBox.RejectRole)
+            box.setDefaultButton(stay)
+            from .inspector import _ask
+
+            answer = _ask(box)
+            if answer is stay:
+                return
+            if answer is apply_b:
+                self.accept()
+                return
+            if answer is discard:
+                self.done(0)
+                return
+        self.accept()
+
+    def done(self, code):
+        if self.is_done():
+            return
+        super(OperationEditor, self).done(code)
         cb, self.on_close = self.on_close, None
         if cb:
-            cb(accepted)
-        self.deleteLater()  # non modal, enfant de la fenêtre principale : sinon gardé jusqu'à la fin de la session
+            cb(bool(code))
 
 
 def extra_label(kind):
@@ -673,7 +908,6 @@ class _DocumentObserver(object):
                 _open_editors.remove(ed)
                 try:
                     ed.done(0)
-                    ed.deleteLater()
                 except RuntimeError:
                     pass
 
@@ -690,20 +924,23 @@ def _close_orphan(ed):
     _open_editors.remove(ed)
     try:
         ed.done(0)
-        ed.deleteLater()
     except RuntimeError:
         pass
 
 
 def open_editor(proj, op, on_close=None, title=None):
-    """Ouvre (non modal) l'éditeur de l'opération ``op`` et le retourne."""
+    """Ouvre l'éditeur de l'opération ``op`` dans le panneau contextuel et le retourne."""
     global _observer
     if _observer is None:
         _observer = _DocumentObserver()
         FreeCAD.addDocumentObserver(_observer)
-    dlg = OperationEditor(proj, op, on_close=on_close, title=title)
-    _open_editors.append(dlg)
-    dlg.finished.connect(lambda _r: _open_editors.remove(dlg) if dlg in _open_editors else None)
-    dlg.show()
-    dlg.raise_()
-    return dlg
+    editor = OperationEditor(proj, op, on_close=on_close, title=title)
+    _open_editors.append(editor)
+    editor.finished.connect(lambda _r: _open_editors.remove(editor) if editor in _open_editors else None)
+    from . import shell
+
+    shown = shell.inspector().show_page(editor)
+    if shown is None:
+        return editor  # la page précédente a gardé la place ; l'éditeur est déjà terminé
+    shell.show_space("machine")
+    return editor

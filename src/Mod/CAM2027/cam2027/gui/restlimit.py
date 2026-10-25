@@ -161,7 +161,5 @@ def add_tab(editor):
     if editor.kind == wrap.KIND:
         return None
     tab = RestLimitTab(editor)
-    from .opeditor import _scrolled
-
-    editor.tabs.addTab(_scrolled(tab.widget), tr("Rest and area"))
+    editor.tabs.addTab(tab.widget, tr("Rest and area"))
     return tab
