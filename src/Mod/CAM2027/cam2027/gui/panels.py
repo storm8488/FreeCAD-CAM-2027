@@ -898,418 +898,6 @@ class ToolLibraryPanel(QtWidgets.QWidget):
         self.refresh_list()
 
 
-# ---------------------------------------------------------------------------
-# Panneau projet
-# ---------------------------------------------------------------------------
-
-
-_STATE_ICONS = {"inactive": "visibility", "todo": "calculate", "stale": "recalculate", "failed": "error",
-                "warning": "warning", "computed": "check"}
-_STEP_ICONS = {"model": "open-project", "stock": "stock", "ops": "contour", "export": "export-gcode"}
-_LIST_ICONS = {"edit": "settings", "dup": "redo", "del": "delete"}
-
-
-class ProjectPanel(QtWidgets.QWidget):
-    """Panneau de flux de travail : étapes Pièce → Brut & montage → Opérations → Contrôle & export,
-    liste des opérations (actif, ordre, dupliquer, supprimer, modifier) et données machine manquantes."""
-
-    STEPS = (
-        ("model", "1. Part", "Import model / drawing", "CAM2027_ImportModel"),
-        ("stock", "2. Stock and fixture", "Stock and fixture", "CAM2027_StockFixture"),
-        ("ops", "3. Operations", "Add operation", "CAM2027_AddOperation"),
-        ("export", "4. Check and export", "Export G-code", "CAM2027_Export"),
-    )
-
-    def __init__(self, parent=None):
-        super(ProjectPanel, self).__init__(parent)
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 6)
-        self.title = QtWidgets.QLabel()
-        self.title.setWordWrap(True)
-        lay.addWidget(self.title)
-        self.start_row = QtWidgets.QWidget()
-        row0 = QtWidgets.QHBoxLayout(self.start_row)
-        row0.setContentsMargins(0, 0, 0, 0)
-        b_new = QtWidgets.QPushButton(tr("New project"))
-        b_new.setIcon(theme.icon("new-project"))
-        theme.set_role(b_new, "primary")
-        b_new.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_NewProject"))
-        b_open = QtWidgets.QPushButton(tr("Open a project..."))
-        b_open.setIcon(theme.icon("open-project"))
-        b_open.clicked.connect(lambda: FreeCADGui.runCommand("Std_Open"))
-        row0.addWidget(b_new)
-        row0.addWidget(b_open)
-        lay.addWidget(self.start_row)
-        from . import twosided as tsgui
-
-        self.side_bar = tsgui.SideBar(self._switch_side)  # recto-verso : bascule face A / face B
-        lay.addWidget(self.side_bar)
-        self.step_rows = {}
-        steps = QtWidgets.QGridLayout()
-        steps.setColumnStretch(1, 1)
-        for i, (key, label, button, command) in enumerate(self.STEPS):
-            status = QtWidgets.QLabel()
-            status.setFixedWidth(22)
-            status.setAlignment(QtCore.Qt.AlignCenter)
-            text = _StepLabel()  # libellé + détail sur deux lignes fixes (le retour automatique chevauchait)
-            btn = QtWidgets.QPushButton(tr(button))
-            btn.setIcon(theme.icon(_STEP_ICONS[key]))
-            btn.clicked.connect(lambda _c=False, cmd=command: FreeCADGui.runCommand(cmd))
-            steps.addWidget(status, i, 0)
-            steps.addWidget(text, i, 1)
-            steps.addWidget(btn, i, 2)
-            self.step_rows[key] = (status, text, btn, label)
-        lay.addLayout(steps)
-
-        self.tree = _OperationTree(self.move_to)
-        # quatre colonnes lisibles dans un dock étroit (stratégie, commandes et Z : infobulle de la ligne)
-        self.tree.setHeaderLabels([tr("Operation"), tr("State"), tr("Tool"), tr("Time (estimate)")])
-        header = self.tree.header()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        for col in (1, 2, 3):
-            header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeToContents)
-        self.tree.setTextElideMode(QtCore.Qt.ElideRight)
-        self.tree.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.tree.setAllColumnsShowFocus(True)
-        self.tree.headerItem().setToolTip(1, tr("To compute / Computed / To recompute / Warning / Failed. Computed does not mean verified or safe for the machine."))
-        self.tree.setRootIsDecorated(False)
-        self.tree.setMinimumHeight(160)  # au moins quatre lignes d'opérations visibles
-        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.tree.itemDoubleClicked.connect(self.on_double_click)
-        self.tree.itemChanged.connect(self.on_item_changed)
-        self.tree.itemSelectionChanged.connect(self._select_in_3d)
-        lay.addWidget(self.tree, 1)
-        row = QtWidgets.QHBoxLayout()
-        self.buttons = {}
-        for key, label, slot in (
-            ("edit", "Edit", self.edit_selected),
-            ("up", "Up", lambda: self.move_selected(-1)),
-            ("down", "Down", lambda: self.move_selected(1)),
-            ("dup", "Duplicate", self.duplicate_selected),
-            ("del", "Delete", self.delete_selected),
-        ):
-            b = QtWidgets.QPushButton(tr(label))
-            if key in _LIST_ICONS:
-                b.setIcon(theme.icon(_LIST_ICONS[key]))
-            if key == "del":
-                theme.set_role(b, "danger")
-            b.clicked.connect(slot)
-            row.addWidget(b)
-            self.buttons[key] = b
-        lay.addLayout(row)
-        row2 = QtWidgets.QHBoxLayout()
-        recompute = self.recompute_button = QtWidgets.QPushButton(tr("Recompute toolpaths"))
-        recompute.setIcon(theme.icon("recalculate"))
-        recompute.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Compute"))
-        row2.addWidget(recompute)
-        simulate = QtWidgets.QPushButton(tr("Simulate"))
-        simulate.setIcon(theme.icon("play"))
-        simulate.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_Simulate"))
-        row2.addWidget(simulate)
-        compare = QtWidgets.QPushButton(tr("Compare and edit operations"))  # édition groupée (S3)
-        compare.setIcon(theme.icon("settings"))
-        compare.clicked.connect(lambda: FreeCADGui.runCommand("CAM2027_BulkEdit"))
-        row2.addWidget(compare)
-        lay.addLayout(row2)
-        self.steps = QtWidgets.QLabel()
-        self.steps.setWordWrap(True)
-        theme.set_role(self.steps, "warning")
-        lay.addWidget(self.steps)
-        self._updating = False
-        self.refresh()
-
-    # -- affichage -------------------------------------------------------------
-
-    def _switch_side(self, side):
-        from . import twosided as tsgui
-
-        proj = state.active_project()
-        if proj is not None:
-            tsgui.switch_side(proj, side)
-        self.refresh()
-
-    def _set_step(self, key, done, detail=""):
-        status, text, btn, label = self.step_rows[key]
-        status.setText("<span style='color:%s;font-size:14pt'>%s</span>" % (
-            theme.status_color("done" if done else "todo"), "✔" if done else "○"))
-        status.setToolTip(tr("done") if done else tr("to do"))
-        text.set_step(tr(label), detail, theme.color("muted"))
-
-    def refresh(self):
-        self._updating = True
-        try:
-            self._refresh()
-        finally:
-            self._updating = False
-
-    def _refresh(self):
-        self.tree.clear()
-        proj = state.active_project()
-        has_project = proj is not None
-        self.start_row.setVisible(not has_project)
-        for key in self.step_rows:
-            self.step_rows[key][2].setEnabled(has_project)
-        for b in self.buttons.values():
-            b.setEnabled(has_project)
-        if proj is None:
-            self.side_bar.refresh(None)
-            self.title.setText("<b>%s</b><br>%s" % (tr("No CAM2027 project in the active document."),
-                                                     tr("Workflow: Project > Model > Stock and fixture > Operations > Export")))
-            for key in self.step_rows:
-                self._set_step(key, False)
-            self.steps.setText("")
-            return
-        self.title.setText("<b>%s</b> - %s %s" % (proj.doc.Label, tr("machine:"), proj.machine.name))
-        self.side_bar.refresh(proj)
-        from ..project.operations import toolpath_summary, STRATEGIES, COMPUTE_STATES, compute_state
-        from ..project import indexing
-        from .opeditor import extra_label  # gravure enroulée, angles vifs, palpage, Photo V-Carve, décors
-
-        if proj.has_job:
-            models = [m.Label for m in proj.job.Model.Group]
-        else:
-            from ..project import sheet as sheetmod
-
-            models = [o.Label for o in proj.model_candidates()] + [v.Label for v in sheetmod.vector_objects(proj.doc)]
-        self._set_step("model", bool(models), ", ".join(models) if models else tr("import STEP, STL, SVG or DXF"))
-        if proj.has_job:
-            sb = proj.stock_bounds()
-            from ..project.stock import clamps
-
-            n_clamps = len(clamps(proj.doc))
-            self._set_step("stock", True, "%.1f x %.1f x %.1f mm, %s%s" % (
-                sb["length"], sb["width"], sb["height"], " ".join(proj.job.Fixtures),
-                (", %d %s" % (n_clamps, tr("clamps"))) if n_clamps else ""))
-        else:
-            self._set_step("stock", False, tr("creates the job"))
-        ops = proj.operations() if proj.has_job else []
-        reg = proj.registry if proj.has_job else {}
-        bad = 0
-        pending = 0
-        total_seconds = 0
-        for op in ops:
-            s = toolpath_summary(op)
-            total_seconds += _seconds(s["cycle_time"])
-            base = proj.base_operation(op)
-            rec = reg.get(base.Name, {})
-            kind = rec.get("kind", "?")
-            tc = getattr(base, "ToolController", None)
-            tool_text = ""
-            if tc is not None:
-                v = bridge.tool_controller_values(tc)
-                tool_text = "T%d D%.3g" % (v["tool_number"], v["diameter_mm"] or 0)
-            # registre déjà lu : ``operation_state`` le relisait (JSON) pour chaque ligne
-            op_state = proj.operation_state(op) if indexing.is_index_op(op) else compute_state(op, base, rec or None)
-            valid = op_state not in ("failed",)
-            if not valid:
-                bad += 1
-            if op_state in ("todo", "stale"):
-                pending += 1
-            state_label, state_level = COMPUTE_STATES[op_state]
-            from ..project import indexing
-
-            if indexing.is_index_op(op):
-                strategy_text = tr("A axis positioning (automatic)")
-            else:
-                strategy_text = tr(STRATEGIES.get(kind, {}).get("label", extra_label(kind)))
-                if rec.get("index_deg") is not None:
-                    strategy_text += "  @A%g" % rec["index_deg"]
-            item = QtWidgets.QTreeWidgetItem([op.Label, tr(state_label), tool_text, str(s["cycle_time"] or "")])
-            item.setData(0, QtCore.Qt.UserRole, op.Name)
-            row_tip = "%s\n%s : %s" % (strategy_text, tr("Commands"),
-                                       s["commands"] if base.Active else tr("(inactive)"))
-            if s["commands"]:
-                row_tip += "\nZ (mm) : %.2f .. %.2f" % (s["zmin"] or 0, s["zmax"] or 0)
-            for col in range(1, 4):
-                item.setToolTip(col, row_tip)
-            if not base.Active:  # opération décochée : ligne grisée
-                for col in range(4):
-                    item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.color("muted"))))
-            if indexing.is_index_op(op):
-                item.setIcon(0, theme.icon("axis-a"))
-                item.setToolTip(0, tr("Rebuilt automatically in front of each change of A angle."))
-            else:
-                item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
-                item.setCheckState(0, QtCore.Qt.Checked if base.Active else QtCore.Qt.Unchecked)
-            tips = list(rec.get("warnings", []))
-            if rec.get("ignored_params"):
-                tips.append(tr("ignored parameters") + ": " + ", ".join(rec["ignored_params"]))
-            item.setIcon(1, theme.icon(_STATE_ICONS[op_state]))
-            item.setForeground(1, QtGui.QBrush(QtGui.QColor(theme.status_color(state_level))))
-            if not valid:
-                tips.append(tr("No cutting move: check the geometry, the depths and the tool."))
-                for col in range(item.columnCount()):
-                    item.setForeground(col, QtGui.QBrush(QtGui.QColor(theme.status_color("error"))))
-            item.setToolTip(0, "\n".join([op.Label, row_tip] + tips))
-            if indexing.is_index_op(op):
-                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsDragEnabled)
-            self.tree.addTopLevelItem(item)
-        if ops:
-            detail = "%d %s" % (len(ops), tr("operations")) + ((", %d %s" % (bad, tr("invalid"))) if bad else "")
-            if total_seconds:
-                detail += ", %s %s" % (tr("total time"), _hms(total_seconds))
-            self._set_step("ops", bad == 0, detail)
-        else:
-            self._set_step("ops", False, tr("select geometry, then add an operation"))
-        if proj.has_job and proj.job.PostProcessorOutputFile:
-            self._set_step("export", True, proj.job.PostProcessorOutputFile)
-        else:
-            self._set_step("export", False, (proj.job.PostProcessor if proj.has_job else "") or "")
-        missing = proj.machine.unknown_fields()
-        from ..project.machine import FIELD_LABELS
-
-        self.steps.setText(tr("Machine data to fill in: {fields}",
-                              fields=", ".join(tr(FIELD_LABELS.get(f, f)) for f in missing)) if missing else "")
-        self.steps.setToolTip(tr("Fill them in with the Machine profile command: until then, the matching export checks stay 'not verifiable'."))
-        self._mark_next_step()
-        if pending:
-            # calcul périmé : l'action principale devient « Recalculer »
-            for _key, (_st, _tx, btn, _lb) in self.step_rows.items():
-                theme.set_role(btn, "")
-            theme.set_role(self.recompute_button, "primary")
-            self.recompute_button.setText(tr("Recompute toolpaths ({n} pending)", n=pending))
-        else:
-            theme.set_role(self.recompute_button, "")
-            self.recompute_button.setText(tr("Recompute toolpaths"))
-
-    def _mark_next_step(self):
-        """Action principale contextuelle : le bouton de la première étape non faite est en bleu."""
-        nxt = None
-        for key, _label, _button, _command in self.STEPS:
-            status = self.step_rows[key][0].toolTip()
-            if nxt is None and status != tr("done"):
-                nxt = key
-        for key, (_status, _text, btn, _label) in self.step_rows.items():
-            theme.set_role(btn, "primary" if key == nxt else "")
-
-    # -- actions ---------------------------------------------------------------
-
-    def _selected(self, quiet=False):
-        proj = state.active_project()
-        items = self.tree.selectedItems()
-        if proj is None or not items:
-            return None, None
-        op = proj.doc.getObject(items[0].data(0, QtCore.Qt.UserRole))
-        from ..project import indexing
-
-        if op is not None and indexing.is_index_op(op):
-            if quiet:
-                return proj, None
-            _info(tr("A axis positionings are managed automatically: edit, move or delete the operations instead."))
-            return None, None
-        return proj, op
-
-    def _select_in_3d(self):
-        proj, op = self._selected(quiet=True)
-        if op is not None:
-            FreeCADGui.Selection.clearSelection()
-            FreeCADGui.Selection.addSelection(op)
-
-    def _reselect(self, name):
-        for i in range(self.tree.topLevelItemCount()):
-            item = self.tree.topLevelItem(i)
-            if item.data(0, QtCore.Qt.UserRole) == name:
-                self.tree.setCurrentItem(item)
-                return
-
-    def on_double_click(self, item, _col):
-        self.edit_selected()
-
-    def on_item_changed(self, item, col):
-        if self._updating or col != 0:
-            return
-        # traité après le signal : ``refresh`` reconstruit la liste ; pendant le signal, il détruisait l'élément
-        # que Qt était en train de cocher (violation d'accès, plantage de FreeCAD au hasard)
-        name, active = item.data(0, QtCore.Qt.UserRole), item.checkState(0) == QtCore.Qt.Checked
-        QtCore.QTimer.singleShot(0, lambda: self._set_active(name, active))
-
-    def _set_active(self, name, active):
-        proj = state.active_project()
-        if proj is None:
-            return
-        op = proj.doc.getObject(name)
-        if op is None:
-            return
-        with undo.transaction(proj.doc, tr("Enable or disable the operation")):
-            proj.set_operation_active(op, active)
-            proj.compute()
-        self.refresh()
-        self._reselect(op.Name)
-
-    def edit_selected(self):
-        proj, op = self._selected()
-        if op is None:
-            return
-        from ..project import wrap
-
-        if wrap.is_wrap_op(op):
-            from .commands import open_wrap_dialog
-
-            open_wrap_dialog(proj, op)
-            return
-        from . import opeditor
-
-        opeditor.open_editor(proj, proj.base_operation(op))
-
-    def move_to(self, name, index):
-        """Glisser-déposer : l'opération ``name`` prend le rang ``index`` parmi les opérations (positionnements A
-        exclus, recréés automatiquement)."""
-        proj = state.active_project()
-        if proj is None:
-            return
-        op = proj.doc.getObject(name)
-        if op is None:
-            return
-        try:
-            with undo.transaction(proj.doc, tr("Move the operation")):
-                proj.move_operation_to(op, index)
-                proj.compute()
-        except Exception as exc:
-            _warn(tr_msg(exc))
-        self.refresh()
-        self._reselect(name)
-
-    def move_selected(self, delta):
-        proj, op = self._selected()
-        if op is None:
-            return
-        with undo.transaction(proj.doc, tr("Move the operation")):
-            proj.move_operation(op, delta)
-            proj.compute()
-        self.refresh()
-        self._reselect(op.Name)
-
-    def duplicate_selected(self):
-        proj, op = self._selected()
-        if op is None:
-            return
-        try:
-            with undo.transaction(proj.doc, tr("Duplicate")):
-                new, _rec = proj.duplicate_operation(op)
-                proj.compute()
-        except Exception as exc:
-            _warn(tr_msg(exc))
-            return
-        self.refresh()
-        self._reselect(new.Name)
-
-    def delete_selected(self):
-        proj, op = self._selected()
-        if op is None:
-            return
-        if QtWidgets.QMessageBox.question(self, "CAM2027", tr("Delete the operation '{name}'?", name=op.Label)) \
-                != QtWidgets.QMessageBox.Yes:
-            return
-        try:
-            with undo.transaction(proj.doc, tr("Delete")):
-                proj.remove_operation(op)
-                proj.compute()
-        except Exception as exc:
-            _warn(tr_msg(exc))
-        self.refresh()
-
-
 def _seconds(cycle_time):
     """Durée FreeCAD « HH:MM:SS » (ou vide) en secondes."""
     try:
@@ -1358,6 +946,10 @@ def restyle_all():
     for dock in list(_docks.values()):
         if _is_alive(dock) and dock.widget() is not None:
             theme.apply(dock.widget())
+    from . import shell
+
+    if shell._shell is not None:
+        shell._shell.restyle()
     refresh_project_panel()
 
 
@@ -1393,6 +985,7 @@ class _UndoObserver(object):
 
     def slotDeletedDocument(self, doc):
         QtCore.QTimer.singleShot(0, refresh_project_panel)
+        QtCore.QTimer.singleShot(250, refresh_project_panel)  # le document est encore listé pendant le signal
 
 
 def _document_activated():
@@ -1401,6 +994,9 @@ def _document_activated():
         from ..project.project import attach_job_view
 
         attach_job_view(proj.job)  # projet enregistré avant que le job ait son fournisseur de vue
+    from . import shell
+
+    shell.document_activated(FreeCAD.ActiveDocument)
     refresh_project_panel()
 
 
@@ -1408,11 +1004,15 @@ _undo_observer = None
 
 
 def ensure_project_panel():
+    """Navigateur métier (dock « CAM2027_Project » de la coquille) ; l'observateur du document est posé une fois."""
     global _undo_observer
     if _undo_observer is None:
         _undo_observer = _UndoObserver()
         FreeCAD.addDocumentObserver(_undo_observer)
-    return _dock("Project", tr("CAM2027 project"), ProjectPanel, QtCore.Qt.RightDockWidgetArea)
+    from . import shell
+
+    s = shell.install()
+    return s.nav_dock if s is not None else None
 
 
 class _OperationTree(QtWidgets.QTreeWidget):
@@ -1484,49 +1084,11 @@ def _event_pos(event):
     return pos.toPoint() if hasattr(pos, "toPoint") else pos
 
 
-class _StepLabel(QtWidgets.QLabel):
-    """Étape du panneau Projet : libellé en gras puis détail sur une deuxième ligne, raccourci par « … » à la
-    largeur disponible (texte complet en infobulle). Hauteur fixe de deux lignes : un QLabel à retour
-    automatique dans la grille débordait sur l'étape suivante quand le dock était étroit."""
-
-    def __init__(self):
-        super(_StepLabel, self).__init__()
-        self._label, self._detail, self._muted = "", "", None
-        self.setWordWrap(False)
-        self.setTextFormat(QtCore.Qt.RichText)
-        self.setFixedHeight(2 * self.fontMetrics().lineSpacing() + 4)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
-        self.setMinimumWidth(60)
-
-    def set_step(self, label, detail, muted):
-        self._label, self._detail, self._muted = label, detail or "", muted
-        self.setToolTip("%s %s" % (label, detail) if detail else label)
-        self._render()
-
-    def resizeEvent(self, event):
-        super(_StepLabel, self).resizeEvent(event)
-        self._render()
-
-    def _render(self):
-        import html
-
-        fm = self.fontMetrics()
-        width = max(20, self.width() - 4)
-        bold = QtGui.QFont(self.font())
-        bold.setBold(True)
-        label = QtGui.QFontMetrics(bold).elidedText(self._label, QtCore.Qt.ElideRight, width)
-        detail = fm.elidedText(self._detail, QtCore.Qt.ElideRight, width) if self._detail else ""
-        text = "<b>%s</b>" % html.escape(label)
-        if detail:
-            text += "<br><span style='color:%s'>%s</span>" % (self._muted, html.escape(detail))
-        self.setText(text)
-
-
 def refresh_project_panel():
     from ..project import operations as opsmod
 
     if opsmod.GuiTicker.defer(refresh_project_panel):  # calcul en cours : une fois à la fin
         return
-    dock = _docks.get("Project")
-    if dock is not None and _is_alive(dock):
-        dock.widget().refresh()
+    from . import shell
+
+    shell.refresh()

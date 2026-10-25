@@ -186,9 +186,43 @@ QHeaderView::section {{ background-color: {raised}; color: {muted}; border: none
     padding: {xs}px {sm}px; font-weight: 600; }}
 QScrollArea {{ border: none; }}
 QToolTip {{ background-color: {raised}; color: {text}; border: 1px solid {border}; }}
+QToolButton#sectionHeader {{ background-color: {raised}; border: none; border-radius: 0; border-bottom: 1px solid {divider};
+    text-align: left; font-weight: 600; padding: {xs}px {sm}px; min-height: {ctrl_inner}px; }}
+QToolButton#sectionHeader:hover {{ background-color: {selected}; }}
+QFrame#taskRow {{ background-color: {surface}; border: 1px solid transparent; border-radius: {rinput}px; }}
+QFrame#taskRow:hover {{ background-color: {raised}; border-color: {divider}; }}
+QLabel#keyStrip {{ background-color: {raised}; border-top: 1px solid {divider}; border-bottom: 1px solid {divider};
+    padding: {xs}px {sm}px; }}
+QWidget#inspectorHead {{ background-color: {raised}; border-bottom: 1px solid {divider}; }}
+QWidget#pageButtons {{ border-top: 1px solid {divider}; }}
+QLabel#projectSummary {{ background-color: {raised}; border: 1px solid {divider}; border-radius: {rinput}px; }}
 """.format(families=families, mono=mono, body=font["sizes"]["body"], caption=font["sizes"]["caption"],
            section=font["sizes"]["section"], rinput=r["input"], rpanel=r["panel"], ctrl_inner=ctrl - 6,
            row=t["density"][density]["row"] - 8, xl=sp["xl"], xs=sp["xs"], sm=sp["sm"], md=sp["md"], lg=sp["lg"], **c)
+
+
+def shell_stylesheet(theme=None):
+    """QSS de la barre des espaces : fond de la fenêtre FreeCAD (``chrome``), boutons d'espace soulignés par
+    l'accent quand ils sont actifs ; états survol / focus / désactivé distincts."""
+    t = tokens()
+    c = t["themes"][chrome() if theme is None else resolve(theme)]
+    sp = t["spacing"]
+    return """
+QToolBar#CAM2027_Shell {{ border: none; border-bottom: 1px solid {divider}; padding: 2px {sm}px; spacing: 2px; }}
+QToolBar#CAM2027_Shell QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 4px;
+    padding: 3px {sm}px; color: {text}; }}
+QToolBar#CAM2027_Shell QToolButton:hover {{ background-color: {selected}; }}
+QToolBar#CAM2027_Shell QToolButton:pressed {{ background-color: {selected}; border-color: {focus}; }}
+QToolBar#CAM2027_Shell QToolButton:focus {{ border-color: {focus}; }}
+QToolBar#CAM2027_Shell QToolButton:disabled {{ color: {disabledText}; }}
+QToolBar#CAM2027_Shell QToolButton#spaceButton {{ font-weight: 600; padding: 4px {md}px;
+    border-radius: 0; border-bottom: 3px solid transparent; margin: 0 {xs}px; }}
+QToolBar#CAM2027_Shell QToolButton#spaceButton:checked {{ border-bottom: 3px solid {primary}; color: {text}; background: transparent; }}
+QToolBar#CAM2027_Shell QToolButton#spaceButton:hover {{ background-color: {selected}; }}
+QToolBar#CAM2027_Shell QToolButton#spaceButton:disabled {{ color: {disabledText}; }}
+QToolBar#CAM2027_Shell QLabel {{ background: transparent; color: {text}; }}
+QToolBar#CAM2027_Shell::separator {{ background-color: {divider}; width: 1px; margin: 4px {xs}px; }}
+""".format(xs=sp["xs"], sm=sp["sm"], md=sp["md"], **c)
 
 
 def apply(widget, theme=None):

@@ -33,7 +33,7 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         commands.register()
         self.appendToolbar("CAM2027", commands.TOOLBAR)
         self.appendToolbar("CAM2027 Drawing", commands.aspirecmds.DRAWING_MENU)  # S5 : dessin vectoriel
-        # menus par étape du métier : Préparer / Usiner / Simuler / Exporter
+        # un menu par espace : Préparer / Dessiner / Usiner / Vérifier et exporter (accès complémentaire)
         for title, names in commands.STAGE_MENUS:
             self.appendMenu(tr(title), names)
         from cam2027.gui import standalone
@@ -73,7 +73,13 @@ class CAM2027Workbench(FreeCADGui.Workbench):
             prefs.apply_scene_colors(force=bool(done))
         except Exception as exc:
             FreeCAD.Console.PrintWarning("CAM2027: scene colours not applied: %s\n" % exc)
+        from cam2027.gui import shell
+
+        shell.install()  # barre des espaces, navigateur, panneau contextuel
         panels.ensure_project_panel()
+        if standalone.is_standalone():
+            standalone.tidy_toolbars()
+        shell.shell().bar.show()
         self._fix_menu_titles()
         from PySide import QtCore
         from cam2027.gui import commands
@@ -99,7 +105,13 @@ class CAM2027Workbench(FreeCADGui.Workbench):
         QtCore.QTimer.singleShot(0, lambda: standalone.guard_menu_titles(titles))
 
     def Deactivated(self):
-        pass
+        # mode atelier dans un FreeCAD complet : la coquille se retire pour laisser les autres ateliers intacts
+        from cam2027.gui import shell, standalone
+
+        if not standalone.is_standalone() and shell._shell is not None:
+            shell._shell.bar.hide()
+            shell._shell.nav_dock.hide()
+            shell._shell.insp_dock.hide()
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"

@@ -326,8 +326,11 @@ def _property_views():
 
 
 def apply_advanced_mode(on=None):
-    """Montre / cache l'éditeur de propriétés (l'arbre du modèle reste visible) ; retourne le nombre touché."""
+    """Mode avancé : arbre FreeCAD (dock « Modèle ») et éditeur de propriétés visibles ; sinon masqués, la
+    navigation passe par le navigateur métier. Retourne le nombre de vues de propriétés touchées."""
     import FreeCAD
+    import FreeCADGui
+    from .qt import QtWidgets
 
     if on is None:
         on = advanced_mode()
@@ -336,30 +339,79 @@ def apply_advanced_mode(on=None):
     views = _property_views()
     for view in views:
         view.setVisible(bool(on))
+    if is_standalone():
+        model = FreeCADGui.getMainWindow().findChild(QtWidgets.QDockWidget, "Model")
+        if model is not None:
+            model.setVisible(bool(on))
     return len(views)
 
 
+def tidy_toolbars():
+    """Logiciel autonome : les barres FreeCAD et les anciennes barres CAM2027 sont rangées (la barre des espaces
+    porte les commandes globales ; menus et raccourcis restent) ; retourne les barres masquées."""
+    import FreeCADGui
+    from .qt import QtWidgets
+    from . import shell
+
+    import FreeCAD
+    from .qt import QtCore
+
+    params = FreeCAD.ParamGet("User parameter:BaseApp/MainWindow/Toolbars")
+    hidden = []
+    for tb in FreeCADGui.getMainWindow().findChildren(QtWidgets.QToolBar):
+        name = tb.objectName()
+        if name in shell.STANDALONE_HIDDEN_TOOLBARS:
+            params.SetBool(name, False)  # FreeCAD relit cette préférence quand il reconstruit les barres
+            if tb.isVisible():
+                tb.hide()
+                hidden.append(name)
+    if not getattr(tidy_toolbars, "_scheduled", False):
+        # les barres de l'atelier sont construites juste après Activated : repasser une fois ensuite
+        tidy_toolbars._scheduled = True
+
+        def again():
+            tidy_toolbars._scheduled = False
+            tidy_toolbars()
+
+        QtCore.QTimer.singleShot(300, again)
+    return hidden
+
+
 #: panneaux FreeCAD masqués par la disposition par défaut
-HIDDEN_DOCKS = ("Report view", "Python console", "Selection view")
+HIDDEN_DOCKS = ("Report view", "Python console", "Selection view", "Model", "CAM2027_ToolLibrary", "Tasks")
 
 
 def reset_layout():
-    """Disposition par défaut : modèle à gauche, projet à droite, bibliothèque en bas, barres visibles."""
+    """Disposition par défaut : barre des espaces en haut, navigateur à gauche, panneau contextuel à droite
+    (fermé tant qu'aucune tâche), bibliothèque et arbre FreeCAD sur demande, barres FreeCAD rangées."""
     import FreeCADGui
     from .qt import QtCore, QtWidgets
+    from . import shell
 
     mw = FreeCADGui.getMainWindow()
-    areas = {"Model": QtCore.Qt.LeftDockWidgetArea, "CAM2027_Project": QtCore.Qt.RightDockWidgetArea,
-             "CAM2027_ToolLibrary": QtCore.Qt.BottomDockWidgetArea}
+    areas = {"CAM2027_Project": QtCore.Qt.LeftDockWidgetArea, "CAM2027_Inspector": QtCore.Qt.RightDockWidgetArea}
     for dock in mw.findChildren(QtWidgets.QDockWidget):
         name = dock.objectName()
         if name in areas:
             dock.setFloating(False)
             mw.addDockWidget(areas[name], dock)
-            dock.show()
+            dock.setVisible(name == "CAM2027_Project")
         elif name in HIDDEN_DOCKS:
             dock.hide()
-    for tb in mw.findChildren(QtWidgets.QToolBar):
-        if tb.objectName() in ("File", "Edit", "View", "CAM2027"):
-            tb.show()
+    s = shell.install()
+    if s is not None:
+        s.bar.show()
+        try:
+            mw.resizeDocks([s.nav_dock, s.insp_dock], [shell.NAVIGATOR_WIDTH, shell.INSPECTOR_WIDTH], QtCore.Qt.Horizontal)
+        except Exception:
+            pass
+        if s.inspector.page is not None:
+            s.insp_dock.show()
+            s.apply_width_rule()
+    if is_standalone():
+        tidy_toolbars()
+    else:
+        for tb in mw.findChildren(QtWidgets.QToolBar):
+            if tb.objectName() in ("File", "Edit", "View", "CAM2027"):
+                tb.show()
     apply_advanced_mode(False)

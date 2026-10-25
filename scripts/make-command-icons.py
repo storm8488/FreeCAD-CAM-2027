@@ -137,6 +137,17 @@ ICONS.update({
     "std-views": ([_cube], ["P:M4 7.5 12 3l8 4.5-8 4.5z"]),
     "std-align": (["P:M3 19l5-4h13l-5 4z"], ["P:M13 3v8 M10.5 8.5 13 11l2.5-2.5"]),
 })
+# espaces de la barre supérieure (Préparer, Dessiner, Usiner, Vérifier et exporter) et navigateur
+ICONS.update({
+    "space-prepare": (["P:M3 11h13v10H3z M3 11l4-4h13l-4 4 M16 21l4-4V7"], ["P:M9.5 16h0 M7 16l2 2 4-4"]),
+    "space-draw": (["P:M4 20c3-9 8-13 15-13"], ["P:M14 21l7-7-2.5-2.5-7 7V21z"]),
+    "space-machine": ([_em_shank], ["P:" + _em_cut, "P:M3 21h18"]),
+    "space-verify": (["P:M3 10h5v4h6v-4h7v11H3z"], ["P:M13 5.5l2.2 2.2 4.8-4.8", "P:M17 15h4.5 M19.5 12.5l2.5 2.5-2.5 2.5"]),
+    "panel-left": (["P:M3 5h18v14H3z"], ['<rect x="4" y="6" width="5.5" height="12" fill="{ac}" stroke="none"/>']),
+    "panel-right": (["P:M3 5h18v14H3z"], ['<rect x="14.5" y="6" width="5.5" height="12" fill="{ac}" stroke="none"/>']),
+    "visibility-off": (["P:M2 12c2.5-4 6-6 10-6s7.5 2 10 6c-2.5 4-6 6-10 6s-7.5-2-10-6z", '<circle cx="12" cy="12" r="3"/>'],
+                       ["P:M4 4l16 16"]),
+})
 # icônes à trait pointillé (zone interdite, copies du motif, axe du miroir)
 ICONS["cmd-keep-out"] = (['<path d="M3 4h18v16H3z" %s/>' % DASH], ['<circle cx="12" cy="12" r="5.5"/>', "P:M8.2 15.8l7.6-7.6"])
 ICONS["cmd-pattern"] = (["P:M3 3h7v7H3z"], ['<path d="M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z" %s/>' % DASH])
