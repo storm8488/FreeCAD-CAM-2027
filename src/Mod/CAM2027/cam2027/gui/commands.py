@@ -280,155 +280,13 @@ class StockFixture(_Base):
     text = "Stock and fixture"
     tooltip = "Create the job (if needed), define the stock and the work coordinate system"
 
-    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
             return
-        dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
-        theme.apply(dlg)
-        dlg.setWindowTitle(tr("Stock and fixture"))
-        form = QtWidgets.QFormLayout(dlg)
-        kind = QtWidgets.QComboBox()
-        kind.addItem(tr("Box around the model with margins"), "box_margins")
-        kind.addItem(tr("Explicit box"), "box")
-        kind.addItem(tr("Cylinder (rotary / round stock)"), "cylinder")
-        kind.addItem(tr("Sheet under the 2D drawing (top at Z 0)"), "sheet")
-        kind.addItem(tr("Round bar along X on the A axis (4th axis)"), "cylinder_x")
-        from ..project import sheet as sheetmod
+        from . import preparepages
 
-        if not proj.has_job and sheetmod.vector_objects(proj.doc) and not proj.model_candidates():
-            kind.setCurrentIndex(kind.findData("sheet"))  # seulement des dessins 2D : panneau
-        form.addRow(tr("Stock type"), kind)
-        xy = QtWidgets.QDoubleSpinBox(); xy.setRange(0, 1000); xy.setValue(2.0)
-        ztop = QtWidgets.QDoubleSpinBox(); ztop.setRange(0, 1000); ztop.setValue(0.0)
-        zbot = QtWidgets.QDoubleSpinBox(); zbot.setRange(0, 1000); zbot.setValue(0.0)
-        form.addRow(tr("XY margin (mm)"), xy)
-        form.addRow(tr("Top margin (mm)"), ztop)
-        form.addRow(tr("Bottom margin (mm)"), zbot)
-        length = QtWidgets.QDoubleSpinBox(); length.setRange(0.1, 5000); length.setValue(100)
-        width = QtWidgets.QDoubleSpinBox(); width.setRange(0.1, 5000); width.setValue(100)
-        height = QtWidgets.QDoubleSpinBox(); height.setRange(0.1, 5000); height.setValue(20)
-        radius = QtWidgets.QDoubleSpinBox(); radius.setRange(0.1, 5000); radius.setValue(25)
-        form.addRow(tr("Length X (mm)"), length)
-        form.addRow(tr("Width Y (mm)"), width)
-        form.addRow(tr("Height Z (mm)"), height)
-        form.addRow(tr("Radius (mm)"), radius)
-        thickness = QtWidgets.QDoubleSpinBox(); thickness.setRange(0.1, 500); thickness.setValue(18.0)
-        sheet_margin = QtWidgets.QDoubleSpinBox(); sheet_margin.setRange(0, 1000); sheet_margin.setValue(10.0)
-        form.addRow(tr("Sheet thickness (mm)"), thickness)
-        form.addRow(tr("Sheet margin around the drawing (mm)"), sheet_margin)
-        fixture = QtWidgets.QComboBox()
-        fixture.addItems(["G54", "G55", "G56", "G57", "G58", "G59"])
-        form.addRow(tr("Work coordinate system"), fixture)
-        # seulement les champs du type de brut choisi
-        fields = {"box_margins": (xy, ztop, zbot), "box": (length, width, height), "cylinder": (radius, height),
-                  "sheet": (thickness, sheet_margin), "cylinder_x": (radius, xy)}
-        all_fields = {w for ws in fields.values() for w in ws}
-
-        def show_fields(_i=None):
-            wanted = set(fields.get(kind.currentData(), ()))
-            for w in all_fields:
-                w.setVisible(w in wanted)
-                label = form.labelForField(w)
-                if label is not None:
-                    label.setVisible(w in wanted)
-            dlg.adjustSize()
-
-        kind.currentIndexChanged.connect(show_fields)
-        show_fields()
-        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept)
-        bb.rejected.connect(dlg.reject)
-        form.addRow(bb)
-        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
-            return
-        k = kind.currentData()
-        if k == "sheet":
-            try:
-                if proj.has_job:
-                    _warn(tr("The project already has a job: the sheet is only available for a new 2D project."))
-                    return
-                with busy(tr("Stock and fixture")) as b:
-                    proj.create_sheet_job(thickness=thickness.value(), margin=sheet_margin.value(),
-                                          fixtures=[fixture.currentText()])
-                if b.stopped:
-                    return
-            except Exception as exc:
-                _warn(tr_msg(exc))
-                return
-            FreeCADGui.SendMsgToActiveView("ViewFit")
-            _after_change()
-            return
-        if k == "cylinder_x":
-            centre = proj.machine.rotary.center_offset_mm
-            if centre is None:
-                _warn(tr("Fill in the A axis centre in the machine profile first."))
-                return
-            models = [o for o in FreeCADGui.Selection.getSelection() if getattr(o, "Shape", None)] or \
-                proj.model_candidates()
-            if proj.has_job:
-                models = [c for c in proj.job.Model.Group]
-            if not models:
-                _warn(tr("Select or import a solid model first."))
-                return
-            box = models[0].Shape.BoundBox
-            for o in models[1:]:
-                box.add(o.Shape.BoundBox)
-            spec = {"kind": k, "radius": radius.value(), "length": box.XLength + 2 * xy.value(),
-                    "x_start": box.XMin - xy.value(), "center": tuple(centre)}
-        elif k == "box_margins":
-            spec = {"kind": k, "xy": xy.value(), "z_top": ztop.value(), "z_bottom": zbot.value()}
-        elif k == "box":
-            spec = {"kind": k, "length": length.value(), "width": width.value(), "height": height.value()}
-        else:
-            spec = {"kind": k, "radius": radius.value(), "height": height.value()}
-        try:
-            if not proj.has_job:
-                candidates = proj.model_candidates()
-                sel = [o for o in FreeCADGui.Selection.getSelection() if o in candidates]
-                if not sel:
-                    sel = candidates
-                    if len(sel) > 1 and all(o.TypeId.startswith("Part::") for o in sel):
-                        unique = proj.unique_bodies(sel)
-                        if len(unique) < len(sel):
-                            _info(tr("{n} duplicate bodies ignored (file imported twice?).", n=len(sel) - len(unique)))
-                        sel = unique
-                    faces = sum(len(o.Shape.Faces) for o in sel if hasattr(o, "Shape"))
-                    if len(sel) > 1 and all(o.TypeId.startswith("Part::") for o in sel):
-                        if faces <= MERGE_MAX_FACES:
-                            with busy(tr("Merging the {n} bodies into one part...", n=len(sel))) as b:
-                                merged = proj.merge_models(sel, proj.doc.Label)
-                            if b.stopped:
-                                return
-                            if merged is not None:
-                                sel = [merged]
-                            else:
-                                _info(tr("The {n} bodies could not be merged into one solid: they are machined as separate parts.", n=len(sel)))
-                        else:
-                            _info(tr("{n} bodies ({f} faces): too large to merge, they are machined as separate parts. To machine only some of them, select them before Stock and fixture.",
-                                     n=len(sel), f=faces))
-                if not sel:
-                    from ..project import sheet as sheetmod
-
-                    if sheetmod.vector_objects(proj.doc):
-                        _warn(tr("The project only has 2D drawings: choose the stock type 'Sheet under the 2D drawing'."))
-                    else:
-                        _warn(tr("Import a part (STEP, STL, OBJ) or a drawing (SVG, DXF) first."))
-                    return
-                with busy(tr("Stock and fixture")) as b:
-                    proj.create_job(sel, stock=spec, fixtures=[fixture.currentText()])
-                if b.stopped:
-                    return
-            else:
-                proj.set_stock(spec)
-                from ..project.stock import set_fixtures
-
-                set_fixtures(proj.job, [fixture.currentText()])
-        except Exception as exc:
-            _warn(tr_msg(exc))
-            return
-        _after_change()
+        preparepages.open_stock(proj)
 
 
 class AddOperation(_Base):
@@ -436,9 +294,8 @@ class AddOperation(_Base):
     atelier = "cmd-add-operation"
     accel = "Ctrl+Shift+O"
     text = "Add operation"
-    tooltip = "Add a machining operation using a tool assembly and a cutting preset"
+    tooltip = "Add a machining operation: family, strategy, tool and cutting preset, then the editor"
 
-    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
@@ -454,202 +311,9 @@ class AddOperation(_Base):
             except (ValueError, OSError):
                 pass
         proj.merge_library(user)
-        lib = proj.library
-        sel = FreeCADGui.Selection.getSelectionEx()
-        base = []
-        ignored = {proj.job.Name, getattr(proj.job.Stock, "Name", "")}
-        for s in sel:
-            if s.Object.Document.Name == proj.doc.Name and getattr(s.Object, "Shape", None) \
-                    and s.Object.Name not in ignored:
-                base.append((s.Object, list(s.SubElementNames)))
-        dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
-        theme.apply(dlg)
-        dlg.setWindowTitle(tr("Add operation"))
-        form = QtWidgets.QFormLayout(dlg)
-        name = QtWidgets.QLineEdit()
-        name.setProperty("auto", True)
-        name.textEdited.connect(lambda _t: name.setProperty("auto", False))  # nom tapé : ne plus le remplacer
-        form.addRow(tr("Name"), name)
-        kind = QtWidgets.QComboBox()
-        for key, meta in STRATEGIES.items():
-            kind.addItem(theme.icon(STRATEGY_ICONS.get(key, "contour")), tr(meta["label"]), key)
-        form.addRow(tr("Strategy"), kind)
-        limits = QtWidgets.QLabel()
-        limits.setWordWrap(True)
-        form.addRow(tr("Known limits"), limits)
-        from .toolpicker import ToolField
+        from . import addop
 
-        asm = ToolField(proj)  # comme Fusion : Sélectionner… / Éditer…, outils du document en liste
-        form.addRow(tr("Tool"), asm)
-        tool_note = QtWidgets.QLabel()
-        tool_note.setWordWrap(True)
-        theme.set_role(tool_note, "warning")
-        form.addRow(tool_note)
-        from ..project import operations as opsmod
-
-        def on_strategy(_i=None):
-            k = kind.currentData()
-            limits.setText(tr(STRATEGIES[k]["limits"]) or "-")
-            asm.blockSignals(True)
-            asm.set_kind(k)
-            asm.blockSignals(False)
-            ok = asm.tool() is not None and opsmod.tool_fits(k, asm.tool())
-            tool_note.setText("" if ok else tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
-            tool_note.setVisible(not ok)
-            fill_presets()
-            if name.property("auto"):
-                label = tr(STRATEGIES[k]["label"]).split(" (")[0]
-                used = {o.Label for o in proj.operations()}
-                n = 1
-                while ("%s %d" % (label, n)) in used:
-                    n += 1
-                name.setText("%s %d" % (label, n))
-        preset = QtWidgets.QComboBox()
-        form.addRow(tr("Cutting preset"), preset)
-
-        def fill_presets():
-            preset.clear()
-            tool = asm.tool()
-            if tool is None:
-                return
-            for p in tool.presets:
-                preset.addItem(preset_label(p), p.id)
-            ok = opsmod.tool_fits(kind.currentData(), tool)
-            tool_note.setText("" if ok else tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
-            tool_note.setVisible(not ok)
-
-        asm.changed.connect(fill_presets)
-        kind.currentIndexChanged.connect(on_strategy)
-        on_strategy()
-        sel_label = QtWidgets.QLabel(", ".join("%s: %s" % (o.Label, " ".join(subs) or tr("whole")) for o, subs in base)
-                                     or tr("(nothing selected: whole part, or pocket floors / top faces found automatically)"))
-        sel_label.setWordWrap(True)
-        form.addRow(tr("Geometry (selection)"), sel_label)
-        index = QtWidgets.QDoubleSpinBox()
-        index.setRange(-361.0, 360.0)
-        index.setDecimals(3)
-        index.setSuffix(" °")
-        index.setSpecialValueText(tr("(none: 3 axes)"))
-        index.setValue(index.minimum())
-        index.setToolTip(tr("Indexed 4th axis: the part is turned to this A angle, then machined in 3 axes. Select the faces or edges on the part as it is shown."))
-        index.setEnabled(bool(proj.machine.rotary.present))
-        form.addRow(tr("A index (deg)"), index)
-        hint = QtWidgets.QLabel(tr("Depths, passes and strategy settings are edited in the next window (tabs), with values prefilled from the cutting preset."))
-        hint.setWordWrap(True)
-        theme.set_role(hint, "muted")
-        form.addRow(hint)
-        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept)
-        bb.rejected.connect(dlg.reject)
-        form.addRow(bb)
-        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
-            return
-        if asm.currentData() is None or preset.currentData() is None:
-            _warn(tr("No tool of the right type for this strategy: click Select... to choose one or create a new one."))
-            return
-        lib = proj.library  # l'instantané a pu recevoir l'outil choisi
-        a, tool, _h = lib.resolve_assembly(asm.currentData())
-        values = tool.preset(preset.currentData()).resolve(tool)
-        k = kind.currentData()
-        params = default_params(k, tool, values)
-        if k == "millface" and base and all(not subs for _o, subs in base):
-            base = []  # pièce sélectionnée en entier : comme sans sélection (faces du dessus, sinon dessus du brut)
-        explicit = bool(base)
-        if not base:
-            models = list(proj.job.Model.Group)  # toute la pièce : chaque objet du modèle, pas seulement le premier
-            with busy(tr("Computing the toolpaths...")) as b:
-                auto = opsmod.auto_geometry(k, models)  # fonds des alvéoles d'un plateau : 0,5 s
-            if b.stopped:
-                return
-            if auto is None:
-                base = [(m, []) for m in models]
-            elif auto:
-                base = auto
-            elif k == "millface":
-                # pas de face plane au sommet (surface 3D d'un STL, dessus bombé) : comme le surfaçage de Fusion,
-                # le dessus du brut est surfacé jusqu'au haut de la pièce, sur tout le brut
-                base = [(proj.job.Stock, [opsmod.stock_top_face(proj.job.Stock)])]
-                params.update({"BoundaryShape": "Stock",
-                               "FinalDepth": max(m.Shape.BoundBox.ZMax for m in models)})
-            else:
-                _warn(tr("Nothing to machine found automatically for this strategy: select the faces in the 3D view (click, Ctrl+click), then add the operation."))
-                return
-        label = name.text().strip() or tr(STRATEGIES[k]["label"]).split(" (")[0]
-        parts = [(label, base)]
-        # fonds de poche à plusieurs hauteurs : chacun jusqu'à son fond, comme Fusion. FreeCAD les usine jusqu'au
-        # plus haut ; avec le plus bas comme profondeur finale, il descend partout (entailles de 1 mm sur le
-        # disque WobbleRing, 40 mm sur le chauffage) : une opération par hauteur.
-        groups = opsmod.floor_groups(base) if k in ("pocket", "pocket2d", "adaptive") else None
-        if groups and len(groups) > 1:
-            parts = [(tr("{name} (Z {z} mm)", name=label, z="%.2f" % z), group) for z, group in groups]
-        try:
-            index_deg = index.value() if index.isEnabled() and index.value() > index.minimum() else None
-            added_ops = []
-            for part_label, part_base in parts:
-                part_params = dict(params)
-                if (not explicit and k in ("pocket2d", "adaptive") and opsmod.floor_groups(part_base)
-                        and not opsmod.floors_have_islands(part_base)):
-                    part_params.setdefault("UseOutline", True)  # trous débouchants laissés ouverts (Fusion)
-                added_ops.append(proj.add_operation(k, part_label, a.id, preset.currentData(), base=part_base,
-                                                    params=part_params, index_deg=index_deg))
-            with busy(tr("Computing the toolpaths..."), stoppable=proj) as b:
-                proj.compute()
-        except Exception as exc:
-            _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
-            _after_change()
-            return
-        if b.stopped:  # opérations gardées, parcours incomplet (message de busy) ; pas de recalcul
-            panels.refresh_project_panel()
-            return
-        skipped = []
-        if not explicit:
-            failed = [o for o, _r in added_ops if proj.operation_state(o) == "failed"]
-            skipped = [o.Label for o in failed]
-            for o in failed:
-                proj.remove_operation(o)
-            added_ops = [(o, r) for o, r in added_ops if o not in failed]
-        if added_ops and skipped:
-            _info(tr("Left out, no toolpath with this tool (too narrow?): {names}", names=", ".join(skipped)))
-        if not added_ops:
-            _after_change()
-            fit = opsmod.largest_tool_for(base) if k in ("pocket", "pocket2d", "adaptive") else None
-            if fit is not None and fit < tool.geometry.diameter:
-                _warn(tr("The {d} mm tool is too large for the pockets found on the part (largest tool that fits: {fit} mm): choose a smaller tool, or select the faces to machine.",
-                         d="%g" % tool.geometry.diameter, fit="%.1f" % fit))
-                return
-            why = helix_refusal(base, tool.geometry.diameter) if k == "helix" else None
-            if why:
-                _warn(why)
-                return
-            _warn(tr("This strategy produced no toolpath on the whole part: select the faces or edges to machine, then add the operation again."))
-            return
-        if len(added_ops) > 1:
-            _after_change()
-            _info(tr("One operation per pocket depth, each down to its own floor: {names}",
-                     names=", ".join(o.Label for o, _r in added_ops)))
-            return
-        op, rec = added_ops[0]
-        if rec["warnings"]:
-            _info("\n".join(tr_msg(w) for w in rec["warnings"]))
-        _after_change()
-        from . import opeditor
-
-        added = (proj.doc.UndoCount, tr(self.text))  # étape d'annulation de cet ajout (encore ouverte ici)
-
-        def on_close(accepted):
-            if not accepted:
-                try:
-                    doc = proj.doc
-                    if (doc.UndoCount, (doc.UndoNames or [None])[0]) == added:
-                        doc.undo()  # rien fait depuis l'ajout : on l'annule, comme s'il n'avait pas eu lieu
-                    else:
-                        with undo.transaction(doc, tr("Delete")):
-                            proj.remove_operation(op)
-                except Exception as exc:
-                    _warn(tr("Operation failed: {error}", error=tr_msg(exc)))
-                _after_change()
-
-        opeditor.open_editor(proj, op, on_close=on_close, title=tr("New operation: {name}", name=op.Label))
+        addop.open_page(proj)
 
 
 class WrapEngrave(_Base):
@@ -1039,99 +703,9 @@ class Export(_Base):
             if proj is not None:
                 _warn(tr("No job to export."))
             return
-        dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
-        theme.apply(dlg)
-        dlg.setWindowTitle(tr("Export G-code"))
-        dlg.resize(900, 650)
-        lay = QtWidgets.QVBoxLayout(dlg)
-        form = QtWidgets.QFormLayout()
-        post = QtWidgets.QComboBox()
-        posts = exportmod.available_postprocessors()
-        post.addItems(posts)
-        if proj.job.PostProcessor in posts:
-            post.setCurrentText(proj.job.PostProcessor)
-        form.addRow(tr("Post processor"), post)
-        args = QtWidgets.QLineEdit(proj.job.PostProcessorArgs)
-        form.addRow(tr("Arguments"), args)
-        default_out = proj.job.PostProcessorOutputFile or os.path.join(
-            os.path.dirname(proj.doc.FileName) if proj.doc.FileName else os.path.expanduser("~"),
-            (proj.doc.Label or "program") + ".nc")
-        out = QtWidgets.QLineEdit(default_out)
-        browse = QtWidgets.QPushButton(tr("Browse..."))
+        from . import exportpage
 
-        def pick():
-            p, _f = QtWidgets.QFileDialog.getSaveFileName(dlg, tr("Output file"), out.text(), "G-code (*.nc *.gcode *.ngc)")
-            if p:
-                out.setText(p)
-
-        browse.clicked.connect(pick)
-        row = QtWidgets.QHBoxLayout(); row.addWidget(out); row.addWidget(browse)
-        form.addRow(tr("Output file"), row)
-        lay.addLayout(form)
-        tabs = QtWidgets.QTabWidget()
-        preview = QtWidgets.QPlainTextEdit(); preview.setReadOnly(True)
-        preview.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
-        checks = QtWidgets.QTextEdit(); checks.setReadOnly(True)
-        sheet = QtWidgets.QPlainTextEdit(); sheet.setReadOnly(True)
-        summary = QtWidgets.QTextEdit(); summary.setReadOnly(True)
-        tabs.addTab(summary, tr("Summary before export"))
-        tabs.addTab(preview, tr("G-code preview"))
-        tabs.addTab(checks, tr("Checks"))
-        tabs.addTab(sheet, tr("Setup sheet"))
-        lay.addWidget(tabs)
-        btns = QtWidgets.QHBoxLayout()
-        b_prev = QtWidgets.QPushButton(tr("Preview"))
-        b_exp = QtWidgets.QPushButton(tr("Export G-code"))
-        b_exp.setIcon(theme.icon("export-gcode"))
-        theme.set_role(b_exp, "primary")
-        b_close = QtWidgets.QPushButton(tr("Close"))
-        btns.addWidget(b_prev); btns.addWidget(b_exp); btns.addStretch(); btns.addWidget(b_close)
-        lay.addLayout(btns)
-
-        def do_preview():
-            try:
-                with busy(tr("Post-processing..."), stoppable=proj) as b:
-                    text, analysis, issues = proj.preview_gcode(post.currentText(), args.text())
-                    rows = exportmod.export_summary(proj, analysis, issues)
-                    sheet_text = exportmod.prep_sheet(proj, [], analysis, issues, [out.text()])
-            except Exception as exc:
-                checks.setPlainText(tr("Post-processing failed: {error}", error=tr_msg(exc)))
-                return
-            if b.stopped:
-                return
-            preview.setPlainText(text)
-            summary.setHtml(_format_summary(rows))
-            checks.setHtml(_format_checks(analysis, issues))
-            sheet.setPlainText(sheet_text)
-
-        def do_export():
-            try:
-                from ..project import twosided
-
-                with busy(tr("Post-processing..."), stoppable=proj) as b:
-                    result = twosided.exporter(proj)(out.text(), post.currentText(), args.text())  # recto-verso : un fichier par face
-            except ExportBlocked as exc:
-                checks.setHtml(_format_checks(exc.analysis, exc.issues))
-                tabs.setCurrentWidget(checks)
-                _warn(tr("Export blocked by the checks: {errors}", errors="; ".join(tr_msg(m) for lvl, m in exc.issues if lvl == "error")))
-                return
-            except Exception as exc:
-                _warn(tr("Export failed: {error}", error=tr_msg(exc)))
-                return
-            if b.stopped:
-                return
-            preview.setPlainText(result["gcode"])
-            checks.setHtml(_format_checks(result["analysis"], result["issues"]))
-            sheet.setPlainText(result["sheet_text"])
-            _info(tr("Written: {files}\nSetup sheet: {sheet}\nLoad the file in CNCjs yourself; nothing is sent automatically.",
-                     files=", ".join(result["files"]), sheet=result["sheet"]))
-            panels.refresh_project_panel()
-
-        b_prev.clicked.connect(do_preview)
-        b_exp.clicked.connect(do_export)
-        b_close.clicked.connect(dlg.accept)
-        do_preview()
-        exec_dialog(dlg)
+        exportpage.open_page(proj)
 
 
 def _format_summary(rows):
@@ -1288,9 +862,11 @@ class MaterialCheck(_Base):
             return
         if b.stopped:
             return
-        from .verification import VerificationDialog
+        from . import shell
+        from .verification import VerificationPage
 
-        exec_dialog(VerificationDialog(rep, material_report_text(rep), FreeCADGui.getMainWindow()))
+        shell.show_space("verify")
+        shell.inspector().show_page(VerificationPage(rep, material_report_text(rep)))
 
 
 def show_material_result(proj, rep):
@@ -1439,111 +1015,13 @@ class Machine(_Base):
     text = "Machine profile"
     tooltip = "Travels, feeds, spindle, controller, rotary axis (unknown values stay empty)"
 
-    @_undoable
     def Activated(self):
         proj = _need_project()
         if proj is None:
             return
-        m = proj.machine
-        dlg = QtWidgets.QDialog(FreeCADGui.getMainWindow())
-        theme.apply(dlg)
-        dlg.setWindowTitle(tr("Machine profile"))
-        outer = QtWidgets.QVBoxLayout(dlg)
-        columns = QtWidgets.QHBoxLayout()
-        outer.addLayout(columns)
-        left = QtWidgets.QWidget()
-        form = QtWidgets.QFormLayout(left)
-        form.setContentsMargins(0, 0, 0, 0)
-        columns.addWidget(left, 3)
-        right = QtWidgets.QVBoxLayout()
-        columns.addLayout(right, 2)
-        widgets = {}
-        from ..project.machine import FIELD_LABELS
+        from . import preparepages
 
-        for key in ("name", "vendor", "model", "controller", "post_processor", "post_processor_args", "travel_x_mm",
-                    "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2", "spindle_min_rpm",
-                    "spindle_max_rpm", "spindle_power_w", "collet", "notes"):
-            label = FIELD_LABELS[key]
-            w = QtWidgets.QLineEdit("" if getattr(m, key) is None else str(getattr(m, key)))
-            w.setPlaceholderText(tr("to fill in"))
-            w.setMinimumWidth(260)
-            w.setCursorPosition(0)
-            form.addRow(tr(label), w)
-            widgets[key] = w
-        rot = QtWidgets.QCheckBox(tr("Rotary axis A present (about X)"))
-        rot.setChecked(bool(m.rotary.present))
-        right.addWidget(rot)
-        abox = QtWidgets.QGroupBox(tr("A axis (indexed 3+1 and continuous)"))
-        aform = QtWidgets.QFormLayout(abox)
-        direction = QtWidgets.QComboBox()
-        direction.addItem(tr("to fill in"), None)
-        direction.addItem(tr("Right hand: A+ counter-clockwise seen from +X"), "right_hand")
-        direction.addItem(tr("Left hand: A+ clockwise seen from +X"), "left_hand")
-        direction.setCurrentIndex(max(0, direction.findData(m.rotary.positive_direction)))
-        aform.addRow(tr("A axis positive direction"), direction)
-        centre = m.rotary.center_offset_mm or (None, None)
-        a_fields = {}
-        for key, label, value in (("cy", "A axis centre Y (mm)", centre[0]), ("cz", "A axis centre Z (mm)", centre[1]),
-                                  ("min", "A axis min (deg)", m.rotary.min_deg), ("max", "A axis max (deg)", m.rotary.max_deg),
-                                  ("feed", "A axis max feed (deg/min)", m.rotary.max_feed_deg_min)):
-            w = QtWidgets.QLineEdit("" if value is None else str(value))
-            w.setPlaceholderText(tr("to fill in"))
-            aform.addRow(tr(label), w)
-            a_fields[key] = w
-        note = QtWidgets.QLabel(tr("The centre is the position of the rotation axis in the work coordinate system. Nothing is assumed: indexed operations are refused until the centre and the positive direction are filled in."))
-        note.setWordWrap(True)
-        theme.set_role(note, "muted")
-        aform.addRow(note)
-        abox.setEnabled(rot.isChecked())
-        rot.toggled.connect(abox.setEnabled)
-        right.addWidget(abox)
-        right.addStretch(1)
-        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept)
-        bb.rejected.connect(dlg.reject)
-        outer.addWidget(bb)
-        if exec_dialog(dlg) != QtWidgets.QDialog.Accepted:
-            return
-        d = m.to_dict()
-        numeric = ("travel_x_mm", "travel_y_mm", "travel_z_mm", "max_feed_xy_mm_min", "max_feed_z_mm_min", "acceleration_mm_s2",
-                   "spindle_min_rpm", "spindle_max_rpm", "spindle_power_w")
-        labels = dict(FIELD_LABELS, cy="A axis centre Y (mm)", cz="A axis centre Z (mm)", min="A axis min (deg)",
-                      max="A axis max (deg)", feed="A axis max feed (deg/min)")
-
-        def num(key, w):
-            text = w.text().strip().replace(",", ".")
-            if not text:
-                return None
-            try:
-                return float(text)
-            except ValueError:
-                raise ValueError(tr("'{value}' is not a number: {field}", value=w.text().strip(), field=tr(labels[key])))
-
-        try:
-            for key, w in widgets.items():
-                if key in numeric:
-                    d[key] = num(key, w)
-                else:
-                    d[key] = w.text().strip() or (None if key in ("post_processor", "collet") else "")
-            d["rotary"]["present"] = rot.isChecked()
-            cy, cz = num("cy", a_fields["cy"]), num("cz", a_fields["cz"])
-            d["rotary"]["center_offset_mm"] = (cy, cz) if cy is not None and cz is not None else None
-            d["rotary"]["min_deg"] = num("min", a_fields["min"])
-            d["rotary"]["max_deg"] = num("max", a_fields["max"])
-            d["rotary"]["max_feed_deg_min"] = num("feed", a_fields["feed"])
-            d["rotary"]["positive_direction"] = direction.currentData()
-            new = MachineProfile.from_dict(d)
-        except ValueError as exc:
-            _warn(tr_msg(exc))
-            return
-        proj.set_machine(new)
-        if proj.has_job and new.post_processor:
-            try:
-                proj.job.PostProcessor = new.post_processor
-                proj.job.PostProcessorArgs = new.post_processor_args or ""
-            except Exception as exc:
-                _warn(tr_msg(exc))
-        _after_change()
+        preparepages.open_machine(proj)
 
 
 class About(_Base):
@@ -1672,15 +1150,15 @@ MENU = [name for name, _cls in COMMANDS]
 WORKBENCH_MENU = ["CAM2027_Theme", "CAM2027_Language", "CAM2027_AdvancedMode", "CAM2027_ResetLayout", "Separator", "CAM2027_ReportBug",
                   "CAM2027_SuggestFeature", "CAM2027_SupportProject", "CAM2027_About"]
 #: menus par étape du métier (titres anglais traduits par tr())
+#: un menu par espace : Préparer / Dessiner / Usiner / Vérifier et exporter (mêmes noms que la barre)
 STAGE_MENUS = (
-    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut", "Separator", "CAM2027_ToolLibrary",
-                 "CAM2027_Machine"]),
+    ("Prepare", ["CAM2027_ImportModel", "CAM2027_ImportRelief", "CAM2027_Nest", "CAM2027_StockFixture", "CAM2027_TwoSided", "CAM2027_KeepOut",
+                 "CAM2027_Probe", "Separator", "CAM2027_ToolLibrary", "CAM2027_Machine"]),
+    ("Draw", aspirecmds.DRAWING_MENU),
     ("Machining", ["CAM2027_AddOperation", "CAM2027_BulkEdit", "Separator", "CAM2027_FlatDepth", "CAM2027_Inlay", "CAM2027_WrapEngrave",
-                   "CAM2027_RotaryMachining", "CAM2027_ProjectOnPart", "CAM2027_Pattern", "CAM2027_Holes", "CAM2027_Probe", "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
-    ("Simulate", ["CAM2027_Simulate", "CAM2027_MaterialCheck"]),
-    ("Export", ["CAM2027_Export"] + aspirecmds.EXPORT_MENU),
+                 "CAM2027_RotaryMachining", "CAM2027_ProjectOnPart", "CAM2027_Pattern", "CAM2027_Holes", "Separator", "CAM2027_Compute"] + aspirecmds.MACHINING_MENU),
+    ("Check and export", ["CAM2027_Simulate", "CAM2027_MaterialCheck", "Separator", "CAM2027_Export"] + aspirecmds.EXPORT_MENU),
 )
-STAGE_MENUS = STAGE_MENUS[:1] + (("Drawing", aspirecmds.DRAWING_MENU),) + STAGE_MENUS[1:]  # S5 : dessin vectoriel
 
 #: commandes FreeCAD gardées dans les barres du logiciel -> icône « Atelier » (même style que CAM2027)
 STD_ICONS = {

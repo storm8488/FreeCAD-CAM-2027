@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Panneau de vérification du contrôle matière (charte « Atelier », § 10) : chaque contrôle avec son résultat et
 sa **portée** (ce qui a été contrôlé, ce qui ne l'a pas été), jamais un contrôle non exécuté présenté comme
-réussi. ``verification_rows`` est pur (testable) ; ``VerificationDialog`` l'affiche."""
+réussi. ``verification_rows`` est pur (testable) ; ``VerificationPage`` l'affiche dans le panneau de tâche."""
 
 from .qt import QtCore, QtGui, QtWidgets
 from ..i18n import tr, tr_msg
 from . import theme
+from .inspector import Page
 
 #: statut -> (symbole, rôle de couleur du thème, libellé)
 STATUS = {
@@ -91,15 +92,15 @@ def overall_status(rows):
     return "ok", tr("No conflict detected on the checked items")
 
 
-class VerificationDialog(QtWidgets.QDialog):
-    """Tableau contrôle / résultat / portée, statut d'ensemble, rapport texte copiable."""
+class VerificationPage(Page):
+    """Tableau contrôle / résultat / portée, statut d'ensemble, rapport texte copiable (panneau contextuel)."""
 
     def __init__(self, rep, report_text, parent=None):
-        super(VerificationDialog, self).__init__(parent)
-        self.setWindowTitle(tr("Verification"))
+        super(VerificationPage, self).__init__(tr("Verification"), parent)
         self.setObjectName("CAM2027_Verification")
-        theme.apply(self)
-        lay = QtWidgets.QVBoxLayout(self)
+        body = self.scrolled_body()
+        lay = QtWidgets.QVBoxLayout(body)
+        lay.setContentsMargins(10, 8, 10, 8)
         rows = verification_rows(rep)
         status, headline = overall_status(rows)
         head = QtWidgets.QLabel("%s  %s" % (STATUS[status][0], headline))
@@ -107,40 +108,38 @@ class VerificationDialog(QtWidgets.QDialog):
         head.setWordWrap(True)
         head.setStyleSheet("font-weight: 600; font-size: 16px; color: %s" % theme.status_color(STATUS[status][1]))
         lay.addWidget(head)
-        table = QtWidgets.QTableWidget(len(rows), 4)
-        table.setHorizontalHeaderLabels([tr("Check"), tr("Status"), tr("Result"), tr("Scope")])
-        table.verticalHeader().setVisible(False)
-        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        table.setWordWrap(True)
-        for r, (check, st, result, scope) in enumerate(rows):
+        scope = QtWidgets.QLabel(tr("Checks done: {n}. Not checked: {m}.", n=sum(1 for _c, s, _r, _p in rows if s in ("ok", "danger", "info")),
+                                    m=sum(1 for _c, s, _r, _p in rows if s in ("not_checked", "warning"))))
+        theme.set_role(scope, "muted")
+        lay.addWidget(scope)
+        # une carte par contrôle (lisible dans un panneau de 360 px, sans défilement horizontal)
+        for check, st, result, scope_text in rows:
             symbol, role, word = STATUS[st]
-            cells = [check, "%s %s" % (symbol, tr(word)), result, scope]
-            for c, text in enumerate(cells):
-                item = QtWidgets.QTableWidgetItem(text)
-                if c == 1:
-                    item.setForeground(QtGui.QColor(theme.status_color(role)))
-                    item.setToolTip(tr(word))
-                table.setItem(r, c, item)
-        table.setTextElideMode(QtCore.Qt.ElideNone)
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QtWidgets.QHeaderView.Interactive)
-        table.setColumnWidth(3, 300)
-        table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)  # après la mise en page
-        lay.addWidget(table)
+            card = QtWidgets.QFrame()
+            card.setObjectName("taskRow")
+            cl = QtWidgets.QVBoxLayout(card)
+            cl.setContentsMargins(8, 4, 8, 4)
+            cl.setSpacing(1)
+            head_row = QtWidgets.QLabel("<span style='color:%s'><b>%s %s</b></span> &nbsp; <b>%s</b>" % (
+                theme.status_color(role), symbol, tr(word), check))
+            head_row.setWordWrap(True)
+            cl.addWidget(head_row)
+            res = QtWidgets.QLabel(result)
+            res.setWordWrap(True)
+            cl.addWidget(res)
+            if scope_text:
+                sc = QtWidgets.QLabel(tr("Scope: {s}", s=scope_text))
+                sc.setWordWrap(True)
+                theme.set_role(sc, "muted")
+                cl.addWidget(sc)
+            lay.addWidget(card)
+        lay.addStretch(1)
         note = QtWidgets.QLabel(tr("A result has a scope: what was checked and what remains unknown. A verification does not validate the machine setup."))
         note.setWordWrap(True)
         note.setProperty("role", "muted")
         lay.addWidget(note)
-        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
-        copy = buttons.addButton(tr("Copy the report"), QtWidgets.QDialogButtonBox.ActionRole)
-        copy.clicked.connect(lambda: QtWidgets.QApplication.clipboard().setText(report_text))
-        buttons.rejected.connect(self.reject)
-        buttons.accepted.connect(self.accept)
-        lay.addWidget(buttons)
-        self.resize(1040, 480)
+        self.add_buttons(tr("Close"), extra=((tr("Copy the report"),
+                                             lambda: QtWidgets.QApplication.clipboard().setText(report_text)),))
+        theme.apply(self)
         self.rows = rows
         self.status = status
