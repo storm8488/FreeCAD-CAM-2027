@@ -28,4 +28,4 @@ body:
     id: environment
     attributes:
       label: "Versions"
-      placeholder: "CAM2027 0.1.5 alpha, FreeCAD 1.1.4, Windows 10.0.26100"
+      placeholder: "CAM2027 0.1.6 alpha, FreeCAD 1.1.4, Windows 10.0.26100"

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Version de l'atelier CAM2027 et des formats de données."""
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 #: phase de test : affichée dans le titre de la fenêtre, la barre d'état et « À propos »
 RELEASE_STAGE = "alpha"
 #: dépôt public : formulaires de bug et d'idée (``cam2027.feedback``)
